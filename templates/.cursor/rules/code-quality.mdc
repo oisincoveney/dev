@@ -1,0 +1,20 @@
+---
+description: Code quality, naming, and anti-pattern rules
+globs: ["**/*.ts", "**/*.tsx"]
+---
+
+# Code Quality
+
+## HOOK-ENFORCED (will be blocked)
+- NEVER use `export default`. Use named exports only.
+- NEVER use `console.log`. Use structured logging. `console.warn` and `console.error` are OK for actual error conditions.
+- NEVER nest ternaries. Use early returns or if/else blocks.
+- NEVER hardcode URLs (`http://localhost`, `127.0.0.1`), API keys, or environment-specific values. Use environment variables.
+
+## INSTRUCTION RULES
+- No magic numbers. Extract non-obvious constants to named variables. Obvious values (0, 1, `''`, `true`) are fine inline.
+- DRY: if you write the same logic twice, extract it to a shared function or component immediately. The threshold is 2 occurrences.
+- Early returns over nested conditionals. Guard clauses at the top of functions.
+- Naming: `on*` for callback props (`onClick`, `onSubmit`), `handle*` for internal handlers (`handleClick`, `handleSubmit`).
+- Extract non-obvious constants to named variables with descriptive names.
+- Conventional commits: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`, `style:`, `perf:`, `ci:`, `build:`, `revert:`.

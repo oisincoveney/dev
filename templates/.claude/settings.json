@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/ts-style-guard.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

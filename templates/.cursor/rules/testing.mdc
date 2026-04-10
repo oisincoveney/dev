@@ -1,0 +1,14 @@
+---
+description: Testing requirements and patterns
+globs: ["**/*.ts", "**/*.tsx", "**/*.test.*"]
+---
+
+# Testing
+
+## HOOK-ENFORCED (warned)
+- Every new component and function MUST have tests. When writing a new `.tsx` component, a corresponding `.test.tsx` file should exist.
+
+## INSTRUCTION RULES
+- Vitest for unit and integration tests. Playwright for E2E tests.
+- Tests MUST be co-located with source code: `Foo.test.tsx` lives next to `Foo.tsx`, not in a separate `__tests__/` directory.
+- Follow existing test patterns in the project. Read existing tests before writing new ones.

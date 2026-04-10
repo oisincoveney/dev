@@ -1,0 +1,17 @@
+---
+description: Performance patterns and anti-patterns for React/frontend code
+globs: ["**/*.tsx", "**/*.jsx"]
+---
+
+# Performance
+
+## HOOK-ENFORCED (warned)
+- Avoid inline arrow functions in JSX event handlers (`onClick={() => ...}`). Extract to a `handle*` function for stable references.
+- Avoid inline object/array literals in JSX props (`data={{ ... }}`). Extract to a variable or `useMemo`.
+
+## INSTRUCTION RULES
+- Avoid unnecessary re-renders. Use Jotai's fine-grained subscriptions (`useAtomValue` on specific atoms) instead of subscribing to large state objects.
+- Use `React.memo` when a component receives stable props but its parent re-renders frequently.
+- Use stable references for callbacks and objects passed as props.
+- Use keys properly in lists — stable, unique identifiers, never array indices (unless the list is static and never reordered).
+- Lazy load routes and heavy components with `React.lazy` and `Suspense`.

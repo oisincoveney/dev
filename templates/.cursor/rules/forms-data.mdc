@@ -1,0 +1,12 @@
+---
+description: Form handling, API typing, and internationalization rules
+globs: ["**/*.ts", "**/*.tsx"]
+---
+
+# Forms & Data
+
+## INSTRUCTION RULES
+- Use framework-native form handling with Zod validation. Do not add a separate form library unless the project already uses one.
+- The API layer MUST always be fully typed. Use whatever the project provides (orval, tRPC, typed fetch wrappers). If none exists, create typed fetch functions with Zod response validation.
+- Prefer the simplest solution with the fewest abstraction boundaries. Do not add unnecessary layers between the API and the UI.
+- ALL user-facing strings MUST be i18n-ready. Do not hardcode user-visible text — use translation keys or a string constants file, depending on the project's i18n setup.

@@ -1,0 +1,62 @@
+# Merge these into your existing lefthook.yml
+# These are ADDITIONAL commands to add alongside your existing ones.
+
+pre-commit:
+  commands:
+    ts-style-guard:
+      glob: "**/*.{ts,tsx}"
+      exclude: "**/components/ui/**"
+      run: |
+        FAIL=0
+        for f in {staged_files}; do
+          # Rule 1: No `any` type
+          if grep -nP ':\s*any\b|<any\s*>|as\s+any\b' "$f" | grep -vP '^\s*//' | grep -vP '^\s*\*' > /dev/null 2>&1; then
+            echo "⛔ $f: contains \`any\` type"
+            FAIL=1
+          fi
+          # Rule 4: No ts-ignore
+          if grep -nE '@ts-ignore|@ts-expect-error' "$f" > /dev/null 2>&1; then
+            echo "⛔ $f: contains @ts-ignore or @ts-expect-error"
+            FAIL=1
+          fi
+          # Rule 14: No createContext
+          if grep -nE 'createContext\s*[<(]' "$f" > /dev/null 2>&1; then
+            echo "⛔ $f: uses createContext (use Jotai)"
+            FAIL=1
+          fi
+          # Rule 32: No inline styles
+          if grep -nE 'style\s*=\s*\{\{' "$f" > /dev/null 2>&1; then
+            echo "⛔ $f: uses inline styles"
+            FAIL=1
+          fi
+          # Rule 49: No export default
+          if grep -nE '^export\s+default\b' "$f" > /dev/null 2>&1; then
+            echo "⛔ $f: uses export default"
+            FAIL=1
+          fi
+          # Rule 50: No console.log
+          if grep -nE 'console\.log\s*\(' "$f" | grep -vP '^\s*//' > /dev/null 2>&1; then
+            echo "⛔ $f: contains console.log"
+            FAIL=1
+          fi
+        done
+        if [ $FAIL -ne 0 ]; then
+          echo ""
+          echo "Fix the above violations. See CLAUDE.md / AGENTS.md for full rules."
+          exit 1
+        fi
+
+commit-msg:
+  commands:
+    conventional-commits:
+      run: |
+        MSG=$(cat {1})
+        if ! echo "$MSG" | head -1 | grep -qE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)(\(.+\))?(!)?\: .+'; then
+          echo "⛔ Commit message must follow conventional commits format:"
+          echo "  feat: add user authentication"
+          echo "  fix(auth): handle expired tokens"
+          echo "  chore: update dependencies"
+          echo ""
+          echo "Your message: $(head -1 {1})"
+          exit 1
+        fi

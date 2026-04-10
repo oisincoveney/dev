@@ -1,0 +1,34 @@
+---
+description: Feature-first architecture, file organization, and infrastructure rules
+globs: ["**/*.ts", "**/*.tsx"]
+---
+
+# Architecture
+
+## HOOK-ENFORCED (will be blocked)
+- Max 300 lines per file. If a file exceeds this, split it into smaller modules.
+- kebab-case for ALL folder names. No camelCase or PascalCase directories.
+- Infrastructure layers (`ws/`, `infrastructure/`) are READ-ONLY for AI. Do not modify these files without explicit approval.
+- Do NOT create new files in `components/ui/` without explicit approval. Compose from existing ShadCN components.
+
+## INSTRUCTION RULES
+
+### Feature-first organization
+```
+src/
+├── features/
+│   ├── {feature-name}/
+│   │   ├── store/          # Jotai atoms, actions, listeners, handlers, types
+│   │   ├── components/     # Feature-specific components
+│   │   ├── hooks/          # Feature-specific hooks
+│   │   └── types.ts        # Feature types
+├── components/
+│   └── ui/                 # ShadCN primitives ONLY
+├── hooks/                  # Truly global hooks (useIsMobile, etc.)
+├── lib/                    # Utilities and adapters
+└── ws/ (or infrastructure/)  # Infrastructure layer (READ-ONLY)
+```
+
+- Global hooks in `hooks/`, utilities in `lib/`.
+- Routing must be modular by page, whether file-based, virtual, or code-based.
+- Effect library is encouraged for service composition and error handling.

@@ -1,0 +1,17 @@
+---
+description: Jotai state management and anti-pattern rules
+globs: ["**/*.ts", "**/*.tsx"]
+---
+
+# State Management
+
+## HOOK-ENFORCED (will be blocked)
+- NEVER use `React.createContext` or `createContext`. Use Jotai atoms for all state management.
+- `useRef` is ONLY for DOM refs (typed as `HTMLElement`, `SVGElement`, etc.) and library integration. NEVER use `useRef` to store data across renders — use Jotai atoms. (warned)
+- `useState` should be used sparingly — only for simple local UI state like open/closed, hover state, or form input focus. For anything shared or complex, use Jotai atoms. (warned)
+
+## INSTRUCTION RULES
+- Use Jotai atoms for services (dependency injection pattern). Services are stored in atoms, not in Context providers.
+- Feature-scoped atoms MUST be co-located in the feature's `store/` directory.
+- Cross-feature communication uses shared atoms or events. Do NOT import directly from another feature's store.
+- Lean towards event-driven communication between features rather than direct atom dependencies.

@@ -1,0 +1,34 @@
+{
+  "name": "@oisincoveney/style",
+  "version": "0.1.0",
+  "description": "Frontend TypeScript style enforcement for AI coding tools",
+  "type": "module",
+  "main": "./dist/rules.mjs",
+  "exports": {
+    ".": "./dist/rules.mjs"
+  },
+  "bin": {
+    "oisin-style": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "bun build src/cli.ts --outfile dist/cli.mjs --target node && bun build src/rules.ts --outfile dist/rules.mjs --target node",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "bun run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oisincoveney/style.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.1",
+    "typescript": "^5.8.3"
+  }
+}

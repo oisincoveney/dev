@@ -1,0 +1,28 @@
+---
+description: Rules for AI behavior when generating code
+---
+
+# AI Behavior
+
+These rules apply to ALL AI interactions, not just specific file types.
+
+## Before Writing Code
+- MUST read existing codebase before writing any code. Understand the project structure, patterns, and conventions already in use.
+- Research and propose your approach. Wait for approval before coding. Do not jump straight to implementation.
+- Use existing utilities, hooks, and patterns found in the project. Do NOT rewrite something that already exists.
+
+## Code Generation Rules
+- NEVER over-engineer. Use the simplest solution that solves the problem.
+- NEVER over-abstract. No unnecessary wrappers, indirection, or factory patterns for one-time operations.
+- NEVER over-comment. No obvious comments like `// increment counter` or `// return the value`. Comments are only for non-obvious WHY.
+- NEVER copy-paste code. If you're about to duplicate logic, extract it to a shared function or component.
+- NEVER write custom code when a well-maintained library already does the job. Check if a library exists before building from scratch.
+- NEVER use hacks, workarounds, or bandaids. Investigate root causes and apply proper fixes.
+- NEVER create new base UI components in `components/ui/` without explicit approval.
+- Refactor in the same PR as the feature, not in a separate PR.
+- Write modular, composable code. Break things into sensibly named hooks and components.
+- Use semantic HTML. No empty `<div>` elements used as spacers or wrappers when a semantic element exists.
+
+## Infrastructure
+- The WebSocket / infrastructure layer (`ws/`, `infrastructure/`) is READ-ONLY. Do not modify without explicit approval.
+- Effect library is encouraged for service composition, error handling, and async workflows.

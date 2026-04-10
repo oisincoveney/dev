@@ -1,0 +1,24 @@
+---
+description: Tailwind CSS, ShadCN, and UI styling rules
+globs: ["**/*.tsx", "**/*.jsx"]
+---
+
+# Styling & UI
+
+## HOOK-ENFORCED (will be blocked)
+- NEVER use inline styles (`style={{}}`). Use Tailwind classes.
+- NEVER use arbitrary Tailwind values (bracket syntax like `w-[347px]`, `h-[calc(...)]`). Use theme tokens or standard Tailwind classes.
+- NEVER use color-specific Tailwind classes (`bg-blue-500`, `text-red-600`, etc.). Use theme/design tokens.
+- NEVER concatenate className strings with `+`. Use `cn()` or `clsx()`.
+- NEVER use `<img>` for SVG icons. Import SVGs as React components.
+- NEVER import JS animation libraries (`framer-motion`, `react-spring`, `gsap`, etc.). Use CSS/Tailwind transitions only. Get explicit approval before using animation libraries.
+- NEVER use arbitrary z-index (`z-[100]` or `zIndex:`). Use Tailwind's `z-*` scale only.
+- No empty `<div>` or `<span>` elements. Use semantic HTML.
+- Long className strings (>120 chars) should be extracted to variables or components. (warned)
+
+## INSTRUCTION RULES
+- Tailwind CSS is for LAYOUT only. Do not add custom styling unless explicitly requested.
+- ShadCN components are pre-styled. Do NOT override their styles unless explicitly asked.
+- NEVER create new base UI components in `components/ui/`. Compose from existing ones. Ask if something is missing.
+- Images must use `loading="lazy"` with explicit width/height attributes.
+- Semantic HTML everywhere. Use `<nav>`, `<main>`, `<section>`, `<article>`, `<aside>`, `<header>`, `<footer>` instead of generic `<div>`.

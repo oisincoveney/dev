@@ -1,0 +1,18 @@
+---
+description: TypeScript type safety and strictness rules
+globs: ["**/*.ts", "**/*.tsx"]
+---
+
+# TypeScript Strictness
+
+## HOOK-ENFORCED (will be blocked)
+- NEVER use the `any` type. Use `unknown` and narrow, or use proper generics.
+- NEVER use type assertions (`as X`) without a justifying comment on the same line.
+- NEVER use non-null assertions (`!`). Use proper null checks or optional chaining.
+- NEVER use `@ts-ignore` or `@ts-expect-error`. Fix the type error properly.
+- NEVER access `process.env` or `import.meta.env` directly. Access environment variables through a Zod-validated schema file.
+
+## INSTRUCTION RULES
+- ALWAYS use TypeScript utility types (`Pick`, `Omit`, `Partial`, `Required`, indexed access like `App['id']`) instead of widening to primitives like `string` or `number`. If a prop is an app ID, type it as `App['id']`, not `string`.
+- ALWAYS define runtime validation schemas with Zod. Derive TypeScript types with `z.infer<typeof schema>`.
+- tsconfig must use maximum strictness (`strict: true`, `noUncheckedIndexedAccess: true`, etc.).

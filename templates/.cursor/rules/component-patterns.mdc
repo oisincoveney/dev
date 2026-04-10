@@ -1,0 +1,16 @@
+---
+description: React component structure and composition rules
+globs: ["**/*.tsx", "**/*.jsx"]
+---
+
+# Component Patterns
+
+## HOOK-ENFORCED (will be blocked)
+- NEVER use class components (`class X extends Component`). Use function components only.
+- Every component SHOULD have an explicit Props interface (warned if missing).
+
+## INSTRUCTION RULES
+- NEVER prop drill. Children pull their own state from Jotai atoms. Pages are layout shells that compose feature components — they do NOT pass data down to children.
+- Prefer composition. Build complex UI by composing smaller components, not by adding props.
+- Error boundaries are REQUIRED on every route/page-level component.
+- Use modular, composable code. Break logic into sensibly named hooks and components. A 50-line component doing one thing is better than a 200-line component doing three things.

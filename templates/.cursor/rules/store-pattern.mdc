@@ -1,0 +1,34 @@
+---
+description: Jotai store directory structure and naming conventions
+globs: ["**/store/**/*.ts"]
+---
+
+# Store Pattern
+
+## HOOK-ENFORCED (will be blocked)
+
+Every feature with state MUST use this store directory structure:
+
+```
+features/{feature-name}/store/
+├── atoms.ts       # Base and derived atoms
+├── families.ts    # atomFamily definitions (if needed)
+├── actions.ts     # Write atoms (mutations)
+├── listeners.ts   # Side-effect hooks
+├── handlers.ts    # Message handlers
+└── types.ts       # Store-specific interfaces
+```
+
+Files outside this pattern in a store directory will be blocked.
+
+## Naming Conventions (HOOK-ENFORCED)
+
+| File | Export Pattern | Example |
+|------|---------------|---------|
+| atoms.ts | `*Atom` | `projectsAtom`, `activeThreadAtom` |
+| families.ts | `*AtomFamily` | `threadAtomFamily`, `tabsAtomFamily` |
+| actions.ts | `do*Atom` | `doSwitchThreadAtom`, `doAddTabAtom` |
+| listeners.ts | `use*Listeners` | `useThreadStoreListeners` |
+| handlers.ts | `create*Handlers` | `createThreadHandlers` |
+
+Exports that don't match these patterns will be blocked.
