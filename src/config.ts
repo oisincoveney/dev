@@ -24,6 +24,7 @@ export interface DevConfig {
     typecheck: string
     lint: string
     format: string
+    e2e?: string
   }
   skills: ReadonlyArray<string>
   tools: ReadonlyArray<string>

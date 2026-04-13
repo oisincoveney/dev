@@ -127,6 +127,8 @@ export const RULE_SKILLS: ReadonlyArray<RuleSkill> = [
 **No deletion to pass**: never delete or weaken a test to make it pass. Fix the code, not the test.
 
 **Mutation testing** measures test quality beyond coverage. Run periodically.
+
+**Proof of work**: Run the test command and show passing output before reporting done. Never write "the tests should pass" — run them and confirm they do.
 `,
   },
   {
@@ -145,6 +147,8 @@ When you're about to write code that uses an external API, library function, or 
 3. If confirmed, proceed; if not, ask or use the actual API
 
 Never state an API exists based on training data alone. Verify or abstain. Confident wrong answers are worse than honest uncertainty.
+
+**No completion claims without proof**: Never write "this works", "this should work", or "tests should pass" as a terminal statement. Run the test command, observe the output, include it in your response. The Stop hook checks the session transcript — it will block you if you claim completion without evidence.
 
 **User Constraints Are Hard Requirements**
 

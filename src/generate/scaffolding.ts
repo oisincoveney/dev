@@ -22,6 +22,13 @@ export function generateProjectScaffolding(config: DevConfig): ScaffoldedFile[] 
   files.push(...propertyBasedTestingExample(config))
   files.push(...observabilityScaffolding(config))
 
+  if (
+    (config.variant === 'ts-frontend' || config.variant === 'ts-fullstack') &&
+    config.commands.e2e
+  ) {
+    files.push(...playwrightScaffolding(config))
+  }
+
   return files
 }
 
@@ -321,6 +328,54 @@ func reverse(s []int) {
         },
       ]
   }
+}
+
+function playwrightScaffolding(config: DevConfig): ScaffoldedFile[] {
+  const baseUrl =
+    config.commands.dev.includes('vp dev') ? 'http://localhost:5173' : 'http://localhost:3000'
+
+  return [
+    {
+      path: 'playwright.config.ts',
+      content: `import { defineConfig, devices } from '@playwright/test'
+
+export default defineConfig({
+  testDir: './e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: 'html',
+  use: {
+    baseURL: '${baseUrl}',
+    trace: 'on-first-retry',
+  },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+  ],
+  webServer: {
+    command: '${config.commands.dev}',
+    url: '${baseUrl}',
+    reuseExistingServer: !process.env.CI,
+  },
+})
+`,
+    },
+    {
+      path: 'e2e/example.spec.ts',
+      content: `import { expect, test } from '@playwright/test'
+
+// Example browser test. Replace with real user-flow tests.
+// Browser tests verify behaviour at the UI layer — unit tests cover logic.
+// Rule: one spec file per feature or user journey.
+
+test('homepage loads', async ({ page }) => {
+  await page.goto('/')
+  await expect(page).toHaveTitle(/.+/)
+})
+`,
+    },
+  ]
 }
 
 function observabilityScaffolding(config: DevConfig): ScaffoldedFile[] {

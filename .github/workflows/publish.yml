@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Test
+        run: bun run test
+
       - name: Bump patch version
         run: |
           git config user.name "github-actions[bot]"

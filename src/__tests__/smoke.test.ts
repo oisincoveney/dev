@@ -5,7 +5,7 @@ import { generateCodexHooks } from '../generate/codex-hooks.js'
 import { generateCursorRules } from '../generate/cursor-rules.js'
 import { generateLefthook } from '../generate/lefthook.js'
 import { generateLintConfig } from '../generate/lint-config.js'
-import { generateClaudeMd } from '../generate/markdown.js'
+import { buildClaudeMdBundle, generateClaudeMd } from '../generate/markdown.js'
 import { RULE_SKILLS, SUPERPOWER_SKILLS, skillsForVariant } from '../skills.js'
 
 const tsFrontendConfig: DevConfig = {
@@ -20,6 +20,7 @@ const tsFrontendConfig: DevConfig = {
     typecheck: 'vp check',
     lint: 'vp check',
     format: 'vp check',
+    e2e: 'playwright test',
   },
   skills: RULE_SKILLS.map((s) => s.id),
   tools: ['beads', 'contract-driven'],
@@ -82,6 +83,18 @@ describe('skills registry', () => {
       expect(skill.markdownSection).toMatch(/^## /)
       expect(skill.markdownSection.length).toBeGreaterThan(50)
     }
+  })
+
+  it('testing skill includes proof-of-work requirement', () => {
+    const testing = RULE_SKILLS.find((s) => s.id === 'testing')
+    expect(testing?.markdownSection).toContain('Proof of work')
+    expect(testing?.markdownSection).toContain('the tests should pass')
+  })
+
+  it('ai-behavior skill includes no-completion-claims rule', () => {
+    const aiBehavior = RULE_SKILLS.find((s) => s.id === 'ai-behavior')
+    expect(aiBehavior?.markdownSection).toContain('No completion claims without proof')
+    expect(aiBehavior?.markdownSection).toContain('Stop hook checks the session transcript')
   })
 })
 
@@ -154,6 +167,41 @@ describe('generateLefthook', () => {
     expect(yml).toContain('vp check')
     expect(yml).toContain('vp test')
   })
+
+  it('includes playwright step for ts-frontend when e2e is configured', () => {
+    const yml = generateLefthook(tsFrontendConfig)
+    expect(yml).toContain('playwright')
+    expect(yml).toContain('playwright test')
+  })
+
+  it('includes playwright step for ts-fullstack when e2e is configured', () => {
+    const fullstackConfig: DevConfig = {
+      ...tsFrontendConfig,
+      variant: 'ts-fullstack',
+      commands: { ...tsFrontendConfig.commands, e2e: 'playwright test' },
+    }
+    const yml = generateLefthook(fullstackConfig)
+    expect(yml).toContain('playwright')
+  })
+
+  it('does not include playwright step for backend variants', () => {
+    const backendConfig: DevConfig = {
+      ...tsFrontendConfig,
+      variant: 'ts-backend',
+      commands: { ...tsFrontendConfig.commands, e2e: undefined },
+    }
+    const yml = generateLefthook(backendConfig)
+    expect(yml).not.toContain('playwright')
+  })
+
+  it('does not include playwright step when e2e is not configured', () => {
+    const noE2eConfig: DevConfig = {
+      ...tsFrontendConfig,
+      commands: { ...tsFrontendConfig.commands, e2e: undefined },
+    }
+    const yml = generateLefthook(noE2eConfig)
+    expect(yml).not.toContain('playwright')
+  })
 })
 
 describe('generateLintConfig', () => {
@@ -187,6 +235,43 @@ describe('generateClaudeMd', () => {
     expect(md).toContain('## Commands')
     expect(md).toContain('vp dev')
     expect(md).toContain('vp check')
+  })
+
+  it('includes e2e command in commands block when configured', () => {
+    const md = generateClaudeMd(tsFrontendConfig, fakeAnswers)
+    expect(md).toContain('e2e:')
+    expect(md).toContain('playwright test')
+  })
+
+  it('omits e2e line when not configured', () => {
+    const noE2e: DevConfig = {
+      ...tsFrontendConfig,
+      commands: { ...tsFrontendConfig.commands, e2e: undefined },
+    }
+    const md = generateClaudeMd(noE2e, fakeAnswers)
+    expect(md).not.toContain('e2e:')
+  })
+
+  it('includes proof-of-work rule in critical rules', () => {
+    const bundle = buildClaudeMdBundle(tsFrontendConfig, fakeAnswers)
+    expect(bundle.root).toContain('Stop hook checks the session transcript')
+  })
+
+  it('includes Karpathy coding principles fragment', () => {
+    const bundle = buildClaudeMdBundle(tsFrontendConfig, fakeAnswers)
+    expect(bundle.fragments['.claude/docs/coding-principles.md']).toBeDefined()
+    const principles = bundle.fragments['.claude/docs/coding-principles.md']
+    expect(principles).toContain('Think Before Coding')
+    expect(principles).toContain('Simplicity First')
+    expect(principles).toContain('Surgical Changes')
+    expect(principles).toContain('Goal-Driven Execution')
+  })
+
+  it('includes forbidden completion-claim pattern in uncertainty block', () => {
+    const bundle = buildClaudeMdBundle(tsFrontendConfig, fakeAnswers)
+    const uncertainty = bundle.fragments['.claude/docs/uncertainty.md']
+    expect(uncertainty).toContain('this should work')
+    expect(uncertainty).toContain('tests should pass')
   })
 
   it('includes beads block when beads tool is selected', () => {

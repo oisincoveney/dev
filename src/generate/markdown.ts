@@ -22,6 +22,7 @@ export function buildClaudeMdBundle(config: DevConfig, _answers: Answers): Claud
     '.claude/docs/destructive.md': destructiveBlock(),
     '.claude/docs/workflow.md': workflowBlock(config),
     '.claude/docs/principles.md': principlesBlock(config),
+    '.claude/docs/coding-principles.md': karpathyBlock(),
   }
 
   if (config.tools.includes('beads')) {
@@ -50,6 +51,7 @@ export function buildClaudeMdBundle(config: DevConfig, _answers: Answers): Claud
     '- Confident wrong answers are worse than honest uncertainty — say "I need to verify" and check',
     '- Treat user constraints as non-negotiable; do not reinterpret',
     '- No follow-up questions like "Want me to...". If done, stop.',
+    '- Do not write "this works", "this should work", or "done" without having run the test command and seen passing output. The Stop hook checks the session transcript — it will block you if you claim completion without evidence.',
     '',
     importLines.join('\n'),
   ].join('\n')
@@ -64,6 +66,7 @@ export function generateClaudeMd(config: DevConfig, answers: Answers): string {
 }
 
 function commandsBlock(config: DevConfig): string {
+  const e2eLine = config.commands.e2e ? `\ne2e:       ${config.commands.e2e}` : ''
   return `## Commands
 
 \`\`\`
@@ -72,7 +75,7 @@ build:     ${config.commands.build}
 test:      ${config.commands.test}
 typecheck: ${config.commands.typecheck}
 lint:      ${config.commands.lint}
-format:    ${config.commands.format}
+format:    ${config.commands.format}${e2eLine}
 \`\`\`
 
 Use these exact commands. Do not guess alternatives like \`docker compose up\`, \`npm start\`, etc.
@@ -211,6 +214,28 @@ Confident wrong answers are worse than honest uncertainty.
 - Calling \`lib.method()\` without confirming method exists in the installed version
 - Referencing filesystem paths, env vars, or config keys without reading the actual file
 - Citing documentation claims without having read the docs in this session
+- Saying "this works", "this should work", "I believe this is correct", or "the tests should pass" as a terminal statement without having run the test command and seen passing output
+`
+}
+
+function karpathyBlock(): string {
+  return `## Coding Principles
+
+**Think Before Coding**
+
+State your assumptions explicitly before writing code. If uncertain about requirements, ask. Don't hide confusion or silently choose between interpretations — surface tradeoffs and present alternatives.
+
+**Simplicity First**
+
+Write the minimum code that solves the problem. Nothing speculative. No unrequested features, no premature abstractions, no unnecessary configurability. If you wrote 200 lines and it could be 50, rewrite it. A senior engineer should not find the solution overcomplicated.
+
+**Surgical Changes**
+
+Touch only what the task requires. Every modified line should directly address the request. Don't clean up unrelated code, don't refactor functioning code, don't improve surrounding style. Match existing conventions.
+
+**Goal-Driven Execution**
+
+Before coding, state the explicit success criteria. Define what "done" looks like in testable terms. After implementing, verify against those criteria — run the test command, check the output, confirm the goal is met. Loop until verified, not until it looks right.
 `
 }
 

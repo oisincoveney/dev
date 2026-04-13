@@ -34,6 +34,7 @@ export interface Answers {
     typecheck: string
     lint: string
     format: string
+    e2e?: string
   }
   skills: ReadonlyArray<string>
   tools: ReadonlyArray<string>
@@ -133,13 +134,17 @@ export async function runPrompts(detected: RunPromptsOptions): Promise<Answers> 
 
   const defaults = defaultCommandsFor(variant, packageManager, detected)
 
-  const commands = {
+  const commands: Answers['commands'] = {
     dev: await askCommand('Dev command (how to run the app)?', defaults.dev),
     build: await askCommand('Build command?', defaults.build),
     test: await askCommand('Test command?', defaults.test),
     typecheck: await askCommand('Typecheck command?', defaults.typecheck),
     lint: await askCommand('Lint command?', defaults.lint),
     format: await askCommand('Format command?', defaults.format),
+  }
+
+  if (variant === 'ts-frontend' || variant === 'ts-fullstack') {
+    commands.e2e = await askCommand('Browser test command (Playwright)?', 'playwright test')
   }
 
   const ruleSkills = ruleSkillsForVariant(variant)
