@@ -240,7 +240,7 @@ describe('detectProject', () => {
     return dir
   }
 
-  it('detects ts-frontend for SvelteKit project', () => {
+  it('detects ts-fullstack for SvelteKit project', () => {
     const dir = makeTmpProject({
       'package.json': JSON.stringify({
         scripts: { dev: 'vite dev', build: 'vite build', check: 'svelte-check' },
@@ -249,8 +249,23 @@ describe('detectProject', () => {
     })
     try {
       const result = detectProject(dir)
-      expect(result.variant).toBe('ts-frontend')
+      expect(result.variant).toBe('ts-fullstack')
       expect(result.language).toBe('typescript')
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('detects ts-frontend for plain Svelte (no Kit) project', () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({
+        scripts: { dev: 'vite dev', build: 'vite build' },
+        devDependencies: { '@sveltejs/vite-plugin-svelte': '^3.0.0', vite: '^5.0.0' },
+      }),
+    })
+    try {
+      const result = detectProject(dir)
+      expect(result.variant).toBe('ts-frontend')
     } finally {
       rmSync(dir, { recursive: true })
     }

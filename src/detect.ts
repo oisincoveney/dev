@@ -117,11 +117,14 @@ function detectVariantFromDeps(pkg: PackageJson): ProjectVariant | null {
   if (has('next', 'nuxt', '@nuxt/core')) return 'ts-fullstack'
   if (has('@tanstack/start')) return 'ts-fullstack'
 
-  // Frontend-only SSR/SPA frameworks (Vite-based)
-  if (has('@sveltejs/kit', '@sveltejs/vite-plugin-svelte')) return 'ts-frontend'
+  // Fullstack meta-frameworks with server capabilities
+  if (has('@sveltejs/kit')) return 'ts-fullstack'
   if (has('@remix-run/react', '@remix-run/node')) return 'ts-fullstack'
-  if (has('astro')) return 'ts-frontend'
   if (has('@solidjs/start')) return 'ts-fullstack'
+
+  // Frontend-only (Svelte without Kit, plain Vite, Astro)
+  if (has('@sveltejs/vite-plugin-svelte')) return 'ts-frontend'
+  if (has('astro')) return 'ts-frontend'
 
   // Pure backend indicators
   const hasBackend = has('express', 'fastify', 'hono', 'koa', '@nestjs/core', 'elysia')
