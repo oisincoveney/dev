@@ -69,6 +69,7 @@ export async function runPrompts(detected: RunPromptsOptions): Promise<Answers> 
   const variant = cancelGuard(
     await p.select<ProjectVariant>({
       message: 'What are you building?',
+      initialValue: detected.variant ?? undefined,
       options: [
         { value: 'ts-frontend', label: 'TypeScript Frontend (Vite+)' },
         { value: 'ts-backend', label: 'TypeScript Backend' },

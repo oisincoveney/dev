@@ -6,11 +6,13 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Language, PackageManager } from './config.js'
+import type { ProjectVariant } from './skills.js'
 
 export interface Detected {
   isEmpty: boolean
   language: Language | null
   packageManager: PackageManager | null
+  variant: ProjectVariant | null
   commands: {
     dev: string | null
     build: string | null
@@ -29,6 +31,7 @@ export function detectProject(cwd: string): Detected {
     isEmpty: false,
     language: null,
     packageManager: null,
+    variant: null,
     commands: {
       dev: null,
       build: null,
@@ -105,6 +108,34 @@ interface PackageJson {
   devDependencies?: Record<string, string>
 }
 
+function detectVariantFromDeps(pkg: PackageJson): ProjectVariant | null {
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies }
+
+  const has = (...names: string[]) => names.some((n) => deps[n] !== undefined)
+
+  // Fullstack frameworks
+  if (has('next', 'nuxt', '@nuxt/core')) return 'ts-fullstack'
+  if (has('@tanstack/start')) return 'ts-fullstack'
+
+  // Frontend-only SSR/SPA frameworks (Vite-based)
+  if (has('@sveltejs/kit', '@sveltejs/vite-plugin-svelte')) return 'ts-frontend'
+  if (has('@remix-run/react', '@remix-run/node')) return 'ts-fullstack'
+  if (has('astro')) return 'ts-frontend'
+  if (has('@solidjs/start')) return 'ts-fullstack'
+
+  // Pure backend indicators
+  const hasBackend = has('express', 'fastify', 'hono', 'koa', '@nestjs/core', 'elysia')
+  const hasFrontend = has('react', 'vue', 'svelte', 'solid-js', 'preact', '@angular/core')
+  const hasVite = has('vite')
+
+  if (hasBackend && hasFrontend) return 'ts-fullstack'
+  if (hasBackend && !hasFrontend) return 'ts-backend'
+  if (hasVite && hasFrontend) return 'ts-frontend'
+  if (hasFrontend) return 'ts-frontend'
+
+  return null
+}
+
 function readJsScripts(pkgJsonPath: string, detected: Detected): void {
   const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as PackageJson
   const scripts = pkg.scripts ?? {}
@@ -123,9 +154,11 @@ function readJsScripts(pkgJsonPath: string, detected: Detected): void {
   detected.commands.dev = scriptMatch(['dev', 'start', 'serve'])
   detected.commands.build = scriptMatch(['build'])
   detected.commands.test = scriptMatch(['test', 'test:unit', 'vitest', 'jest'])
-  detected.commands.typecheck = scriptMatch(['typecheck', 'check-types', 'tsc', 'type-check'])
+  detected.commands.typecheck = scriptMatch(['typecheck', 'check', 'check-types', 'tsc', 'type-check'])
   detected.commands.lint = scriptMatch(['lint', 'eslint', 'biome'])
   detected.commands.format = scriptMatch(['format', 'prettier', 'fmt'])
+
+  detected.variant = detectVariantFromDeps(pkg)
 }
 
 function checkGitRemote(cwd: string): boolean {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
+import { detectProject } from '../detect.js'
 import { generateClaudeSettings } from '../generate/claude-settings.js'
 import { generateCodexHooks } from '../generate/codex-hooks.js'
 import { generateCursorRules } from '../generate/cursor-rules.js'
@@ -7,6 +8,9 @@ import { generateLefthook } from '../generate/lefthook.js'
 import { generateLintConfig } from '../generate/lint-config.js'
 import { buildClaudeMdBundle, generateClaudeMd } from '../generate/markdown.js'
 import { RULE_SKILLS, SUPERPOWER_SKILLS, skillsForVariant } from '../skills.js'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const tsFrontendConfig: DevConfig = {
   language: 'typescript',
@@ -224,6 +228,95 @@ describe('generateLintConfig', () => {
     expect(configs['.golangci.yml']).toContain('gocognit')
     expect(configs['.golangci.yml']).toContain('varnamelen')
     expect(configs['.golangci.yml']).toContain('depguard')
+  })
+})
+
+describe('detectProject', () => {
+  function makeTmpProject(files: Record<string, string>): string {
+    const dir = mkdtempSync(join(tmpdir(), 'style-template-test-'))
+    for (const [name, content] of Object.entries(files)) {
+      writeFileSync(join(dir, name), content)
+    }
+    return dir
+  }
+
+  it('detects ts-frontend for SvelteKit project', () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({
+        scripts: { dev: 'vite dev', build: 'vite build', check: 'svelte-check' },
+        devDependencies: { '@sveltejs/kit': '^2.0.0', vite: '^5.0.0' },
+      }),
+    })
+    try {
+      const result = detectProject(dir)
+      expect(result.variant).toBe('ts-frontend')
+      expect(result.language).toBe('typescript')
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('detects ts-fullstack for Next.js project', () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({
+        scripts: { dev: 'next dev', build: 'next build' },
+        dependencies: { next: '^14.0.0', react: '^18.0.0' },
+      }),
+    })
+    try {
+      const result = detectProject(dir)
+      expect(result.variant).toBe('ts-fullstack')
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('detects ts-backend for Hono project', () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({
+        scripts: { dev: 'bun run src/index.ts', build: 'bun build' },
+        dependencies: { hono: '^4.0.0' },
+      }),
+    })
+    try {
+      const result = detectProject(dir)
+      expect(result.variant).toBe('ts-backend')
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('reads scripts from package.json', () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({
+        scripts: { dev: 'vp dev', build: 'vp build', test: 'vp test', check: 'vp check' },
+        devDependencies: { vite: '^5.0.0', react: '^18.0.0' },
+        'bun.lock': '',
+      }),
+    })
+    try {
+      const result = detectProject(dir)
+      expect(result.commands.dev).toBe('bun run dev')
+      expect(result.commands.build).toBe('bun run build')
+      expect(result.commands.test).toBe('bun run test')
+      expect(result.commands.typecheck).toBe('bun run check')
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('detects Rust project', () => {
+    const dir = makeTmpProject({
+      'Cargo.toml': '[package]\nname = "myapp"\nversion = "0.1.0"',
+    })
+    try {
+      const result = detectProject(dir)
+      expect(result.language).toBe('rust')
+      expect(result.packageManager).toBe('cargo')
+      expect(result.commands.test).toBe('cargo test')
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
   })
 })
 
