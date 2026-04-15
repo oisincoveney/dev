@@ -35,94 +35,60 @@ interface ClaudeSettings {
   mcpServers?: Record<string, unknown>
 }
 
+// Hook commands use relative paths (.claude/hooks/foo.sh), but Claude Code may
+// run them from a subdirectory (common in monorepos). Prefix every command with
+// a cd to the git root so the path resolves correctly regardless of cwd.
+function hook(script: string, timeout?: number): HookCommand {
+  return {
+    type: 'command',
+    command: `cd "$(git rev-parse --show-toplevel)" && .claude/hooks/${script}`,
+    ...(timeout !== undefined ? { timeout } : {}),
+  }
+}
+
 export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
   const settings: ClaudeSettings = {
     hooks: {
       SessionStart: [
         {
-          hooks: [
-            {
-              type: 'command',
-              command: '.claude/hooks/context-bootstrap.sh',
-              timeout: 10,
-            },
-          ],
+          hooks: [hook('context-bootstrap.sh', 10)],
         },
       ],
       UserPromptSubmit: [
         {
-          hooks: [
-            {
-              type: 'command',
-              command: '.claude/hooks/context-injector.sh',
-              timeout: 5,
-            },
-          ],
+          hooks: [hook('context-injector.sh', 5)],
         },
       ],
       PreToolUse: [
         {
           matcher: 'Write|Edit',
           hooks: [
-            {
-              type: 'command',
-              command: '.claude/hooks/import-validator.sh',
-              timeout: 10,
-            },
-            {
-              type: 'command',
-              command: '.claude/hooks/ai-antipattern-guard.sh',
-              timeout: 10,
-            },
+            hook('ts-style-guard.sh', 30),
+            hook('import-validator.sh', 10),
+            hook('ai-antipattern-guard.sh', 10),
           ],
         },
         {
           matcher: 'Bash',
           hooks: [
-            {
-              type: 'command',
-              command: '.claude/hooks/destructive-command-guard.sh',
-              timeout: 5,
-            },
-            {
-              type: 'command',
-              command: '.claude/hooks/block-coauthor.sh',
-              timeout: 5,
-            },
+            hook('destructive-command-guard.sh', 5),
+            hook('block-coauthor.sh', 5),
           ],
         },
         {
           matcher: 'TodoWrite',
-          hooks: [
-            {
-              type: 'command',
-              command: '.claude/hooks/block-todowrite.sh',
-              timeout: 5,
-            },
-          ],
+          hooks: [hook('block-todowrite.sh', 5)],
         },
       ],
       PostToolUse: [
         {
           matcher: 'Write|Edit',
-          hooks: [
-            {
-              type: 'command',
-              command: '.claude/hooks/post-edit-check.sh',
-              timeout: 60,
-            },
-          ],
+          hooks: [hook('post-edit-check.sh', 60)],
         },
       ],
       Stop: [
         {
-          hooks: [
-            {
-              type: 'command',
-              command: '.claude/hooks/pre-stop-verification.sh',
-              timeout: 30,
-            },
-          ],
+          hooks: [hook('pre-stop-verification.sh', 30)],
         },
       ],
     },

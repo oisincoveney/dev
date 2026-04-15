@@ -82,15 +82,15 @@ export async function runPrompts(detected: RunPromptsOptions): Promise<Answers> 
         { value: 'go-bin', label: 'Go (binary)' },
         { value: 'go-lib', label: 'Go (library)' },
         { value: 'go-workspace', label: 'Go Workspace (multi-module)' },
+        { value: 'swift-app', label: 'Swift App (Xcode / SwiftUI)' },
+        { value: 'swift-lib', label: 'Swift Library (Swift Package Manager)' },
+        { value: 'swift-package', label: 'Swift Package / CLI (Swift Package Manager)' },
+        { value: 'other-app', label: 'Other language — language-agnostic rules only' },
       ],
     }),
   )
 
-  const language: Language = variant.startsWith('ts-')
-    ? 'typescript'
-    : variant.startsWith('rust-')
-      ? 'rust'
-      : 'go'
+  const language = languageForVariant(variant)
 
   let framework: string | null = null
   if (variant === 'ts-frontend' || variant === 'ts-fullstack') {
@@ -114,6 +114,17 @@ export async function runPrompts(detected: RunPromptsOptions): Promise<Answers> 
           { value: 'fastify', label: 'Fastify' },
           { value: 'express', label: 'Express' },
           { value: 'none', label: 'None (library/CLI)' },
+        ],
+      }),
+    )
+  } else if (variant === 'swift-app') {
+    framework = cancelGuard(
+      await p.select<string>({
+        message: 'UI framework?',
+        options: [
+          { value: 'swiftui', label: 'SwiftUI' },
+          { value: 'uikit', label: 'UIKit' },
+          { value: 'appkit', label: 'AppKit (macOS)' },
         ],
       }),
     )
@@ -370,6 +381,14 @@ async function askCommand(message: string, defaultValue: string): Promise<string
   return value.length === 0 ? defaultValue : value
 }
 
+function languageForVariant(variant: ProjectVariant): Language {
+  if (variant.startsWith('ts-')) return 'typescript'
+  if (variant.startsWith('rust-')) return 'rust'
+  if (variant.startsWith('swift-')) return 'swift'
+  if (variant.startsWith('other-')) return 'other'
+  return 'go'
+}
+
 function resolvePackageManager(detected: Detected, language: Language): PackageManager {
   if (detected.packageManager) return detected.packageManager
   switch (language) {
@@ -379,6 +398,10 @@ function resolvePackageManager(detected: Detected, language: Language): PackageM
       return 'cargo'
     case 'go':
       return 'go'
+    case 'swift':
+      return 'swift'
+    case 'other':
+      return 'other'
   }
 }
 
@@ -410,6 +433,38 @@ function defaultCommandsFor(
       typecheck: d.typecheck ?? 'cargo check',
       lint: d.lint ?? 'cargo clippy --all-targets -- -D warnings',
       format: d.format ?? 'cargo fmt',
+    }
+  }
+
+  if (variant.startsWith('swift-')) {
+    if (variant === 'swift-app') {
+      return {
+        dev: d.dev ?? '',
+        build: d.build ?? 'xcodebuild build',
+        test: d.test ?? 'xcodebuild test',
+        typecheck: d.typecheck ?? 'xcodebuild build',
+        lint: d.lint ?? 'swiftlint lint',
+        format: d.format ?? 'swiftformat .',
+      }
+    }
+    return {
+      dev: d.dev ?? 'swift run',
+      build: d.build ?? 'swift build',
+      test: d.test ?? 'swift test',
+      typecheck: d.typecheck ?? 'swift build',
+      lint: d.lint ?? 'swiftlint lint',
+      format: d.format ?? 'swiftformat .',
+    }
+  }
+
+  if (variant.startsWith('other-')) {
+    return {
+      dev: d.dev ?? '',
+      build: d.build ?? '',
+      test: d.test ?? '',
+      typecheck: d.typecheck ?? '',
+      lint: d.lint ?? '',
+      format: d.format ?? '',
     }
   }
 

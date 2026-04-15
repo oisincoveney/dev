@@ -41,6 +41,10 @@ export type ProjectVariant =
   | 'go-bin'
   | 'go-lib'
   | 'go-workspace'
+  | 'swift-app'
+  | 'swift-lib'
+  | 'swift-package'
+  | 'other-app'
 
 const ALL_VARIANTS: ReadonlyArray<ProjectVariant> = [
   'ts-frontend',
@@ -54,6 +58,10 @@ const ALL_VARIANTS: ReadonlyArray<ProjectVariant> = [
   'go-bin',
   'go-lib',
   'go-workspace',
+  'swift-app',
+  'swift-lib',
+  'swift-package',
+  'other-app',
 ]
 
 const TS_VARIANTS: ReadonlyArray<ProjectVariant> = [

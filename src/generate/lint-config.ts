@@ -21,6 +21,9 @@ export function generateLintConfig(config: DevConfig): Record<string, string> {
       return {
         '.golangci.yml': goLangciConfig(),
       }
+    case 'swift':
+    case 'other':
+      return {}
   }
 }
 

@@ -159,8 +159,8 @@ Reference the spec in commits: "Implements per specs/2026-04-13-<slug>.md".
 `
 }
 
-function contractDrivenBlock(language: 'typescript' | 'rust' | 'go'): string {
-  const examples: Record<typeof language, string> = {
+function contractDrivenBlock(language: import('../config.js').Language): string {
+  const structureByLanguage: Record<string, string> = {
     typescript: `src/modules/trip/
   index.ts          # Public interface — the ONLY thing other modules import
   trip.ts           # Implementation (internal)
@@ -174,7 +174,18 @@ function contractDrivenBlock(language: 'typescript' | 'rust' | 'go'): string {
   trip.go           # Public types and interfaces (exported)
   internal.go       # unexported helpers
   trip_test.go      # Tests that verify the contract`,
+    swift: `Sources/Trip/
+  Trip.swift        # Public types + contract doc comments
+  TripStore.swift   # internal implementation (not exported)
+Tests/TripTests/
+  TripTests.swift   # Tests that verify the contract`,
+    other: `trip/
+  interface         # Public surface — the only thing consumers use
+  internal          # Implementation details (unexported/private)
+  tests             # Tests that verify the contract`,
   }
+
+  const examples = structureByLanguage
 
   return `## Contract-Driven Modules
 

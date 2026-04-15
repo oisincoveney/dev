@@ -178,6 +178,66 @@ impl Example {
 `,
         },
       ]
+    case 'swift':
+      return [
+        {
+          path: 'Sources/Example/Example.swift',
+          content: `/// Public interface — callers may only import from this module.
+///
+/// # Contract
+/// - \`\`ExampleRecord/init(name:)\`\` throws \`\`ExampleError/invalidName\`\` if name is
+///   empty or exceeds 128 characters after trimming.
+/// - \`\`ExampleRecord/id\`\` is stable for the lifetime of the record.
+public struct ExampleRecord: Sendable {
+    public let id: UUID
+    public let name: String
+    public let createdAt: Date
+
+    public init(name: String) throws {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed.count <= 128 else {
+            throw ExampleError.invalidName
+        }
+        self.id = UUID()
+        self.name = trimmed
+        self.createdAt = Date()
+    }
+}
+
+public enum ExampleError: Error {
+    case invalidName
+}
+`,
+        },
+        {
+          path: 'Tests/ExampleTests/ExampleTests.swift',
+          content: `import XCTest
+@testable import Example
+
+final class ExampleTests: XCTestCase {
+    func testValidName() throws {
+        let record = try ExampleRecord(name: "hello")
+        XCTAssertEqual(record.name, "hello")
+    }
+
+    func testTrimsWhitespace() throws {
+        let record = try ExampleRecord(name: "  hello  ")
+        XCTAssertEqual(record.name, "hello")
+    }
+
+    func testEmptyNameThrows() {
+        XCTAssertThrowsError(try ExampleRecord(name: ""))
+    }
+
+    func testLongNameThrows() {
+        XCTAssertThrowsError(try ExampleRecord(name: String(repeating: "x", count: 129)))
+    }
+}
+`,
+        },
+      ]
+    case 'other':
+      return []
     case 'go':
       return [
         {
@@ -289,6 +349,28 @@ proptest! {
 `,
         },
       ]
+    case 'swift':
+      return [
+        {
+          path: 'Tests/PropertyExampleTests/PropertyExampleTests.swift',
+          content: `import XCTest
+
+// Property-based test example using randomised inputs.
+// For full PBT support consider SwiftCheck (github.com/typelift/SwiftCheck).
+
+final class PropertyExampleTests: XCTestCase {
+    func testReverseTwiceIsIdentity() {
+        for _ in 0..<200 {
+            let xs = (0..<Int.random(in: 0...50)).map { _ in Int.random(in: -1000...1000) }
+            XCTAssertEqual(Array(xs.reversed().reversed()), xs)
+        }
+    }
+}
+`,
+        },
+      ]
+    case 'other':
+      return []
     case 'go':
       return [
         {
@@ -419,6 +501,25 @@ pub fn init() {
 `,
         },
       ]
+    case 'swift':
+      return [
+        {
+          path: 'Sources/Logging/Logging.swift',
+          content: `import OSLog
+
+// Use os.Logger for structured logging throughout the app.
+// Never use print() in production code.
+// Include subsystem (bundle ID) and category on every logger.
+extension Logger {
+    static let app = Logger(subsystem: Bundle.main.bundleIdentifier ?? "app", category: "general")
+    static let network = Logger(subsystem: Bundle.main.bundleIdentifier ?? "app", category: "network")
+    static let data = Logger(subsystem: Bundle.main.bundleIdentifier ?? "app", category: "data")
+}
+`,
+        },
+      ]
+    case 'other':
+      return []
     case 'go':
       return [
         {

@@ -44,5 +44,9 @@ function globsForLanguage(language: DevConfig['language']): string[] {
       return ['**/*.rs']
     case 'go':
       return ['**/*.go']
+    case 'swift':
+      return ['**/*.swift']
+    case 'other':
+      return ['**/*']
   }
 }

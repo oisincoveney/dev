@@ -26,6 +26,9 @@ export function generateToolConfigs(config: DevConfig): Record<string, string> {
     case 'go':
       out['.go-mutesting.yml'] = goMutestingConfig()
       break
+    case 'swift':
+    case 'other':
+      break
   }
 
   return out

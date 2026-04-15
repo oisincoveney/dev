@@ -52,6 +52,7 @@ export function detectProject(cwd: string): Detected {
   const pkgJsonPath = join(cwd, 'package.json')
   const cargoPath = join(cwd, 'Cargo.toml')
   const goModPath = join(cwd, 'go.mod')
+  const swiftPkgPath = join(cwd, 'Package.swift')
 
   if (existsSync(pkgJsonPath)) {
     detected.language = 'typescript'
@@ -75,6 +76,26 @@ export function detectProject(cwd: string): Detected {
     detected.commands.typecheck = 'go vet ./...'
     detected.commands.lint = 'golangci-lint run'
     detected.commands.format = 'gofmt -w .'
+  } else if (existsSync(swiftPkgPath)) {
+    detected.language = 'swift'
+    detected.packageManager = 'swift'
+    detected.variant = detectSwiftVariant(cwd, swiftPkgPath)
+    detected.commands.dev = 'swift run'
+    detected.commands.build = 'swift build'
+    detected.commands.test = 'swift test'
+    detected.commands.typecheck = 'swift build'
+    detected.commands.lint = 'swiftlint lint'
+    detected.commands.format = 'swiftformat .'
+  } else if (hasXcodeProject(cwd)) {
+    detected.language = 'swift'
+    detected.packageManager = 'swift'
+    detected.variant = 'swift-app'
+    detected.commands.dev = null
+    detected.commands.build = 'xcodebuild build'
+    detected.commands.test = 'xcodebuild test'
+    detected.commands.typecheck = 'xcodebuild build'
+    detected.commands.lint = 'swiftlint lint'
+    detected.commands.format = 'swiftformat .'
   } else {
     const entries = existsSync(cwd) ? readDir(cwd) : []
     detected.isEmpty = entries.filter((name) => !name.startsWith('.')).length === 0
@@ -162,6 +183,30 @@ function readJsScripts(pkgJsonPath: string, detected: Detected): void {
   detected.commands.format = scriptMatch(['format', 'prettier', 'fmt'])
 
   detected.variant = detectVariantFromDeps(pkg)
+}
+
+function detectSwiftVariant(cwd: string, pkgSwiftPath: string): import('./skills.js').ProjectVariant {
+  try {
+    const contents = readFileSync(pkgSwiftPath, 'utf8')
+    // Executable targets suggest a CLI/app package
+    if (contents.includes('.executableTarget') || contents.includes('type: .executable')) {
+      return 'swift-package'
+    }
+    // Library targets
+    if (contents.includes('.library') || contents.includes('type: .library')) {
+      return 'swift-lib'
+    }
+  } catch {}
+  return 'swift-package'
+}
+
+function hasXcodeProject(cwd: string): boolean {
+  try {
+    const entries: ReadonlyArray<string> = require('node:fs').readdirSync(cwd)
+    return entries.some((e: string) => e.endsWith('.xcodeproj') || e.endsWith('.xcworkspace'))
+  } catch {
+    return false
+  }
 }
 
 function checkGitRemote(cwd: string): boolean {

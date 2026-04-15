@@ -12,21 +12,45 @@ if [[ -z "$FILE_PATH" || -z "$CONTENT" ]]; then
   exit 0
 fi
 
+# Resolve to absolute path so find_pkg_json walks up from the correct directory
+if [[ "$FILE_PATH" != /* ]]; then
+  FILE_PATH="$(pwd)/$FILE_PATH"
+fi
+
 fabricated=""
+
+find_pkg_json() {
+  local dir="$1"
+  while [[ "$dir" != "/" && "$dir" != "." ]]; do
+    if [[ -f "$dir/package.json" ]]; then
+      echo "$dir/package.json"
+      return
+    fi
+    dir="$(dirname "$dir")"
+  done
+  if [[ -f "package.json" ]]; then
+    echo "package.json"
+  fi
+}
 
 case "$FILE_PATH" in
   *.ts|*.tsx|*.js|*.mjs|*.cjs)
-    if [[ -f package.json ]]; then
-      deps=$(jq -r '(.dependencies // {}) + (.devDependencies // {}) + (.peerDependencies // {}) | keys[]' package.json 2>/dev/null || echo "")
+    _pkg_json=$(find_pkg_json "$(dirname "$FILE_PATH")")
+    if [[ -n "$_pkg_json" && -f "$_pkg_json" ]]; then
+      deps=$(jq -r '(.dependencies // {}) + (.devDependencies // {}) + (.peerDependencies // {}) | keys[]' "$_pkg_json" 2>/dev/null || echo "")
       imports=$(echo "$CONTENT" | grep -oE "from ['\"]([^'\"]+)['\"]|require\(['\"]([^'\"]+)['\"]\)" | sed -E "s/(from |require\()?['\"]([^'\"]+)['\"]\)?/\2/" | grep -v '^\.' | grep -v '^/' || true)
       for pkg in $imports; do
         base=$(echo "$pkg" | awk -F/ '{if ($1 ~ /^@/) print $1"/"$2; else print $1}')
-        # Node built-ins
+        # Node built-ins and local path aliases (e.g. @/ Vite alias)
         case "$base" in
           fs|path|node:*|crypto|http|https|url|util|os|stream|events|child_process|buffer|assert|querystring|zlib|net|tls|dgram|dns|readline|repl|vm|worker_threads|cluster|perf_hooks|async_hooks|timers|string_decoder|console|process|module|v8|inspector|trace_events|wasi|test)
             continue
             ;;
         esac
+        # Skip Vite/TypeScript path aliases like @/components, @/lib, @/store
+        if [[ "$base" == "@/"* || "$pkg" == "@/"* ]]; then
+          continue
+        fi
         if ! echo "$deps" | grep -qxF "$base"; then
           fabricated+="$base\n"
         fi

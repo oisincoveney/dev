@@ -406,6 +406,12 @@ function writeJson(path: string, data: unknown): void {
 
 type HookEntry = { matcher?: string; hooks: { type: string; command: string; timeout?: number }[] }
 
+/** Extracts the .claude/hooks/foo.sh filename from a hook command, regardless of prefix. */
+function extractHookScript(command: string): string | null {
+  const match = command.match(/\.claude\/hooks\/([^\s'"]+)/)
+  return match ? match[1] : null
+}
+
 function writeOrMergeSettings(
   path: string,
   generated: ReturnType<typeof generateClaudeSettings>,
@@ -445,12 +451,32 @@ function writeOrMergeSettings(
         // New matcher — add it
         result.push(genEntry)
       } else {
-        // Merge hooks within this matcher: keep existing hooks, append generated ones not already present
-        const existingCommands = new Set(result[existingIdx].hooks.map((h) => h.command))
-        const toAdd = genEntry.hooks.filter((h) => !existingCommands.has(h.command))
+        // Merge hooks within this matcher.
+        // Generated hooks that reference a .claude/hooks/ script replace any existing
+        // hook referencing the same script (handles e.g. adding the cd prefix on update).
+        // Other existing hooks (user-custom, like bd prime) are preserved.
+        const updatedHooks = [...result[existingIdx].hooks]
+        for (const genHook of genEntry.hooks) {
+          const genScript = extractHookScript(genHook.command)
+          const existingIdx2 = genScript
+            ? updatedHooks.findIndex((h) => extractHookScript(h.command) === genScript)
+            : updatedHooks.findIndex((h) => h.command === genHook.command)
+          if (existingIdx2 !== -1) {
+            updatedHooks[existingIdx2] = genHook
+          } else {
+            updatedHooks.push(genHook)
+          }
+        }
+        // Deduplicate: if the same script appears more than once (e.g. from a
+        // previous bad merge), keep the last occurrence for each script.
+        const seen = new Map<string, number>()
+        for (let i = 0; i < updatedHooks.length; i++) {
+          const key = extractHookScript(updatedHooks[i].command) ?? updatedHooks[i].command
+          seen.set(key, i)
+        }
         result[existingIdx] = {
           ...result[existingIdx],
-          hooks: [...result[existingIdx].hooks, ...toAdd],
+          hooks: updatedHooks.filter((_, i) => seen.get(extractHookScript(updatedHooks[i].command) ?? updatedHooks[i].command) === i),
         }
       }
     }

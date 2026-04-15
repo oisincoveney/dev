@@ -176,6 +176,85 @@ describe('installAll', () => {
     expect(backup).toBe(customClippy)
   })
 
+  it('writes correct files for a swift-app project (Pinny-style)', async () => {
+    const swiftAnswers: Answers = {
+      scaffoldNew: false,
+      language: 'swift',
+      variant: 'swift-app',
+      framework: 'swiftui',
+      projectName: '',
+      packageManager: 'swift',
+      commands: {
+        dev: '',
+        build: 'xcodebuild build',
+        test: 'xcodebuild test',
+        typecheck: 'xcodebuild build',
+        lint: 'swiftlint lint',
+        format: 'swiftformat .',
+      },
+      skills: ['code-quality', 'architecture', 'testing', 'ai-behavior', 'performance'],
+      tools: ['beads'],
+      workflow: 'idd',
+      contractDriven: false,
+      targets: ['claude', 'codex', 'opencode', 'cursor', 'lefthook'],
+      mcpServers: [],
+      models: {
+        default: 'claude-sonnet-4-6',
+        planning: 'claude-opus-4-6',
+        simple_edits: 'claude-haiku-4-5-20251001',
+        review: 'claude-opus-4-6',
+      },
+    }
+    const swiftConfig: DevConfig = {
+      language: swiftAnswers.language,
+      variant: swiftAnswers.variant,
+      framework: swiftAnswers.framework,
+      packageManager: swiftAnswers.packageManager,
+      commands: swiftAnswers.commands,
+      skills: swiftAnswers.skills,
+      tools: swiftAnswers.tools,
+      workflow: swiftAnswers.workflow,
+      contractDriven: swiftAnswers.contractDriven,
+      targets: swiftAnswers.targets,
+    }
+
+    await installAll(dir, swiftConfig, swiftAnswers, { skipSideEffects: true })
+
+    // Core hooks and settings present
+    expect(existsSync(join(dir, '.claude/hooks/destructive-command-guard.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/tdd-guard.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/settings.json'))).toBe(true)
+
+    // Lefthook generated with no ts-style-guard
+    expect(existsSync(join(dir, 'lefthook.yml'))).toBe(true)
+    const lefthook = readFileSync(join(dir, 'lefthook.yml'), 'utf8')
+    expect(lefthook).not.toContain('ts-style-guard')
+    expect(lefthook).toContain('xcodebuild test')
+    expect(lefthook).toContain('swiftlint lint')
+
+    // No TS-specific lint configs
+    expect(existsSync(join(dir, 'tsconfig.strict.json'))).toBe(false)
+    expect(existsSync(join(dir, 'clippy.toml'))).toBe(false)
+
+    // Cursor rules use swift glob
+    const codeQuality = readFileSync(join(dir, '.cursor/rules/code-quality.mdc'), 'utf8')
+    expect(codeQuality).toContain('**/*.swift')
+
+    // Swift scaffolding files (contractDriven: false so no contract example)
+    expect(existsSync(join(dir, 'Sources/Example/Example.swift'))).toBe(false)
+    expect(existsSync(join(dir, 'Tests/PropertyExampleTests/PropertyExampleTests.swift'))).toBe(true)
+    expect(existsSync(join(dir, 'Sources/Logging/Logging.swift'))).toBe(true)
+
+    // Commands written to docs
+    const commands = readFileSync(join(dir, '.claude/docs/commands.md'), 'utf8')
+    expect(commands).toContain('xcodebuild build')
+    expect(commands).toContain('swiftlint lint')
+
+    // CLAUDE.md present and references docs
+    const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8')
+    expect(claude).toContain('@.claude/docs/commands.md')
+  })
+
   it('does not create .cursor or .codex when not in targets', async () => {
     const minimal: DevConfig = {
       ...fakeConfig,

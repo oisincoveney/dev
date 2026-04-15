@@ -7,9 +7,9 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ProjectVariant } from './skills.js'
 
-export type Language = 'typescript' | 'rust' | 'go'
+export type Language = 'typescript' | 'rust' | 'go' | 'swift' | 'other'
 export type WorkflowFramework = 'gsd' | 'idd' | 'none'
-export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm' | 'cargo' | 'go'
+export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm' | 'cargo' | 'go' | 'swift' | 'other'
 export type Target = 'claude' | 'codex' | 'opencode' | 'cursor' | 'lefthook'
 
 export interface DevConfig {

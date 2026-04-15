@@ -26,6 +26,12 @@ export async function scaffoldNewProject(cwd: string, answers: Answers): Promise
       return scaffoldRust(projectDir, answers)
     case 'go':
       return scaffoldGo(projectDir, answers)
+    case 'swift':
+      p.log.info('Swift project directory created. Open in Xcode or run `swift package init` to initialise the package.')
+      return projectDir
+    case 'other':
+      p.log.info('Project directory created. Set up the project manually.')
+      return projectDir
   }
 }
 

@@ -148,9 +148,12 @@ describe('end-to-end install with real side effects', () => {
       }
     }
 
-    // Every referenced script file actually exists
+    // Every referenced .claude/hooks/ script actually exists on disk
     for (const cmd of allCommands) {
-      expect(existsSync(join(dir, cmd))).toBe(true)
+      const match = cmd.match(/\.claude\/hooks\/([^\s'"]+)/)
+      if (match) {
+        expect(existsSync(join(dir, '.claude', 'hooks', match[1]))).toBe(true)
+      }
     }
   })
 
@@ -166,8 +169,11 @@ describe('end-to-end install with real side effects', () => {
     for (const entries of Object.values(codex.hooks)) {
       for (const entry of entries) {
         for (const hook of entry.hooks) {
-          expect(hook.command).toMatch(/^\.codex\/hooks\//)
-          expect(existsSync(join(dir, hook.command))).toBe(true)
+          const match = hook.command.match(/\.codex\/hooks\/([^\s'"]+)/)
+          expect(match).not.toBeNull()
+          if (match) {
+            expect(existsSync(join(dir, '.codex', 'hooks', match[1]))).toBe(true)
+          }
         }
       }
     }
