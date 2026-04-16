@@ -183,30 +183,38 @@ Do not add "Co-Authored-By: Claude" to commit messages.
     id: 'component-patterns',
     kind: 'rule',
     name: 'Component Patterns',
-    description: 'Function components, Props interfaces, no prop drilling',
+    description: 'Function components, Props interfaces, no prop drilling, controlled components',
     appliesTo: TS_FRONTEND_VARIANTS,
     markdownSection: `## Component Patterns
 
 - Function components only, no classes
 - Every component has an explicit Props interface
-- No prop drilling — children pull state from atoms/stores
-- Pages are layout shells, not data passers
+- Each component owns its own state — do NOT centralize all state in a parent and pass it down
+- No prop drilling — a prop should be directly consumed by the component that receives it, never passed through as a relay
+- Layout shells use named snippets/slots (Svelte 5) or render props/children (React) — they define structure only, touch no data
+- Shared types live in a \`types.ts\` file — never redefine types that already exist in the codebase
+- Do not use framework-internal stores (\`\$page.data\`, context API) in shared \`\$lib\` components — they are loosely typed
 - Error boundaries on every route
+
+**Before writing a component, answer:**
+1. What state does it own? (If none, say so explicitly)
+2. What props does it consume directly? (If a prop just passes through, it doesn't belong here)
+3. Do the types already exist somewhere? (Use them — don't redefine)
 `,
   },
   {
     id: 'state-management',
     kind: 'rule',
     name: 'State Management',
-    description: 'Jotai atoms, no createContext, feature-scoped stores',
+    description: 'Each component owns its state, framework-appropriate stores, no centralisation',
     appliesTo: TS_FRONTEND_VARIANTS,
     markdownSection: `## State Management
 
-- No \`createContext\` — use Jotai atoms
-- \`useState\` only for simple local UI state (open/closed, hover)
-- \`useRef\` only for DOM refs and library integration
-- Feature atoms live in \`feature/store/\`
-- Cross-feature communication via shared atoms or events
+- Each component owns the state it is responsible for — do not hoist state to a parent unless two siblings genuinely need to share it
+- When siblings must share reactive state, use the framework's appropriate primitive (Svelte 5 \`$state\` in a \`.svelte.ts\` module; Jotai atoms in React) — not a fat parent component
+- Simple local UI state (open/closed, hover, loading) lives in the component that controls it
+- Feature-scoped shared state lives in co-located store files (\`feature/store/\`)
+- Cross-feature communication via shared atoms or events, not prop chains
 `,
   },
   {
