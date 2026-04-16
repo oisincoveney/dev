@@ -438,11 +438,13 @@ function defaultCommandsFor(
 
   if (variant.startsWith('swift-')) {
     if (variant === 'swift-app') {
+      const scheme = detected.xcodeScheme ?? '<Scheme>'
+      const dest = "platform=iOS Simulator,name=iPhone 16"
       return {
         dev: d.dev ?? '',
-        build: d.build ?? 'xcodebuild build',
-        test: d.test ?? 'xcodebuild test',
-        typecheck: d.typecheck ?? 'xcodebuild build',
+        build: d.build ?? `xcodebuild build -scheme ${scheme} -destination '${dest}'`,
+        test: d.test ?? `xcodebuild test -scheme ${scheme} -destination '${dest}'`,
+        typecheck: d.typecheck ?? `xcodebuild build -scheme ${scheme} -destination '${dest}'`,
         lint: d.lint ?? 'swiftlint lint',
         format: d.format ?? 'swiftformat .',
       }

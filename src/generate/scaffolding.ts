@@ -13,6 +13,10 @@ export interface ScaffoldedFile {
 }
 
 export function generateProjectScaffolding(config: DevConfig): ScaffoldedFile[] {
+  // Xcode projects have opaque, project-name-specific folder structure.
+  // Scaffolded files would land in wrong locations — skip entirely.
+  if (config.variant === 'swift-app') return []
+
   const files: ScaffoldedFile[] = []
 
   if (config.contractDriven) {

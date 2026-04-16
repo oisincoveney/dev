@@ -9,7 +9,10 @@ import type { DevConfig } from '../config.js'
 export function generateToolConfigs(config: DevConfig): Record<string, string> {
   const out: Record<string, string> = {
     '.semgrep.yml': semgrepConfig(),
-    'commitlint.config.cjs': commitlintConfig(),
+  }
+
+  if (config.language === 'typescript') {
+    out['commitlint.config.cjs'] = commitlintConfig()
   }
 
   switch (config.language) {

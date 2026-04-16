@@ -13,6 +13,7 @@ export interface Detected {
   language: Language | null
   packageManager: PackageManager | null
   variant: ProjectVariant | null
+  xcodeScheme: string | null
   commands: {
     dev: string | null
     build: string | null
@@ -32,6 +33,7 @@ export function detectProject(cwd: string): Detected {
     language: null,
     packageManager: null,
     variant: null,
+    xcodeScheme: null,
     commands: {
       dev: null,
       build: null,
@@ -86,14 +88,17 @@ export function detectProject(cwd: string): Detected {
     detected.commands.typecheck = 'swift build'
     detected.commands.lint = 'swiftlint lint'
     detected.commands.format = 'swiftformat .'
-  } else if (hasXcodeProject(cwd)) {
+  } else if (detectXcodeScheme(cwd) !== null) {
     detected.language = 'swift'
     detected.packageManager = 'swift'
     detected.variant = 'swift-app'
+    detected.xcodeScheme = detectXcodeScheme(cwd)
+    const scheme = detected.xcodeScheme ?? '<Scheme>'
+    const dest = "platform=iOS Simulator,name=iPhone 16"
     detected.commands.dev = null
-    detected.commands.build = 'xcodebuild build'
-    detected.commands.test = 'xcodebuild test'
-    detected.commands.typecheck = 'xcodebuild build'
+    detected.commands.build = `xcodebuild build -scheme ${scheme} -destination '${dest}'`
+    detected.commands.test = `xcodebuild test -scheme ${scheme} -destination '${dest}'`
+    detected.commands.typecheck = `xcodebuild build -scheme ${scheme} -destination '${dest}'`
     detected.commands.lint = 'swiftlint lint'
     detected.commands.format = 'swiftformat .'
   } else {
@@ -200,12 +205,16 @@ function detectSwiftVariant(cwd: string, pkgSwiftPath: string): import('./skills
   return 'swift-package'
 }
 
-function hasXcodeProject(cwd: string): boolean {
+function detectXcodeScheme(cwd: string): string | null {
   try {
     const entries: ReadonlyArray<string> = require('node:fs').readdirSync(cwd)
-    return entries.some((e: string) => e.endsWith('.xcodeproj') || e.endsWith('.xcworkspace'))
+    const xcodeproj = entries.find((e: string) => e.endsWith('.xcodeproj'))
+    if (xcodeproj) return xcodeproj.slice(0, -'.xcodeproj'.length)
+    const xcworkspace = entries.find((e: string) => e.endsWith('.xcworkspace'))
+    if (xcworkspace) return xcworkspace.slice(0, -'.xcworkspace'.length)
+    return null
   } catch {
-    return false
+    return null
   }
 }
 

@@ -93,7 +93,7 @@ describe('installAll', () => {
 
     // Tool configs
     expect(existsSync(join(dir, '.semgrep.yml'))).toBe(true)
-    expect(existsSync(join(dir, 'commitlint.config.cjs'))).toBe(true)
+    expect(existsSync(join(dir, 'commitlint.config.cjs'))).toBe(false)
     expect(existsSync(join(dir, '.cargo-mutants.toml'))).toBe(true)
 
     // Scaffolded example files
@@ -240,10 +240,10 @@ describe('installAll', () => {
     const codeQuality = readFileSync(join(dir, '.cursor/rules/code-quality.mdc'), 'utf8')
     expect(codeQuality).toContain('**/*.swift')
 
-    // Swift scaffolding files (contractDriven: false so no contract example)
+    // No scaffolding for swift-app — Xcode project structure is opaque
     expect(existsSync(join(dir, 'Sources/Example/Example.swift'))).toBe(false)
-    expect(existsSync(join(dir, 'Tests/PropertyExampleTests/PropertyExampleTests.swift'))).toBe(true)
-    expect(existsSync(join(dir, 'Sources/Logging/Logging.swift'))).toBe(true)
+    expect(existsSync(join(dir, 'Tests/PropertyExampleTests/PropertyExampleTests.swift'))).toBe(false)
+    expect(existsSync(join(dir, 'Sources/Logging/Logging.swift'))).toBe(false)
 
     // Commands written to docs
     const commands = readFileSync(join(dir, '.claude/docs/commands.md'), 'utf8')

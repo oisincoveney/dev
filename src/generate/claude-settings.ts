@@ -63,8 +63,9 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
         {
           matcher: 'Write|Edit',
           hooks: [
-            hook('ts-style-guard.sh', 30),
-            hook('import-validator.sh', 10),
+            ...(config.language === 'typescript'
+              ? [hook('ts-style-guard.sh', 30), hook('import-validator.sh', 10)]
+              : []),
             hook('ai-antipattern-guard.sh', 10),
           ],
         },
