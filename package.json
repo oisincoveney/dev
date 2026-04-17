@@ -1,6 +1,6 @@
 {
   "name": "@oisincoveney/dev",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "description": "Opinionated AI dev environment for multi-language projects — hooks, configs, skills, and workflow enforcement",
   "type": "module",
   "main": "./dist/index.mjs",
