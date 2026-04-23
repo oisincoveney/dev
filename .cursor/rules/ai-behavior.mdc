@@ -1,7 +1,9 @@
 ---
-name: ai-behavior
 description: Uncertainty, no follow-up questions, constraints as hard requirements, one question at a time
+globs: ["**/*.ts","**/*.tsx"]
 ---
+
+# AI Behavior & Principles
 
 # AI Behavior
 

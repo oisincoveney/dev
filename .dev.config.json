@@ -1,0 +1,37 @@
+{
+  "language": "typescript",
+  "variant": "ts-library",
+  "framework": null,
+  "packageManager": "bun",
+  "commands": {
+    "dev": "bun run test:watch",
+    "build": "bun run build",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"no lint configured\"",
+    "format": "echo \"no format configured\""
+  },
+  "skills": [
+    "code-quality",
+    "architecture",
+    "testing",
+    "ai-behavior",
+    "performance"
+  ],
+  "tools": [],
+  "workflow": "none",
+  "contractDriven": false,
+  "targets": [
+    "claude",
+    "codex",
+    "opencode",
+    "cursor",
+    "lefthook"
+  ],
+  "models": {
+    "default": "claude-sonnet-4-6",
+    "planning": "claude-opus-4-7",
+    "simple_edits": "claude-haiku-4-5-20251001",
+    "review": "claude-sonnet-4-6"
+  }
+}

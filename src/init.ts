@@ -1,8 +1,9 @@
 /**
  * `oisin-dev init`
  *
- * Configures AI agents, coding standards, and dev tools in the current project.
- * Requires a project root (package.json / Cargo.toml / go.mod / Package.swift).
+ * Configures AI agents, coding standards, and dev tools in the current directory.
+ * Works whether or not a project manifest exists — prompts fill in what detection
+ * can't determine.
  */
 
 import { basename } from 'node:path'
@@ -18,14 +19,14 @@ export async function runInit(): Promise<void> {
   const cwd = process.cwd()
   const detected = detectProject(cwd)
 
-  if (detected.language === null) {
-    p.log.error(
-      'Not a project root. Run `oisin-dev init` inside a directory with a package.json, Cargo.toml, go.mod, or Package.swift.',
-    )
-    process.exit(1)
+  if (detected.language !== null) {
+    p.log.info(`Detected ${detected.language} project in ${basename(cwd)}. Configuring in place.`)
+  } else if (detected.isEmpty) {
+    p.log.info(`Empty directory ${basename(cwd)}. Configuring in place.`)
+  } else {
+    p.log.info(`No project manifest detected in ${basename(cwd)}. Configuring in place.`)
   }
 
-  p.log.info(`Detected ${detected.language} project in ${basename(cwd)}. Configuring in place.`)
   const answers = await runPrompts(detected)
   await writeConfigAndInstall(cwd, answers)
   p.outro('Done.')
