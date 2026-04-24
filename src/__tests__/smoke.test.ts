@@ -125,6 +125,21 @@ describe('generateClaudeSettings', () => {
     expect(settings.hooks.PreCompact).toBeDefined()
   })
 
+  it('registers banned-words-guard.sh on Stop alongside pre-stop-verification.sh', () => {
+    const settings = generateClaudeSettings(tsFrontendConfig)
+    const stopEntries = settings.hooks.Stop ?? []
+    const commands = stopEntries.flatMap((e) => e.hooks.map((h) => h.command))
+    expect(commands.some((c) => c.includes('pre-stop-verification.sh'))).toBe(true)
+    expect(commands.some((c) => c.includes('banned-words-guard.sh'))).toBe(true)
+  })
+
+  it('registers verify-grounding.sh on Stop', () => {
+    const settings = generateClaudeSettings(tsFrontendConfig)
+    const stopEntries = settings.hooks.Stop ?? []
+    const commands = stopEntries.flatMap((e) => e.hooks.map((h) => h.command))
+    expect(commands.some((c) => c.includes('verify-grounding.sh'))).toBe(true)
+  })
+
   it('registers pre-compact-prime.sh on PreCompact', () => {
     const settings = generateClaudeSettings(tsFrontendConfig)
     const entries = settings.hooks.PreCompact ?? []
