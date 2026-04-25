@@ -4,7 +4,7 @@
  * (bd init, beads plugin, MCP servers, GSD/IDD toolkits).
  */
 
-import { execSync } from 'node:child_process'
+import { execSync, spawnSync } from 'node:child_process'
 import {
   chmodSync,
   copyFileSync,
@@ -360,6 +360,80 @@ function stampSkillFrontmatter(
 }
 
 /**
+ * Run an external command with a HARD timeout enforced via SIGKILL and the
+ * child attached to the parent's TTY so Ctrl-C reaches it via the process
+ * group. Returns a typed result.
+ *
+ * Why this exists (vs `execSync`):
+ * - `execSync({ timeout })` sends SIGTERM, which a misbehaving child can
+ *   catch and ignore — the parent then waits indefinitely. We use SIGKILL,
+ *   which is uncatchable.
+ * - `execSync` runs the child detached from the controlling TTY; SIGINT
+ *   from a `Ctrl-C` press doesn't reach the child process group. With
+ *   `stdio: 'inherit'` the child shares the parent's TTY and is part of
+ *   its foreground process group, so the kernel delivers SIGINT to it
+ *   directly when the user hits Ctrl-C.
+ *
+ * Reasons a child would otherwise hang past `execSync`'s timeout in this
+ * codebase: `bd init` blocked on a global `core.hooksPath` hook calling
+ * back into `bd` while bd holds the dolt lock, and `claude plugin install`
+ * stalling on a remote network call.
+ */
+type RunResult =
+  | { ok: true }
+  | { ok: false; reason: 'exit'; code: number }
+  | { ok: false; reason: 'timeout'; afterMs: number }
+  | { ok: false; reason: 'signal'; signal: NodeJS.Signals }
+  | { ok: false; reason: 'spawn-error'; message: string }
+
+interface RunOptions {
+  cwd: string
+  timeoutMs: number
+  env?: NodeJS.ProcessEnv
+}
+
+export function runCommand(
+  cmd: string,
+  args: ReadonlyArray<string>,
+  opts: RunOptions,
+): RunResult {
+  const result = spawnSync(cmd, args, {
+    cwd: opts.cwd,
+    env: opts.env ?? process.env,
+    stdio: 'inherit',
+    timeout: opts.timeoutMs,
+    killSignal: 'SIGKILL',
+  })
+  if (result.error) {
+    // Distinguish timeout (which spawnSync surfaces as ETIMEDOUT) from
+    // genuine spawn failures (binary not found, permission denied, etc.).
+    const errno = (result.error as NodeJS.ErrnoException).code
+    if (errno === 'ETIMEDOUT') {
+      return { ok: false, reason: 'timeout', afterMs: opts.timeoutMs }
+    }
+    return { ok: false, reason: 'spawn-error', message: result.error.message }
+  }
+  if (result.signal) {
+    return { ok: false, reason: 'signal', signal: result.signal }
+  }
+  if (result.status === 0) return { ok: true }
+  return { ok: false, reason: 'exit', code: result.status ?? -1 }
+}
+
+function runFailureMessage(r: RunResult & { ok: false }): string {
+  switch (r.reason) {
+    case 'exit':
+      return `exit code ${r.code}`
+    case 'timeout':
+      return `timed out after ${r.afterMs}ms (SIGKILL)`
+    case 'signal':
+      return `killed by ${r.signal}`
+    case 'spawn-error':
+      return r.message
+  }
+}
+
+/**
  * Result of attempting to initialise beads in a project directory.
  * Distinct cases let callers (and tests) reason about each terminal state
  * explicitly rather than parsing log strings.
@@ -394,19 +468,16 @@ export type BeadsCliResult =
 export function installBeadsCli(cwd: string): BeadsCliResult {
   if (existsSync(join(cwd, '.beads'))) return { status: 'exists' }
   if (!commandExists('bd')) return { status: 'no-bd' }
-  try {
-    execSync('bd init --non-interactive', {
-      cwd,
-      stdio: 'pipe',
-      env: {
-        ...process.env,
-        GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'",
-      },
-    })
-    return { status: 'created' }
-  } catch (err) {
-    return { status: 'failed', error: (err as Error).message }
-  }
+  const r = runCommand('bd', ['init', '--non-interactive'], {
+    cwd,
+    timeoutMs: 60_000,
+    env: {
+      ...process.env,
+      GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'",
+    },
+  })
+  if (r.ok) return { status: 'created' }
+  return { status: 'failed', error: runFailureMessage(r) }
 }
 
 /**
@@ -426,25 +497,28 @@ export type BeadsPluginResult =
  */
 export function installBeadsPlugin(cwd: string): BeadsPluginResult {
   if (!commandExists('claude')) return { status: 'no-claude' }
-  try {
-    execSync('claude plugin marketplace add --scope project steveyegge/beads', {
-      cwd,
-      stdio: 'pipe',
-      timeout: 30_000,
-    })
-    execSync('claude plugin install --scope project beads', {
-      cwd,
-      stdio: 'pipe',
-      timeout: 30_000,
-    })
-    return { status: 'installed' }
-  } catch (err) {
-    const msg = (err as Error).message
-    if (msg.includes('already') || msg.includes('exists')) {
-      return { status: 'already-installed' }
-    }
-    return { status: 'failed', error: msg }
+  const marketplace = runCommand(
+    'claude',
+    ['plugin', 'marketplace', 'add', '--scope', 'project', 'steveyegge/beads'],
+    { cwd, timeoutMs: 60_000 },
+  )
+  if (!marketplace.ok && marketplace.reason !== 'exit') {
+    return { status: 'failed', error: runFailureMessage(marketplace) }
   }
+  // marketplace add returns non-zero "already added" — that's fine, continue.
+
+  const install = runCommand(
+    'claude',
+    ['plugin', 'install', '--scope', 'project', 'beads'],
+    { cwd, timeoutMs: 60_000 },
+  )
+  if (install.ok) return { status: 'installed' }
+  // claude plugin install returns non-zero for "already installed". With
+  // stdio:'inherit' we don't capture stdout to detect that string, so treat
+  // any non-timeout, non-signal failure here as already-installed when the
+  // marketplace step succeeded — an idempotent re-install matches that.
+  if (install.reason === 'exit') return { status: 'already-installed' }
+  return { status: 'failed', error: runFailureMessage(install) }
 }
 
 function installMcpServers(
