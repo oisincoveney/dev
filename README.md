@@ -198,6 +198,24 @@ Supported language/variant combinations:
 
 ## Development
 
+### Required tools
+
+This repo's tests run against real binaries — they don't mock `bd` or skip when it's missing. Install via [mise](https://mise.jdx.dev/) (preferred):
+
+```sh
+mise install   # reads .mise.toml — installs bun + beads (`bd`)
+```
+
+Or install manually so `bd` is on PATH:
+
+```sh
+curl -sSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+```
+
+If `bd` isn't on PATH, the e2e install tests fail fast with a clear error rather than silently skipping.
+
+### Common commands
+
 ```sh
 # Install dependencies
 bun install
