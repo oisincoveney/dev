@@ -1,26 +1,16 @@
 /**
  * End-to-end install test that runs the real side effects.
- * Tests against actual `bd`, `claude`, and `git` commands.
- * Skipped if those aren't available.
+ * `bd` is a required dev dependency (see .mise.toml / README "Development").
+ * If it isn't installed, this suite fails fast — we do not silently skip.
  */
 
-import { execSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
-import { installAll } from '../install.js'
+import { installAll, installBeadsCli } from '../install.js'
 import type { Answers } from '../prompts.js'
-
-function hasCmd(name: string): boolean {
-  try {
-    execSync(`command -v ${name}`, { stdio: 'ignore' })
-    return true
-  } catch {
-    return false
-  }
-}
 
 const answers: Answers = {
   language: 'rust',
@@ -73,14 +63,21 @@ describe('end-to-end install with real side effects', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it.skipIf(!hasCmd('bd'))(
-    'runs bd init successfully',
-    async () => {
-      await installAll(dir, config, answers)
-      expect(existsSync(join(dir, '.beads'))).toBe(true)
-    },
-    60_000,
-  )
+  it('runs bd init and leaves beads hooks installed', () => {
+    const result = installBeadsCli(dir)
+    expect(result).toEqual({ status: 'created' })
+    expect(existsSync(join(dir, '.beads'))).toBe(true)
+    // bd init points the repo's core.hooksPath at .beads/hooks/ and writes
+    // its hook scripts there. Any subsequent commit fires the real beads
+    // hooks — i.e. agent integration is fully wired up.
+    expect(existsSync(join(dir, '.beads', 'hooks', 'prepare-commit-msg'))).toBe(true)
+  })
+
+  it('returns "exists" on second call and does not re-init', () => {
+    installBeadsCli(dir)
+    const second = installBeadsCli(dir)
+    expect(second).toEqual({ status: 'exists' })
+  })
 
   it('generates all target files with valid content', async () => {
     await installAll(dir, config, answers, { skipSideEffects: true })

@@ -173,7 +173,39 @@ export async function installAll(
   if (options.skipSideEffects) return
 
   if (config.tools.includes('beads')) {
-    installBeads(cwd, log, warn)
+    const cliResult = installBeadsCli(cwd)
+    switch (cliResult.status) {
+      case 'created':
+        log('beads: bd init')
+        break
+      case 'exists':
+        log('beads: .beads/ already exists, skipping bd init')
+        break
+      case 'no-bd':
+        warn(
+          'beads: `bd` not found in PATH. Install: curl -sSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash',
+        )
+        break
+      case 'failed':
+        warn(`beads: bd init failed (${cliResult.error})`)
+        break
+    }
+
+    const pluginResult = installBeadsPlugin(cwd)
+    switch (pluginResult.status) {
+      case 'installed':
+        log('beads: Claude Code plugin installed')
+        break
+      case 'already-installed':
+        log('beads: Claude Code plugin already installed')
+        break
+      case 'no-claude':
+        warn('beads plugin: `claude` CLI not in PATH, skipping plugin install')
+        break
+      case 'failed':
+        warn(`beads plugin install failed (${pluginResult.error})`)
+        break
+    }
   }
 
   if (config.targets.includes('claude') && answers.mcpServers.length > 0) {
@@ -327,48 +359,91 @@ function stampSkillFrontmatter(
   writeFileSync(path, `---\n${yamlLines.join('\n')}\n---\n${body}`)
 }
 
-function installBeads(
-  cwd: string,
-  log: (msg: string) => void,
-  warn: (msg: string) => void,
-): void {
-  if (existsSync(join(cwd, '.beads'))) {
-    log('beads: .beads/ already exists, skipping bd init')
-  } else if (commandExists('bd')) {
-    try {
-      execSync('bd init', { cwd, stdio: 'pipe' })
-      log('beads: bd init')
-    } catch (err) {
-      warn(`beads: bd init failed (${(err as Error).message})`)
-    }
-  } else {
-    warn('beads: `bd` not found in PATH. Install: curl -sSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash')
-  }
+/**
+ * Result of attempting to initialise beads in a project directory.
+ * Distinct cases let callers (and tests) reason about each terminal state
+ * explicitly rather than parsing log strings.
+ */
+export type BeadsCliResult =
+  | { status: 'created' }
+  | { status: 'exists' }
+  | { status: 'no-bd' }
+  | { status: 'failed'; error: string }
 
-  // Install the Claude Code plugin wrapper (gastownhall is the canonical beads repo)
-  if (commandExists('claude')) {
-    try {
-      execSync('claude plugin marketplace add --scope project steveyegge/beads', {
-        cwd,
-        stdio: 'pipe',
-        timeout: 30_000,
-      })
-      execSync('claude plugin install --scope project beads', {
-        cwd,
-        stdio: 'pipe',
-        timeout: 30_000,
-      })
-      log('beads: Claude Code plugin installed')
-    } catch (err) {
-      const msg = (err as Error).message
-      if (msg.includes('already') || msg.includes('exists')) {
-        log('beads: Claude Code plugin already installed')
-      } else {
-        warn(`beads plugin install failed (${msg})`)
-      }
+/**
+ * Initialise beads in `cwd`. Returns a structured result instead of taking
+ * log/warn callbacks so callers (and tests) decide how to surface the outcome.
+ *
+ * `bd init` triggers a `git commit` for the new `.beads/` files. If the user
+ * has `core.hooksPath` set globally (which beads' own setup configures, so
+ * this is common for bd users) those global hooks fire on every git commit —
+ * including the one inside bd init. Each global hook calls back into `bd`,
+ * but bd is still holding the dolt DB lock, so `bd hooks run` blocks waiting
+ * for it and the commit hangs indefinitely.
+ *
+ * Fix: neutralise git hooks for ONLY this `bd init` invocation by setting
+ * `core.hooksPath=/dev/null` via `GIT_CONFIG_PARAMETERS`. This affects only
+ * the subprocess; the user's global config and the repo's own `.git/config`
+ * are untouched, so bd's hook integration (which `bd init` writes into the
+ * repo's `.git/config`) works for every subsequent commit. We get full beads
+ * functionality with no deadlock and no timeout reliance.
+ *
+ * `--non-interactive` is auto-detected when stdin isn't a TTY (our case under
+ * execSync), but set explicitly to pin the contract.
+ */
+export function installBeadsCli(cwd: string): BeadsCliResult {
+  if (existsSync(join(cwd, '.beads'))) return { status: 'exists' }
+  if (!commandExists('bd')) return { status: 'no-bd' }
+  try {
+    execSync('bd init --non-interactive', {
+      cwd,
+      stdio: 'pipe',
+      env: {
+        ...process.env,
+        GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'",
+      },
+    })
+    return { status: 'created' }
+  } catch (err) {
+    return { status: 'failed', error: (err as Error).message }
+  }
+}
+
+/**
+ * Result of attempting to install the beads Claude Code plugin.
+ */
+export type BeadsPluginResult =
+  | { status: 'installed' }
+  | { status: 'already-installed' }
+  | { status: 'no-claude' }
+  | { status: 'failed'; error: string }
+
+/**
+ * Install the beads Claude Code plugin via the `claude` CLI. Slow and
+ * network-bound (two execSync calls against the plugin marketplace).
+ * Returns a structured result. Production caller composes this with
+ * `installBeadsCli`; both are independently testable.
+ */
+export function installBeadsPlugin(cwd: string): BeadsPluginResult {
+  if (!commandExists('claude')) return { status: 'no-claude' }
+  try {
+    execSync('claude plugin marketplace add --scope project steveyegge/beads', {
+      cwd,
+      stdio: 'pipe',
+      timeout: 30_000,
+    })
+    execSync('claude plugin install --scope project beads', {
+      cwd,
+      stdio: 'pipe',
+      timeout: 30_000,
+    })
+    return { status: 'installed' }
+  } catch (err) {
+    const msg = (err as Error).message
+    if (msg.includes('already') || msg.includes('exists')) {
+      return { status: 'already-installed' }
     }
-  } else {
-    warn('beads plugin: `claude` CLI not in PATH, skipping plugin install')
+    return { status: 'failed', error: msg }
   }
 }
 
