@@ -133,11 +133,15 @@ describe('generateClaudeSettings', () => {
     expect(commands.some((c) => c.includes('banned-words-guard.sh'))).toBe(true)
   })
 
-  it('registers verify-grounding.sh on Stop', () => {
+  it('does not register verify-grounding.sh on Stop (replaced by @pinperepette/grounded)', () => {
+    // Stop-event grounding is now handled by grounded's `confidence-check`
+    // hook, which installGroundedHooks writes into ~/.claude/settings.json
+    // (user-level) during the side-effects phase of installAll. The project's
+    // generated .claude/settings.json must not double-wire verify-grounding.sh.
     const settings = generateClaudeSettings(tsFrontendConfig)
     const stopEntries = settings.hooks.Stop ?? []
     const commands = stopEntries.flatMap((e) => e.hooks.map((h) => h.command))
-    expect(commands.some((c) => c.includes('verify-grounding.sh'))).toBe(true)
+    expect(commands.some((c) => c.includes('verify-grounding.sh'))).toBe(false)
   })
 
   it('registers pre-compact-prime.sh on PreCompact', () => {

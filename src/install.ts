@@ -172,6 +172,10 @@ export async function installAll(
 
   if (options.skipSideEffects) return
 
+  if (config.targets.includes('claude')) {
+    installGroundedHooks(cwd, log, warn)
+  }
+
   if (config.tools.includes('beads')) {
     const cliResult = installBeadsCli(cwd)
     switch (cliResult.status) {
@@ -230,6 +234,85 @@ function installClaudeHooks(cwd: string, log: (msg: string) => void): void {
     chmodSync(dest, 0o755)
     log(`.claude/hooks/${file}`)
   }
+}
+
+/**
+ * Ensures @pinperepette/grounded is installed and its 11 Claude Code hooks
+ * are registered in the user's ~/.claude/settings.json via grounded's own
+ * documented install path (`grounded install`). Independent of the target
+ * project's language or package manager — works for TS, Rust, Python, Go.
+ *
+ * Install strategy, in priority order:
+ *   1. mise — `mise use npm:@pinperepette/grounded@0.1.0` (writes to the
+ *      target's mise.toml, then `mise install`). Polyglot-friendly: matches
+ *      how this repo declares `bun` and `bd` (mise.toml).
+ *   2. bun  — `bun add -g @pinperepette/grounded`
+ *   3. npm  — `npm install -g @pinperepette/grounded`
+ *
+ * Idempotent: grounded's installer removes prior grounded entries before
+ * writing, so re-running this on every `oisin-dev install` is safe.
+ */
+function installGroundedHooks(
+  cwd: string,
+  log: (msg: string) => void,
+  warn: (msg: string) => void,
+): void {
+  if (!commandExists('grounded')) {
+    if (commandExists('mise')) {
+      const use = spawnSync(
+        'mise',
+        ['use', '--quiet', 'npm:@pinperepette/grounded@0.1.0'],
+        { cwd, stdio: 'pipe', encoding: 'utf8' },
+      )
+      if (use.status !== 0) {
+        warn(`grounded: mise use failed: ${use.stderr || use.stdout}`)
+        return
+      }
+    } else if (commandExists('bun')) {
+      const inst = spawnSync('bun', ['add', '-g', '@pinperepette/grounded'], {
+        stdio: 'pipe',
+        encoding: 'utf8',
+      })
+      if (inst.status !== 0) {
+        warn(`grounded: bun add -g failed: ${inst.stderr || inst.stdout}`)
+        return
+      }
+    } else if (commandExists('npm')) {
+      const inst = spawnSync('npm', ['install', '-g', '@pinperepette/grounded'], {
+        stdio: 'pipe',
+        encoding: 'utf8',
+      })
+      if (inst.status !== 0) {
+        warn(`grounded: npm install -g failed: ${inst.stderr || inst.stdout}`)
+        return
+      }
+    } else {
+      warn('grounded: none of mise, bun, or npm in PATH — skipping grounded hooks')
+      return
+    }
+  }
+  // `mise use` only configures the tool; the binary may still need to be
+  // resolved through `mise exec` if it's not yet on the active PATH. Try a
+  // direct `grounded install` first; on failure, retry via mise exec.
+  const direct = spawnSync('grounded', ['install'], { cwd, stdio: 'pipe', encoding: 'utf8' })
+  if (direct.status === 0) {
+    log('@pinperepette/grounded hooks → ~/.claude/settings.json')
+    return
+  }
+  if (commandExists('mise')) {
+    const viaMise = spawnSync('mise', ['exec', '--', 'grounded', 'install'], {
+      cwd,
+      stdio: 'pipe',
+      encoding: 'utf8',
+    })
+    if (viaMise.status === 0) {
+      log('@pinperepette/grounded hooks → ~/.claude/settings.json (via mise exec)')
+      return
+    }
+    warn(`grounded install failed (direct + mise exec): ${viaMise.stderr || viaMise.stdout}`)
+    return
+  }
+  warn(`grounded install failed: ${direct.stderr || direct.stdout}`)
 }
 
 function installCodexHooks(cwd: string, log: (msg: string) => void): void {

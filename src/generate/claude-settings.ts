@@ -111,7 +111,6 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
           hooks: [
             hook('pre-stop-verification.sh', 30),
             hook('banned-words-guard.sh', 10),
-            hook('verify-grounding.sh', 10),
           ],
         },
       ],
