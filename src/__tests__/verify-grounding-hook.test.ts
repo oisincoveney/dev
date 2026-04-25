@@ -29,6 +29,7 @@ type Entry =
   | { type: 'user'; text: string }
   | { type: 'assistant-text'; text: string }
   | { type: 'assistant-tool'; name: string }
+  | { type: 'tool-result'; output: string }
 
 function writeTranscript(dir: string, entries: Entry[]): string {
   const path = join(dir, 'transcript.jsonl')
@@ -40,6 +41,18 @@ function writeTranscript(dir: string, entries: Entry[]): string {
       return JSON.stringify({
         type: 'assistant',
         content: [{ type: 'text', text: entry.text }],
+      })
+    }
+    if (entry.type === 'tool-result') {
+      // Claude Code stores tool_result returns as type:"user" events carrying
+      // {type: "tool_result"} content. The hook must NOT treat these as a
+      // real user turn, or the grounding counter resets on every tool call.
+      return JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', content: entry.output }],
+        },
       })
     }
     return JSON.stringify({
@@ -142,6 +155,39 @@ describe.skipIf(!canRun)('verify-grounding.sh', () => {
     ])
     const { status } = runHook(dir, transcript)
     expect(status).toBe(0)
+  })
+
+  it('does not reset grounding when a tool_result returns as a user-role event', () => {
+    // Regression: real transcripts interleave tool_use (assistant) with
+    // tool_result (user-role) events. Treating the tool_result as a real user
+    // turn would reset the counter to 0 and fire the GATE even though the
+    // turn included a Bash call.
+    const transcript = writeTranscript(dir, [
+      { type: 'user', text: 'check the tests' },
+      { type: 'assistant-tool', name: 'Bash' },
+      { type: 'tool-result', output: '78 pass' },
+      { type: 'assistant-text', text: 'tests pass' },
+    ])
+    const { status, stderr } = runHook(dir, transcript)
+    expect(status).toBe(2)
+    expect(stderr).toContain('VERIFY_GROUNDING_AUDIT_FIRED')
+    expect(stderr).not.toContain('VERIFY_GROUNDING_GATE_FIRED')
+  })
+
+  it('handles alternating tool_use / tool_result chains without resetting', () => {
+    const transcript = writeTranscript(dir, [
+      { type: 'user', text: 'do research' },
+      { type: 'assistant-tool', name: 'Read' },
+      { type: 'tool-result', output: 'file contents' },
+      { type: 'assistant-tool', name: 'Bash' },
+      { type: 'tool-result', output: 'command output' },
+      { type: 'assistant-tool', name: 'Grep' },
+      { type: 'tool-result', output: 'match' },
+      { type: 'assistant-text', text: 'here is my answer' },
+    ])
+    const { status, stderr } = runHook(dir, transcript)
+    expect(status).toBe(2)
+    expect(stderr).toContain('VERIFY_GROUNDING_AUDIT_FIRED')
   })
 
   it('re-fires GATE when Claude still has not done research after the first gate', () => {
