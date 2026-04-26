@@ -66,13 +66,26 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
     'bd *',
   ].join('|')
 
+  const baselinePin = config.enforcement?.baselinePin === true
+  const multiEvent = config.enforcement?.multiEvent === true
+
+  const sessionStartHooks: HookCommand[] = [hook('context-bootstrap.sh', 10)]
+  if (baselinePin) {
+    sessionStartHooks.push(hook('baseline-pin.sh', 120))
+  }
+
+  const stopHooks: HookCommand[] = [hook('pre-stop-verification.sh', 30)]
+  if (baselinePin) {
+    stopHooks.push(hook('baseline-compare.sh', 120))
+  }
+  if (multiEvent) {
+    stopHooks.push(hook('ai-antipattern-guard.sh', 10))
+  }
+  stopHooks.push(hook('banned-words-guard.sh', 10))
+
   const settings: ClaudeSettings = {
     hooks: {
-      SessionStart: [
-        {
-          hooks: [hook('context-bootstrap.sh', 10)],
-        },
-      ],
+      SessionStart: [{ hooks: sessionStartHooks }],
       UserPromptSubmit: [
         {
           hooks: [hook('context-injector.sh', 5)],
@@ -103,17 +116,13 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
       PostToolUse: [
         {
           matcher: 'Write|Edit',
-          hooks: [hook('post-edit-check.sh', 60)],
-        },
-      ],
-      Stop: [
-        {
           hooks: [
-            hook('pre-stop-verification.sh', 30),
-            hook('banned-words-guard.sh', 10),
+            hook('post-edit-check.sh', 60),
+            ...(multiEvent ? [hook('ai-antipattern-guard.sh', 10)] : []),
           ],
         },
       ],
+      Stop: [{ hooks: stopHooks }],
       PreCompact: [
         {
           hooks: [hook('pre-compact-prime.sh', 10)],

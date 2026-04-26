@@ -172,6 +172,71 @@ describe('generateClaudeSettings', () => {
     )
     expect(allowRule?.if).toContain('vp check')
   })
+
+  describe('multi-event hook coverage (enforcement.multiEvent)', () => {
+    it('registers ai-antipattern-guard.sh only on PreToolUse when multiEvent is unset', () => {
+      const settings = generateClaudeSettings(tsFrontendConfig)
+      const post = JSON.stringify(settings.hooks.PostToolUse ?? [])
+      const stop = JSON.stringify(settings.hooks.Stop ?? [])
+      expect(post).not.toContain('ai-antipattern-guard.sh')
+      expect(stop).not.toContain('ai-antipattern-guard.sh')
+    })
+
+    it('registers ai-antipattern-guard.sh on PreToolUse + PostToolUse + Stop when multiEvent is true', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { multiEvent: true } }
+      const settings = generateClaudeSettings(cfg)
+      const pre = JSON.stringify(settings.hooks.PreToolUse ?? [])
+      const post = JSON.stringify(settings.hooks.PostToolUse ?? [])
+      const stop = JSON.stringify(settings.hooks.Stop ?? [])
+      expect(pre).toContain('ai-antipattern-guard.sh')
+      expect(post).toContain('ai-antipattern-guard.sh')
+      expect(stop).toContain('ai-antipattern-guard.sh')
+    })
+  })
+
+  describe('baseline pinning (enforcement.baselinePin)', () => {
+    it('omits baseline hooks when enforcement.baselinePin is unset', () => {
+      const settings = generateClaudeSettings(tsFrontendConfig)
+      const allCommands = JSON.stringify(settings.hooks)
+      expect(allCommands).not.toContain('baseline-pin.sh')
+      expect(allCommands).not.toContain('baseline-compare.sh')
+    })
+
+    it('omits baseline hooks when enforcement.baselinePin is false', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { baselinePin: false } }
+      const settings = generateClaudeSettings(cfg)
+      const allCommands = JSON.stringify(settings.hooks)
+      expect(allCommands).not.toContain('baseline-pin.sh')
+      expect(allCommands).not.toContain('baseline-compare.sh')
+    })
+
+    it('registers baseline-pin.sh on SessionStart after context-bootstrap.sh when enabled', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { baselinePin: true } }
+      const settings = generateClaudeSettings(cfg)
+      const sessionStart = settings.hooks.SessionStart ?? []
+      const commands = sessionStart.flatMap((e) => e.hooks.map((h) => h.command))
+      const bootstrapIndex = commands.findIndex((c) => c.includes('context-bootstrap.sh'))
+      const pinIndex = commands.findIndex((c) => c.includes('baseline-pin.sh'))
+      expect(bootstrapIndex).toBeGreaterThanOrEqual(0)
+      expect(pinIndex).toBeGreaterThanOrEqual(0)
+      expect(pinIndex).toBeGreaterThan(bootstrapIndex)
+    })
+
+    it('registers baseline-compare.sh on Stop in the order pre-stop → baseline → banned when enabled', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { baselinePin: true } }
+      const settings = generateClaudeSettings(cfg)
+      const stop = settings.hooks.Stop ?? []
+      const commands = stop.flatMap((e) => e.hooks.map((h) => h.command))
+      const preStopIdx = commands.findIndex((c) => c.includes('pre-stop-verification.sh'))
+      const compareIdx = commands.findIndex((c) => c.includes('baseline-compare.sh'))
+      const bannedIdx = commands.findIndex((c) => c.includes('banned-words-guard.sh'))
+      expect(preStopIdx).toBeGreaterThanOrEqual(0)
+      expect(compareIdx).toBeGreaterThanOrEqual(0)
+      expect(bannedIdx).toBeGreaterThanOrEqual(0)
+      expect(compareIdx).toBeGreaterThan(preStopIdx)
+      expect(bannedIdx).toBeGreaterThan(compareIdx)
+    })
+  })
 })
 
 describe('generateCodexHooks', () => {
