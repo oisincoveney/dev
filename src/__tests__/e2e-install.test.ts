@@ -63,21 +63,33 @@ describe('end-to-end install with real side effects', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('runs bd init and leaves beads hooks installed', () => {
-    const result = installBeadsCli(dir)
-    expect(result).toEqual({ status: 'created' })
-    expect(existsSync(join(dir, '.beads'))).toBe(true)
-    // bd init points the repo's core.hooksPath at .beads/hooks/ and writes
-    // its hook scripts there. Any subsequent commit fires the real beads
-    // hooks — i.e. agent integration is fully wired up.
-    expect(existsSync(join(dir, '.beads', 'hooks', 'prepare-commit-msg'))).toBe(true)
-  })
+  // bd init forks git config, writes hook scripts, and seeds a SQLite db.
+  // Observed 5204ms on GitHub Actions ubuntu-latest vs ~700ms locally.
+  const BD_INIT_TIMEOUT_MS = 15_000
 
-  it('returns "exists" on second call and does not re-init', () => {
-    installBeadsCli(dir)
-    const second = installBeadsCli(dir)
-    expect(second).toEqual({ status: 'exists' })
-  })
+  it(
+    'runs bd init and leaves beads hooks installed',
+    () => {
+      const result = installBeadsCli(dir)
+      expect(result).toEqual({ status: 'created' })
+      expect(existsSync(join(dir, '.beads'))).toBe(true)
+      // bd init points the repo's core.hooksPath at .beads/hooks/ and writes
+      // its hook scripts there. Any subsequent commit fires the real beads
+      // hooks — i.e. agent integration is fully wired up.
+      expect(existsSync(join(dir, '.beads', 'hooks', 'prepare-commit-msg'))).toBe(true)
+    },
+    BD_INIT_TIMEOUT_MS,
+  )
+
+  it(
+    'returns "exists" on second call and does not re-init',
+    () => {
+      installBeadsCli(dir)
+      const second = installBeadsCli(dir)
+      expect(second).toEqual({ status: 'exists' })
+    },
+    BD_INIT_TIMEOUT_MS,
+  )
 
   it('generates all target files with valid content', async () => {
     await installAll(dir, config, answers, { skipSideEffects: true })
