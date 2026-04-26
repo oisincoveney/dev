@@ -54,7 +54,9 @@ describe('runCommand', () => {
     }
     // Generous upper bound — proves we didn't sit on the 600s sleep.
     expect(elapsed).toBeLessThan(3_000)
-    expect(elapsed).toBeGreaterThanOrEqual(1_500)
+    // Lower bound has slack for setTimeout/clock jitter on slow CI runners
+    // (observed 1499ms on GitHub Actions ubuntu-latest).
+    expect(elapsed).toBeGreaterThanOrEqual(1_450)
   })
 
   it('passes env vars to the child', () => {
