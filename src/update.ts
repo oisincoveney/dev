@@ -10,7 +10,7 @@ import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
 import { readConfig } from './config.js'
-import { installAll } from './install.js'
+import { applyDeleteriousMigrations, installAll } from './install.js'
 
 const RETIRED_HOOK_FILES = [
   '.claude/hooks/verify-grounding.sh',
@@ -47,6 +47,14 @@ export async function runUpdate(): Promise<void> {
   p.log.info(`Re-syncing ${config.variant} project from .dev.config.json`)
 
   pruneRetiredHookFiles(cwd, (msg) => p.log.info(msg))
+
+  const migration = applyDeleteriousMigrations(cwd)
+  for (const path of migration.removed) p.log.info(`removed orphan: ${path}`)
+  for (const file of migration.trimmed) p.log.info(`trimmed BEADS INTEGRATION block: ${file}`)
+  for (const field of migration.configFieldsStripped) {
+    p.log.info(`stripped removed config field: ${field}`)
+  }
+  for (const warning of migration.warnings) p.log.warn(warning)
 
   const spinner = p.spinner()
   spinner.start('Updating hooks, docs, and settings')

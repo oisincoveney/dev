@@ -13,6 +13,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
@@ -764,6 +765,78 @@ export function seedConstitutionDecisions(
   }
 
   return { ok: true, created }
+}
+
+const RETIRED_PATHS = ['.claude/commands/spec.md', '.claude/specs/TEMPLATE.md']
+const WARN_IF_PRESENT = ['.claude/specs', '.claude/plans', 'docs/research']
+const REMOVED_CONFIG_FIELDS = ['enforcement', 'beadsWorkflow', 'mcp']
+
+export interface MigrationResult {
+  removed: string[]
+  trimmed: string[]
+  configFieldsStripped: string[]
+  warnings: string[]
+}
+
+export function applyDeleteriousMigrations(cwd: string): MigrationResult {
+  const result: MigrationResult = {
+    removed: [],
+    trimmed: [],
+    configFieldsStripped: [],
+    warnings: [],
+  }
+
+  for (const rel of RETIRED_PATHS) {
+    const path = join(cwd, rel)
+    if (existsSync(path)) {
+      rmSync(path)
+      result.removed.push(rel)
+    }
+  }
+
+  for (const rel of WARN_IF_PRESENT) {
+    const path = join(cwd, rel)
+    if (!existsSync(path)) continue
+    const entries = readdirSync(path)
+    if (entries.length === 0) {
+      rmSync(path, { recursive: true })
+      result.removed.push(`${rel}/ (empty)`)
+    } else {
+      result.warnings.push(
+        `${rel}/ still has ${entries.length} file(s): ${entries.join(', ')} — review and delete manually; bd is the source of truth now.`,
+      )
+    }
+  }
+
+  for (const file of ['AGENTS.md', 'CLAUDE.md']) {
+    const path = join(cwd, file)
+    if (!existsSync(path)) continue
+    const before = readFileSync(path, 'utf8')
+    trimBeadsIntegrationBlock(path)
+    const after = readFileSync(path, 'utf8')
+    if (after !== before) {
+      result.trimmed.push(file)
+    }
+  }
+
+  const configPath = join(cwd, '.dev.config.json')
+  if (existsSync(configPath)) {
+    const raw = readFileSync(configPath, 'utf8')
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    let changed = false
+    for (const field of REMOVED_CONFIG_FIELDS) {
+      if (field in parsed) {
+        delete parsed[field]
+        result.configFieldsStripped.push(field)
+        changed = true
+      }
+    }
+    if (changed) {
+      writeFileSync(configPath, `${JSON.stringify(parsed, null, 2)}\n`)
+    }
+  }
+
+  return result
 }
 
 function appendToGitignore(cwd: string, line: string): void {
