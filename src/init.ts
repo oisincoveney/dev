@@ -10,7 +10,7 @@ import { basename } from 'node:path'
 import * as p from '@clack/prompts'
 import { type DevConfig, configPath, writeConfig } from './config.js'
 import { detectProject } from './detect.js'
-import { installAll } from './install.js'
+import { applyDeleteriousMigrations, installAll } from './install.js'
 import { type Answers, runPrompts } from './prompts.js'
 
 export async function runInit(): Promise<void> {
@@ -80,6 +80,14 @@ async function writeConfigAndInstall(dir: string, answers: Answers): Promise<voi
 
   writeConfig(dir, config)
   p.log.success(`Wrote ${configPath(dir)}`)
+
+  const migration = applyDeleteriousMigrations(dir)
+  for (const path of migration.removed) p.log.info(`removed orphan: ${path}`)
+  for (const file of migration.trimmed) p.log.info(`trimmed BEADS INTEGRATION block: ${file}`)
+  for (const field of migration.configFieldsStripped) {
+    p.log.info(`stripped removed config field: ${field}`)
+  }
+  for (const warning of migration.warnings) p.log.warn(warning)
 
   const spinner = p.spinner()
   spinner.start('Installing hooks, configs, skills, and instruction files')
