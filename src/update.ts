@@ -6,26 +6,17 @@
  * touching user-customised files (lefthook.yml, lint configs).
  */
 
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
 import { readConfig } from './config.js'
-import { applyDeleteriousMigrations, installAll } from './install.js'
-
-const RETIRED_HOOK_FILES = [
-  '.claude/hooks/verify-grounding.sh',
-  '.codex/hooks/verify-grounding.sh',
-]
-
-function pruneRetiredHookFiles(cwd: string, log: (msg: string) => void): void {
-  for (const rel of RETIRED_HOOK_FILES) {
-    const path = join(cwd, rel)
-    if (existsSync(path)) {
-      rmSync(path)
-      log(`removed orphan: ${rel}`)
-    }
-  }
-}
+import {
+  installAll,
+  removeLegacyRetiredPaths,
+  seedConstitutionDecisions,
+  stripLegacyConfigFields,
+  trimBeadsIntegrationOnAgentDocs,
+} from './install.js'
 
 export async function runUpdate(): Promise<void> {
   p.intro('@oisincoveney/dev update')
@@ -46,18 +37,22 @@ export async function runUpdate(): Promise<void> {
 
   p.log.info(`Re-syncing ${config.variant} project from .dev.config.json`)
 
-  pruneRetiredHookFiles(cwd, (msg) => p.log.info(msg))
+  const legacy = removeLegacyRetiredPaths(cwd)
+  for (const path of legacy.removed) p.log.info(`removed orphan: ${path}`)
+  for (const warning of legacy.warnings) p.log.warn(warning)
 
-  const migration = applyDeleteriousMigrations(cwd)
-  for (const path of migration.removed) p.log.info(`removed orphan: ${path}`)
-  for (const file of migration.trimmed) p.log.info(`trimmed BEADS INTEGRATION block: ${file}`)
-  for (const field of migration.configFieldsStripped) {
-    p.log.info(`stripped removed config field: ${field}`)
+  const trimmed = trimBeadsIntegrationOnAgentDocs(cwd)
+  for (const file of trimmed) p.log.info(`trimmed BEADS INTEGRATION block: ${file}`)
+
+  const stripped = stripLegacyConfigFields(cwd)
+  for (const field of stripped) p.log.info(`stripped removed config field: ${field}`)
+
+  if (config.tools.includes('beads') && config.workflow === 'bd' && existsSync(join(cwd, '.beads'))) {
+    const seed = seedConstitutionDecisions(cwd, config)
+    if (seed.ok && seed.created > 0) {
+      p.log.info(`seeded ${seed.created} constitution decision(s)`)
+    }
   }
-  if (migration.constitutionSeeded > 0) {
-    p.log.info(`seeded ${migration.constitutionSeeded} constitution decision(s)`)
-  }
-  for (const warning of migration.warnings) p.log.warn(warning)
 
   const acceptLefthook = process.argv.includes('--accept-lefthook-overwrite')
 

@@ -11,7 +11,13 @@ import { basename, join } from 'node:path'
 import * as p from '@clack/prompts'
 import { type DevConfig, configPath, writeConfig } from './config.js'
 import { detectProject } from './detect.js'
-import { applyDeleteriousMigrations, installAll } from './install.js'
+import {
+  installAll,
+  removeLegacyRetiredPaths,
+  seedConstitutionDecisions,
+  stripLegacyConfigFields,
+  trimBeadsIntegrationOnAgentDocs,
+} from './install.js'
 import type { SuperDriftEntry } from './manifest.js'
 import { type Answers, runPrompts } from './prompts.js'
 
@@ -83,13 +89,22 @@ async function writeConfigAndInstall(dir: string, answers: Answers): Promise<voi
   writeConfig(dir, config)
   p.log.success(`Wrote ${configPath(dir)}`)
 
-  const migration = applyDeleteriousMigrations(dir)
-  for (const path of migration.removed) p.log.info(`removed orphan: ${path}`)
-  for (const file of migration.trimmed) p.log.info(`trimmed BEADS INTEGRATION block: ${file}`)
-  for (const field of migration.configFieldsStripped) {
-    p.log.info(`stripped removed config field: ${field}`)
+  const legacy = removeLegacyRetiredPaths(dir)
+  for (const path of legacy.removed) p.log.info(`removed orphan: ${path}`)
+  for (const warning of legacy.warnings) p.log.warn(warning)
+
+  const trimmed = trimBeadsIntegrationOnAgentDocs(dir)
+  for (const file of trimmed) p.log.info(`trimmed BEADS INTEGRATION block: ${file}`)
+
+  const stripped = stripLegacyConfigFields(dir)
+  for (const field of stripped) p.log.info(`stripped removed config field: ${field}`)
+
+  if (config.tools.includes('beads') && config.workflow === 'bd') {
+    const seed = seedConstitutionDecisions(dir, config)
+    if (seed.ok && seed.created > 0) {
+      p.log.info(`seeded ${seed.created} constitution decision(s)`)
+    }
   }
-  for (const warning of migration.warnings) p.log.warn(warning)
 
   const spinner = p.spinner()
   spinner.start('Installing hooks, configs, skills, and instruction files')

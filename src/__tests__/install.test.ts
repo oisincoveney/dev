@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
-import { applyDeleteriousMigrations, installAll } from '../install.js'
+import {
+  installAll,
+  removeLegacyRetiredPaths,
+  stripLegacyConfigFields,
+  trimBeadsIntegrationOnAgentDocs,
+} from '../install.js'
 import type { Answers } from '../prompts.js'
 import { RULE_SKILLS } from '../skills.js'
 
@@ -439,7 +444,7 @@ describe('installAll', () => {
   })
 })
 
-describe('applyDeleteriousMigrations (0.6.5 → 0.7.0 update flow)', () => {
+describe('legacy migration helpers (0.6.5 → 0.8.x)', () => {
   let dir: string
 
   beforeEach(() => {
@@ -450,18 +455,18 @@ describe('applyDeleteriousMigrations (0.6.5 → 0.7.0 update flow)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('removes legacy .claude/commands/spec.md', () => {
+  it('removeLegacyRetiredPaths removes .claude/commands/spec.md', () => {
     mkdirSync(join(dir, '.claude/commands'), { recursive: true })
     writeFileSync(join(dir, '.claude/commands/spec.md'), 'legacy')
-    const r = applyDeleteriousMigrations(dir)
+    const r = removeLegacyRetiredPaths(dir)
     expect(existsSync(join(dir, '.claude/commands/spec.md'))).toBe(false)
     expect(r.removed).toContain('.claude/commands/spec.md')
   })
 
-  it('removes legacy .claude/specs/TEMPLATE.md and the empty parent dir', () => {
+  it('removeLegacyRetiredPaths removes .claude/specs/TEMPLATE.md and the empty parent dir', () => {
     mkdirSync(join(dir, '.claude/specs'), { recursive: true })
     writeFileSync(join(dir, '.claude/specs/TEMPLATE.md'), 'legacy template')
-    const r = applyDeleteriousMigrations(dir)
+    const r = removeLegacyRetiredPaths(dir)
     expect(existsSync(join(dir, '.claude/specs/TEMPLATE.md'))).toBe(false)
     expect(existsSync(join(dir, '.claude/specs'))).toBe(false)
     expect(r.removed).toContain('.claude/specs/TEMPLATE.md')
@@ -472,10 +477,10 @@ describe('applyDeleteriousMigrations (0.6.5 → 0.7.0 update flow)', () => {
     mkdirSync(join(dir, '.claude/specs'), { recursive: true })
     writeFileSync(join(dir, '.claude/specs/TEMPLATE.md'), 'legacy')
     writeFileSync(join(dir, '.claude/specs/2026-01-01-feature.md'), 'user spec')
-    const r = applyDeleteriousMigrations(dir)
+    const r = removeLegacyRetiredPaths(dir)
     expect(r.removed).toContain('.claude/specs/TEMPLATE.md')
     expect(existsSync(join(dir, '.claude/specs'))).toBe(true)
-    expect(r.warnings.some((w) => w.includes('2026-01-01-feature.md'))).toBe(true)
+    expect(r.warnings.some((w: string) => w.includes('2026-01-01-feature.md'))).toBe(true)
   })
 
   it('warns about non-empty .claude/plans/ and docs/research/', () => {
@@ -483,14 +488,14 @@ describe('applyDeleteriousMigrations (0.6.5 → 0.7.0 update flow)', () => {
     writeFileSync(join(dir, '.claude/plans/x.md'), 'plan')
     mkdirSync(join(dir, 'docs/research'), { recursive: true })
     writeFileSync(join(dir, 'docs/research/y.md'), 'dossier')
-    const r = applyDeleteriousMigrations(dir)
-    expect(r.warnings.some((w) => w.includes('.claude/plans'))).toBe(true)
-    expect(r.warnings.some((w) => w.includes('docs/research'))).toBe(true)
+    const r = removeLegacyRetiredPaths(dir)
+    expect(r.warnings.some((w: string) => w.includes('.claude/plans'))).toBe(true)
+    expect(r.warnings.some((w: string) => w.includes('docs/research'))).toBe(true)
     expect(existsSync(join(dir, '.claude/plans/x.md'))).toBe(true)
     expect(existsSync(join(dir, 'docs/research/y.md'))).toBe(true)
   })
 
-  it('trims BEADS INTEGRATION block in AGENTS.md and CLAUDE.md', () => {
+  it('trimBeadsIntegrationOnAgentDocs trims AGENTS.md and CLAUDE.md', () => {
     const dirty = `<!-- BEGIN BEADS INTEGRATION v:1 -->
 ## Beads Issue Tracker
 
@@ -506,14 +511,14 @@ some content
 `
     writeFileSync(join(dir, 'AGENTS.md'), dirty)
     writeFileSync(join(dir, 'CLAUDE.md'), dirty)
-    const r = applyDeleteriousMigrations(dir)
-    expect(r.trimmed).toContain('AGENTS.md')
-    expect(r.trimmed).toContain('CLAUDE.md')
+    const trimmed = trimBeadsIntegrationOnAgentDocs(dir)
+    expect(trimmed).toContain('AGENTS.md')
+    expect(trimmed).toContain('CLAUDE.md')
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).not.toContain('Session Completion')
     expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).not.toContain('Session Completion')
   })
 
-  it('strips removed config fields from .dev.config.json', () => {
+  it('stripLegacyConfigFields removes enforcement / beadsWorkflow / mcp from .dev.config.json', () => {
     const stale = {
       language: 'typescript',
       enforcement: { baselinePin: true, docsFirst: false },
@@ -522,10 +527,8 @@ some content
       tools: ['beads'],
     }
     writeFileSync(join(dir, '.dev.config.json'), JSON.stringify(stale, null, 2))
-    const r = applyDeleteriousMigrations(dir)
-    expect(r.configFieldsStripped).toEqual(
-      expect.arrayContaining(['enforcement', 'beadsWorkflow', 'mcp']),
-    )
+    const stripped = stripLegacyConfigFields(dir)
+    expect(stripped).toEqual(expect.arrayContaining(['enforcement', 'beadsWorkflow', 'mcp']))
     const after = JSON.parse(readFileSync(join(dir, '.dev.config.json'), 'utf8'))
     expect(after.enforcement).toBeUndefined()
     expect(after.beadsWorkflow).toBeUndefined()
@@ -533,25 +536,14 @@ some content
     expect(after.tools).toEqual(['beads'])
   })
 
-  it('is idempotent — second run produces no changes', () => {
+  it('helpers are idempotent — second run is a no-op', () => {
     mkdirSync(join(dir, '.claude/commands'), { recursive: true })
     writeFileSync(join(dir, '.claude/commands/spec.md'), 'legacy')
-    const first = applyDeleteriousMigrations(dir)
-    const second = applyDeleteriousMigrations(dir)
-    expect(first.removed.length).toBeGreaterThan(0)
+    removeLegacyRetiredPaths(dir)
+    const second = removeLegacyRetiredPaths(dir)
     expect(second.removed).toEqual([])
-    expect(second.trimmed).toEqual([])
-    expect(second.configFieldsStripped).toEqual([])
-    expect(second.constitutionSeeded).toBe(0)
     expect(second.warnings).toEqual([])
-  })
-
-  it('returns clean empty result when nothing needs migrating', () => {
-    const r = applyDeleteriousMigrations(dir)
-    expect(r.removed).toEqual([])
-    expect(r.trimmed).toEqual([])
-    expect(r.configFieldsStripped).toEqual([])
-    expect(r.constitutionSeeded).toBe(0)
-    expect(r.warnings).toEqual([])
+    expect(stripLegacyConfigFields(dir)).toEqual([])
+    expect(trimBeadsIntegrationOnAgentDocs(dir)).toEqual([])
   })
 })

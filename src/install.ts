@@ -803,32 +803,19 @@ export function seedConstitutionDecisions(
   return { ok: true, created }
 }
 
-const RETIRED_PATHS = ['.claude/commands/spec.md', '.claude/specs/TEMPLATE.md']
+const LEGACY_RETIRED_PATHS = ['.claude/commands/spec.md', '.claude/specs/TEMPLATE.md']
 const WARN_IF_PRESENT = ['.claude/specs', '.claude/plans', 'docs/research']
 const REMOVED_CONFIG_FIELDS = ['enforcement', 'beadsWorkflow', 'mcp']
 
-export interface MigrationResult {
-  removed: string[]
-  trimmed: string[]
-  configFieldsStripped: string[]
-  constitutionSeeded: number
-  warnings: string[]
-}
+export function removeLegacyRetiredPaths(cwd: string): { removed: string[]; warnings: string[] } {
+  const removed: string[] = []
+  const warnings: string[] = []
 
-export function applyDeleteriousMigrations(cwd: string): MigrationResult {
-  const result: MigrationResult = {
-    removed: [],
-    trimmed: [],
-    configFieldsStripped: [],
-    constitutionSeeded: 0,
-    warnings: [],
-  }
-
-  for (const rel of RETIRED_PATHS) {
+  for (const rel of LEGACY_RETIRED_PATHS) {
     const path = join(cwd, rel)
     if (existsSync(path)) {
       rmSync(path)
-      result.removed.push(rel)
+      removed.push(rel)
     }
   }
 
@@ -838,14 +825,19 @@ export function applyDeleteriousMigrations(cwd: string): MigrationResult {
     const entries = readdirSync(path)
     if (entries.length === 0) {
       rmSync(path, { recursive: true })
-      result.removed.push(`${rel}/ (empty)`)
+      removed.push(`${rel}/ (empty)`)
     } else {
-      result.warnings.push(
+      warnings.push(
         `${rel}/ still has ${entries.length} file(s): ${entries.join(', ')} — review and delete manually; bd is the source of truth now.`,
       )
     }
   }
 
+  return { removed, warnings }
+}
+
+export function trimBeadsIntegrationOnAgentDocs(cwd: string): string[] {
+  const trimmed: string[] = []
   for (const file of ['AGENTS.md', 'CLAUDE.md']) {
     const path = join(cwd, file)
     if (!existsSync(path)) continue
@@ -853,45 +845,28 @@ export function applyDeleteriousMigrations(cwd: string): MigrationResult {
     trimBeadsIntegrationBlock(path)
     const after = readFileSync(path, 'utf8')
     if (after !== before) {
-      result.trimmed.push(file)
+      trimmed.push(file)
     }
   }
+  return trimmed
+}
 
+export function stripLegacyConfigFields(cwd: string): string[] {
   const configPath = join(cwd, '.dev.config.json')
-  let parsedConfig: Record<string, unknown> | null = null
-  if (existsSync(configPath)) {
-    const raw = readFileSync(configPath, 'utf8')
-    parsedConfig = JSON.parse(raw) as Record<string, unknown>
-    let changed = false
-    for (const field of REMOVED_CONFIG_FIELDS) {
-      if (field in parsedConfig) {
-        delete parsedConfig[field]
-        result.configFieldsStripped.push(field)
-        changed = true
-      }
-    }
-    if (changed) {
-      writeFileSync(configPath, `${JSON.stringify(parsedConfig, null, 2)}\n`)
+  if (!existsSync(configPath)) return []
+  const raw = readFileSync(configPath, 'utf8')
+  const parsed = JSON.parse(raw) as Record<string, unknown>
+  const stripped: string[] = []
+  for (const field of REMOVED_CONFIG_FIELDS) {
+    if (field in parsed) {
+      delete parsed[field]
+      stripped.push(field)
     }
   }
-
-  if (
-    parsedConfig &&
-    Array.isArray(parsedConfig.tools) &&
-    (parsedConfig.tools as unknown[]).includes('beads') &&
-    parsedConfig.workflow === 'bd' &&
-    existsSync(join(cwd, '.beads')) &&
-    commandExists('bd')
-  ) {
-    const seedResult = seedConstitutionDecisions(cwd, parsedConfig as unknown as DevConfig)
-    if (seedResult.ok) {
-      result.constitutionSeeded = seedResult.created
-    } else {
-      result.warnings.push(`constitution seeding skipped: ${seedResult.error}`)
-    }
+  if (stripped.length > 0) {
+    writeFileSync(configPath, `${JSON.stringify(parsed, null, 2)}\n`)
   }
-
-  return result
+  return stripped
 }
 
 function appendToGitignore(cwd: string, line: string): void {
