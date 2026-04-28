@@ -563,6 +563,21 @@ describe('generateRules', () => {
     expect(rules.some((r) => r.filename === 'planning-ux.md')).toBe(false)
   })
 
+  it('registers bd-context-inject.sh on UserPromptSubmit when beads is selected', () => {
+    const settings = generateClaudeSettings(tsFrontendConfig)
+    const ups = settings.hooks.UserPromptSubmit ?? []
+    const commands = ups.flatMap((e) => e.hooks.map((h) => h.command))
+    expect(commands.some((c) => c.includes('bd-context-inject.sh'))).toBe(true)
+  })
+
+  it('omits bd-context-inject.sh when beads is not selected', () => {
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
+    const settings = generateClaudeSettings(cfg)
+    const ups = settings.hooks.UserPromptSubmit ?? []
+    const commands = ups.flatMap((e) => e.hooks.map((h) => h.command))
+    expect(commands.some((c) => c.includes('bd-context-inject.sh'))).toBe(false)
+  })
+
   it('emits verifier-loop.md when beads tool is selected', () => {
     const rules = generateRules(tsFrontendConfig, TEMPLATES_DIR)
     const verifier = rules.find((r) => r.filename === 'verifier-loop.md')

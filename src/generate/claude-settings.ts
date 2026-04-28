@@ -77,7 +77,10 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
       ],
       UserPromptSubmit: [
         {
-          hooks: [hook('context-injector.sh', 5)],
+          hooks: [
+            hook('context-injector.sh', 5),
+            ...(beadsEnabled ? [hook('bd-context-inject.sh', 5)] : []),
+          ],
         },
       ],
       PreToolUse: [
