@@ -547,6 +547,22 @@ describe('generateRules', () => {
     expect(beads?.content).toContain('bd ready')
   })
 
+  it('emits planning-ux.md when beads tool is selected', () => {
+    const rules = generateRules(tsFrontendConfig, TEMPLATES_DIR)
+    const planning = rules.find((r) => r.filename === 'planning-ux.md')
+    expect(planning?.content).toContain('Planning UX')
+    expect(planning?.content).toContain('Grill me')
+    expect(planning?.content).toContain('Just do it')
+    expect(planning?.content).toContain('Defer')
+    expect(planning?.content).toContain('Never file an epic without explicit user approval')
+  })
+
+  it('omits planning-ux.md when beads tool is not selected', () => {
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
+    const rules = generateRules(cfg, TEMPLATES_DIR)
+    expect(rules.some((r) => r.filename === 'planning-ux.md')).toBe(false)
+  })
+
   it('emits bd-native workflow when workflow is bd', () => {
     const cfg: DevConfig = { ...tsFrontendConfig, workflow: 'bd' as never }
     const rules = generateRules(cfg, TEMPLATES_DIR)

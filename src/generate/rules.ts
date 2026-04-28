@@ -40,6 +40,10 @@ export function generateRules(config: DevConfig, templatesDir: string): RuleFile
 
   if (config.tools.includes('beads')) {
     files.push({ filename: 'beads.md', content: beadsRule() })
+    files.push({
+      filename: 'planning-ux.md',
+      content: readFileSync(resolve(templatesDir, 'rules', 'planning-ux.md'), 'utf8'),
+    })
   }
   if (config.contractDriven) {
     files.push({ filename: 'contract-driven.md', content: contractDrivenRule(config.language) })
