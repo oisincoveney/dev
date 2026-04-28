@@ -591,6 +591,19 @@ describe('generateRules', () => {
     expect(writeEntry?.hooks.some((h) => h.command.includes('require-swarm.sh'))).toBe(false)
   })
 
+  it('lefthook commit-msg includes bd-ticket-ref step when beads is selected', () => {
+    const yml = generateLefthook(tsFrontendConfig)
+    expect(yml).toContain('bd-ticket-ref')
+    expect(yml).toContain('Refs:')
+    expect(yml).toContain('docs|chore|style')
+  })
+
+  it('lefthook commit-msg omits bd-ticket-ref when beads is not selected', () => {
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
+    const yml = generateLefthook(cfg)
+    expect(yml).not.toContain('bd-ticket-ref')
+  })
+
   it('emits verifier-loop.md when beads tool is selected', () => {
     const rules = generateRules(tsFrontendConfig, TEMPLATES_DIR)
     const verifier = rules.find((r) => r.filename === 'verifier-loop.md')

@@ -126,7 +126,7 @@ commit-msg:
           echo "⛔ Co-Authored-By trailers are not allowed in this project."
           exit 1
         fi
-
+${beadsCommitRefStep(config)}
 pre-commit:
   parallel: true
   commands:
@@ -142,5 +142,29 @@ ${testStep}${playwrightStep}    pr-size-check:
         if command -v semgrep >/dev/null 2>&1; then
           semgrep --config p/security-audit --config p/owasp-top-ten --error
         fi
+`
+}
+
+function beadsCommitRefStep(config: DevConfig): string {
+  if (!config.tools.includes('beads')) return ''
+  return `    bd-ticket-ref:
+      run: |
+        subject=$(head -1 {1})
+        type=$(echo "$subject" | grep -oE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)' | head -1)
+        case "$type" in
+          docs|chore|style)
+            exit 0
+            ;;
+        esac
+        if echo "$subject" | grep -qE '\\([a-z0-9._-]*[a-z0-9-]+-[a-z0-9._-]+\\)'; then
+          exit 0
+        fi
+        if grep -qE '^\\s*Refs:\\s+[a-z0-9_-]+-[a-z0-9._-]+' {1}; then
+          exit 0
+        fi
+        echo "⛔ Commit references no bd ticket."
+        echo "   Either include a (bd-XXX) scope or a 'Refs: bd-XXX' footer."
+        echo "   Or use a docs:/chore:/style: type if this isn't ticket-bound work."
+        exit 1
 `
 }
