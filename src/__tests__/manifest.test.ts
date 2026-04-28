@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  applyManagedFiles,
   classifyDrift,
   hashFile,
   type Manifest,
@@ -155,5 +156,202 @@ describe('classifyDrift', () => {
 
   it('returns "none" when both are empty', () => {
     expect(classifyDrift('', '')).toBe('none')
+  })
+})
+
+describe('applyManagedFiles', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'apply-test-'))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('writes fresh files when destination is missing and writes the manifest', () => {
+    const result = applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['.claude/hooks/foo.sh', 'echo foo']]),
+      mode: 'init',
+    })
+    expect(result.written).toEqual(['.claude/hooks/foo.sh'])
+    expect(result.backups).toEqual([])
+    expect(result.superDrifted).toEqual([])
+    expect(readFileSync(join(dir, '.claude/hooks/foo.sh'), 'utf8')).toBe('echo foo')
+    const m = readManifest(dir)
+    expect(m?.version).toBe('0.8.0')
+    expect(m?.files['.claude/hooks/foo.sh']).toBeDefined()
+  })
+
+  it('replaces clean (unmodified) files silently when their hash matches the prior manifest', () => {
+    require('node:fs').mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    writeFileSync(join(dir, '.claude/hooks/foo.sh'), 'echo old')
+    const oldHash = hashFile(join(dir, '.claude/hooks/foo.sh'))!
+    writeManifest(dir, {
+      version: '0.7.0',
+      files: { '.claude/hooks/foo.sh': { sha256: oldHash } },
+    })
+    const result = applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['.claude/hooks/foo.sh', 'echo new']]),
+      mode: 'init',
+    })
+    expect(result.written).toEqual(['.claude/hooks/foo.sh'])
+    expect(result.backups).toEqual([])
+    expect(readFileSync(join(dir, '.claude/hooks/foo.sh'), 'utf8')).toBe('echo new')
+  })
+
+  it('on init: backs up mildly-drifted files to .user-backup before writing fresh', () => {
+    require('node:fs').mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    writeFileSync(join(dir, '.claude/hooks/foo.sh'), 'echo modified by user')
+    writeManifest(dir, {
+      version: '0.7.0',
+      files: { '.claude/hooks/foo.sh': { sha256: 'stale-hash-from-prior-version' } },
+    })
+    const result = applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['.claude/hooks/foo.sh', 'echo fresh']]),
+      mode: 'init',
+    })
+    expect(result.backups).toEqual(['.claude/hooks/foo.sh.user-backup'])
+    expect(result.written).toContain('.claude/hooks/foo.sh')
+    expect(readFileSync(join(dir, '.claude/hooks/foo.sh.user-backup'), 'utf8')).toBe(
+      'echo modified by user',
+    )
+    expect(readFileSync(join(dir, '.claude/hooks/foo.sh'), 'utf8')).toBe('echo fresh')
+  })
+
+  it('on init: super-drifted files surface in superDrifted result instead of being auto-replaced', () => {
+    require('node:fs').mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    const heavilyModified = ['#!/usr/bin/env bash', ...Array.from({ length: 50 }, (_, i) => `echo line ${i}`)].join('\n')
+    writeFileSync(join(dir, '.claude/hooks/foo.sh'), heavilyModified)
+    writeManifest(dir, {
+      version: '0.7.0',
+      files: { '.claude/hooks/foo.sh': { sha256: 'stale-hash' } },
+    })
+    const result = applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['.claude/hooks/foo.sh', 'echo small fresh']]),
+      mode: 'init',
+    })
+    expect(result.superDrifted).toEqual(['.claude/hooks/foo.sh'])
+    expect(result.written).not.toContain('.claude/hooks/foo.sh')
+    expect(readFileSync(join(dir, '.claude/hooks/foo.sh'), 'utf8')).toBe(heavilyModified)
+  })
+
+  it('on init: lefthook.yml drift surfaces in lefthookDrift instead of being replaced', () => {
+    writeFileSync(join(dir, 'lefthook.yml'), 'pre-commit:\n  commands:\n    custom:\n      run: echo custom\n')
+    writeManifest(dir, {
+      version: '0.7.0',
+      files: { 'lefthook.yml': { sha256: 'stale-hash' } },
+    })
+    const result = applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['lefthook.yml', 'pre-commit:\n  commands:\n    fresh:\n      run: echo fresh\n']]),
+      mode: 'init',
+    })
+    expect(result.lefthookDrift).toBe(true)
+    expect(result.written).not.toContain('lefthook.yml')
+    expect(readFileSync(join(dir, 'lefthook.yml'), 'utf8')).toContain('custom')
+  })
+
+  it('on update: writes .dev-new sidecar instead of replacing drifted files', () => {
+    require('node:fs').mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    writeFileSync(join(dir, '.claude/hooks/foo.sh'), 'echo modified by user')
+    writeManifest(dir, {
+      version: '0.7.0',
+      files: { '.claude/hooks/foo.sh': { sha256: 'stale-hash' } },
+    })
+    const result = applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['.claude/hooks/foo.sh', 'echo fresh']]),
+      mode: 'update',
+    })
+    expect(result.devNew).toContain('.claude/hooks/foo.sh.dev-new')
+    expect(result.written).not.toContain('.claude/hooks/foo.sh')
+    expect(readFileSync(join(dir, '.claude/hooks/foo.sh'), 'utf8')).toBe('echo modified by user')
+    expect(readFileSync(join(dir, '.claude/hooks/foo.sh.dev-new'), 'utf8')).toBe('echo fresh')
+  })
+
+  it('removes files in prior manifest but not in new file set (with .user-backup if drifted on init)', () => {
+    require('node:fs').mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    writeFileSync(join(dir, '.claude/hooks/retired.sh'), 'echo retired user-modified')
+    writeManifest(dir, {
+      version: '0.7.0',
+      files: { '.claude/hooks/retired.sh': { sha256: 'stale-hash' } },
+    })
+    const result = applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map(),
+      mode: 'init',
+    })
+    expect(result.removed).toContain('.claude/hooks/retired.sh')
+    expect(result.backups).toContain('.claude/hooks/retired.sh.user-backup')
+    expect(existsSync(join(dir, '.claude/hooks/retired.sh'))).toBe(false)
+    expect(existsSync(join(dir, '.claude/hooks/retired.sh.user-backup'))).toBe(true)
+  })
+
+  it('removes clean (unmodified) retired files without a backup', () => {
+    require('node:fs').mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    const content = 'echo retired'
+    writeFileSync(join(dir, '.claude/hooks/retired.sh'), content)
+    const cleanHash = hashFile(join(dir, '.claude/hooks/retired.sh'))!
+    writeManifest(dir, {
+      version: '0.7.0',
+      files: { '.claude/hooks/retired.sh': { sha256: cleanHash } },
+    })
+    const result = applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map(),
+      mode: 'init',
+    })
+    expect(result.removed).toContain('.claude/hooks/retired.sh')
+    expect(result.backups).toEqual([])
+    expect(existsSync(join(dir, '.claude/hooks/retired.sh.user-backup'))).toBe(false)
+  })
+
+  it('records sha256 hashes in the new manifest after writing', () => {
+    applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['.claude/hooks/a.sh', 'content a']]),
+      mode: 'init',
+    })
+    const m = readManifest(dir)
+    const expectedHash = hashFile(join(dir, '.claude/hooks/a.sh'))
+    expect(m?.files['.claude/hooks/a.sh']?.sha256).toBe(expectedHash)
+  })
+
+  it('preserves files that are not in either manifest (untracked user files)', () => {
+    require('node:fs').mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    writeFileSync(join(dir, '.claude/hooks/user-custom.sh'), 'echo custom')
+    applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['.claude/hooks/ours.sh', 'echo ours']]),
+      mode: 'init',
+    })
+    expect(existsSync(join(dir, '.claude/hooks/user-custom.sh'))).toBe(true)
+    expect(readFileSync(join(dir, '.claude/hooks/user-custom.sh'), 'utf8')).toBe('echo custom')
+  })
+
+  it('on update: dedupes .dev-new writes (no double-warning when content is unchanged)', () => {
+    require('node:fs').mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    writeFileSync(join(dir, '.claude/hooks/foo.sh'), 'echo user-modified')
+    writeManifest(dir, {
+      version: '0.7.0',
+      files: { '.claude/hooks/foo.sh': { sha256: 'stale-hash' } },
+    })
+    applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['.claude/hooks/foo.sh', 'echo fresh']]),
+      mode: 'update',
+    })
+    const result2 = applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([['.claude/hooks/foo.sh', 'echo fresh']]),
+      mode: 'update',
+    })
+    expect(result2.devNew).toEqual([])
   })
 })

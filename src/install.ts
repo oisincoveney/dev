@@ -21,6 +21,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as p from '@clack/prompts'
 import type { DevConfig } from './config.js'
+import { applyManagedFiles, type ApplyManagedFilesResult } from './manifest.js'
 import type { Answers } from './prompts.js'
 import { buildClaudeMdBundle } from './generate/markdown.js'
 import { generateClaudeSettings } from './generate/claude-settings.js'
@@ -45,12 +46,17 @@ export interface InstallOptions {
   isUpdate?: boolean
 }
 
+export interface InstallResult {
+  manifest?: ApplyManagedFilesResult
+}
+
 export async function installAll(
   cwd: string,
   config: DevConfig,
   answers: Answers,
   options: InstallOptions = {},
-): Promise<void> {
+): Promise<InstallResult> {
+  const installResult: InstallResult = {}
   const log = (msg: string): void => {
     // biome-ignore lint: CLI output
     console.log(`  ✓ ${msg}`)
@@ -63,6 +69,12 @@ export async function installAll(
   // ─── File generation ────────────────────────────────────────────────
 
   if (config.targets.includes('claude')) {
+    const managedFiles = gatherClaudeHooks()
+    installResult.manifest = applyManagedFiles(cwd, {
+      version: getPackageVersion(),
+      files: managedFiles,
+      mode: options.isUpdate ? 'update' : 'init',
+    })
     installClaudeHooks(cwd, log)
     const settings = generateClaudeSettings(config)
     if (options.isUpdate) {
@@ -181,7 +193,7 @@ export async function installAll(
     pruneScopeGuardHook(join(homedir(), '.claude', 'settings.json'), log, warn)
   }
 
-  if (options.skipSideEffects) return
+  if (options.skipSideEffects) return installResult
 
   if (config.targets.includes('claude')) {
     installGroundedHooks(cwd, log, warn)
@@ -252,17 +264,30 @@ export async function installAll(
   // GSD and IDD workflows have been removed. The bd-native workflow is the
   // only supported flavor; readConfig coerces legacy "gsd" / "idd" values to
   // "none" with a deprecation warning.
+
+  return installResult
+}
+
+function getPackageVersion(): string {
+  const pkgPath = resolve(__dirname, '..', 'package.json')
+  const raw = readFileSync(pkgPath, 'utf8')
+  const pkg = JSON.parse(raw) as { version: string }
+  return pkg.version
+}
+
+function gatherClaudeHooks(): Map<string, string> {
+  const srcDir = join(TEMPLATES_DIR, 'hooks')
+  const files = new Map<string, string>()
+  for (const file of readdirSync(srcDir)) {
+    const content = readFileSync(join(srcDir, file), 'utf8')
+    files.set(`.claude/hooks/${file}`, content)
+  }
+  return files
 }
 
 function installClaudeHooks(cwd: string, log: (msg: string) => void): void {
-  const srcDir = join(TEMPLATES_DIR, 'hooks')
-  const destDir = join(cwd, '.claude', 'hooks')
-  mkdirSync(destDir, { recursive: true })
-  for (const file of readdirSync(srcDir)) {
-    const src = join(srcDir, file)
-    const dest = join(destDir, file)
-    copyFileSync(src, dest)
-    chmodSync(dest, 0o755)
+  for (const file of readdirSync(join(cwd, '.claude', 'hooks'))) {
+    chmodSync(join(cwd, '.claude', 'hooks', file), 0o755)
     log(`.claude/hooks/${file}`)
   }
 }

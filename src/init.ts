@@ -6,11 +6,13 @@
  * can't determine.
  */
 
-import { basename } from 'node:path'
+import { writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import * as p from '@clack/prompts'
 import { type DevConfig, configPath, writeConfig } from './config.js'
 import { detectProject } from './detect.js'
 import { applyDeleteriousMigrations, installAll } from './install.js'
+import type { SuperDriftEntry } from './manifest.js'
 import { type Answers, runPrompts } from './prompts.js'
 
 export async function runInit(): Promise<void> {
@@ -91,6 +93,54 @@ async function writeConfigAndInstall(dir: string, answers: Answers): Promise<voi
 
   const spinner = p.spinner()
   spinner.start('Installing hooks, configs, skills, and instruction files')
-  await installAll(dir, config, answers)
+  const result = await installAll(dir, config, answers)
   spinner.stop('Installed')
+
+  if (result.manifest) {
+    if (result.manifest.lefthookDrift) {
+      p.log.error(
+        'lefthook.yml has drifted from what we shipped. Halting init — diff your version against the new one, reconcile, then re-run.',
+      )
+      process.exit(1)
+    }
+
+    for (const entry of result.manifest.superDriftedDetails) {
+      await resolveSuperDrift(dir, entry)
+    }
+
+    if (result.manifest.backups.length > 0) {
+      p.log.info(
+        `Backed up customized files to .user-backup: ${result.manifest.backups.join(', ')}.`,
+      )
+    }
+
+    if (result.manifest.removed.length > 0) {
+      p.log.info(`Removed retired files: ${result.manifest.removed.join(', ')}.`)
+    }
+  }
+}
+
+async function resolveSuperDrift(dir: string, entry: SuperDriftEntry): Promise<void> {
+  const choice = await p.select<'keep' | 'take' | 'abort'>({
+    message: `${entry.relPath} is super-drifted (heavily modified). What do you want to do?`,
+    options: [
+      { value: 'keep', label: 'Keep my version (skip overwrite)' },
+      { value: 'take', label: 'Take the new version (back mine up to .user-backup)' },
+      { value: 'abort', label: 'Abort init — I want to review first' },
+    ],
+  })
+
+  if (choice === 'abort' || p.isCancel(choice)) {
+    p.log.warn(`Aborting at ${entry.relPath}. Re-run init when ready.`)
+    process.exit(1)
+  }
+
+  if (choice === 'take') {
+    const absPath = join(dir, entry.relPath)
+    writeFileSync(`${absPath}.user-backup`, entry.currentContent)
+    writeFileSync(absPath, entry.newContent)
+    p.log.info(`Took new version of ${entry.relPath}; your old version is at ${entry.relPath}.user-backup.`)
+  } else {
+    p.log.info(`Kept your version of ${entry.relPath}. New shipped version is NOT applied.`)
+  }
 }
