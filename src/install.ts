@@ -44,6 +44,8 @@ export interface InstallOptions {
   skipSideEffects?: boolean
   /** Update mode: merge settings instead of overwriting, skip lefthook and lint/tool configs. */
   isUpdate?: boolean
+  /** Override lefthook.yml drift on update (caller has explicitly opted in). */
+  acceptLefthookOverwrite?: boolean
 }
 
 export interface InstallResult {
@@ -74,6 +76,7 @@ export async function installAll(
       version: getPackageVersion(),
       files: managedFiles,
       mode: options.isUpdate ? 'update' : 'init',
+      acceptLefthookOverwrite: options.acceptLefthookOverwrite,
     })
     installClaudeHooks(cwd, log)
     const settings = generateClaudeSettings(config)

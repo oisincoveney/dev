@@ -59,13 +59,38 @@ export async function runUpdate(): Promise<void> {
   }
   for (const warning of migration.warnings) p.log.warn(warning)
 
+  const acceptLefthook = process.argv.includes('--accept-lefthook-overwrite')
+
   const spinner = p.spinner()
   spinner.start('Updating hooks, docs, and settings')
-  await installAll(cwd, config, {} as never, {
+  const result = await installAll(cwd, config, {} as never, {
     skipSideEffects: true,
     isUpdate: true,
+    acceptLefthookOverwrite: acceptLefthook,
   })
   spinner.stop('Done')
+
+  if (result.manifest) {
+    if (result.manifest.lefthookDrift && !acceptLefthook) {
+      p.log.error(
+        'lefthook.yml has drifted from what we shipped. Halting update.\n' +
+          '  - To accept the new lefthook.yml (overwrite yours): re-run with --accept-lefthook-overwrite\n' +
+          '  - To keep your version and update the manifest to match: run `oisin-dev accept-lefthook`\n' +
+          '  - Otherwise diff and reconcile manually before re-running update.',
+      )
+      process.exit(1)
+    }
+
+    if (result.manifest.devNew.length > 0) {
+      p.log.warn(
+        `Drifted files; new versions written next to yours: ${result.manifest.devNew.join(', ')}. Diff and reconcile.`,
+      )
+    }
+
+    if (result.manifest.removed.length > 0) {
+      p.log.info(`Removed retired files: ${result.manifest.removed.join(', ')}.`)
+    }
+  }
 
   p.outro('Commit the updated files.')
 }

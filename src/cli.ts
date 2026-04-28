@@ -1,13 +1,15 @@
 #!/usr/bin/env node
+import { runAcceptLefthook } from './accept-lefthook.js'
 import { runInit } from './init.js'
 import { runSetCommands } from './set-commands.js'
 import { runUpdate } from './update.js'
 
 const COMMANDS: Record<string, string> = {
-  init:           'Initialize an opinionated dev environment in the current (or new) project',
-  update:         'Re-sync generated files (hooks, docs, settings) from .dev.config.json',
-  'set-commands': 'Fill in or update dev/build/test/typecheck/lint/format commands',
-  help:           'Show this help message',
+  init:             'Initialize an opinionated dev environment in the current (or new) project',
+  update:           'Re-sync generated files (hooks, docs, settings) from .dev.config.json',
+  'set-commands':   'Fill in or update dev/build/test/typecheck/lint/format commands',
+  'accept-lefthook': "Mark the current lefthook.yml as canonical (clears manifest drift warning)",
+  help:             'Show this help message',
 }
 
 function printHelp(): void {
@@ -36,6 +38,9 @@ async function main(): Promise<void> {
       break
     case 'set-commands':
       await runSetCommands()
+      break
+    case 'accept-lefthook':
+      await runAcceptLefthook()
       break
     case 'help':
     case '--help':

@@ -35,6 +35,7 @@ export interface ApplyManagedFilesOptions {
   version: string
   files: Map<string, string>
   mode: 'init' | 'update'
+  acceptLefthookOverwrite?: boolean
 }
 
 export interface SuperDriftEntry {
@@ -73,7 +74,10 @@ export function applyManagedFiles(
 
   for (const [relPath, content] of options.files) {
     const absPath = join(cwd, relPath)
-    const action = decideWriteAction(absPath, content, relPath, prior, options.mode)
+    let action = decideWriteAction(absPath, content, relPath, prior, options.mode)
+    if (action.kind === 'lefthook-drift' && options.acceptLefthookOverwrite === true) {
+      action = { kind: 'clean-replace' }
+    }
     applyWriteAction(absPath, content, relPath, action, options.mode, result)
     newFiles[relPath] = { sha256: hashContent(content) }
   }
