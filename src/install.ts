@@ -86,7 +86,7 @@ export async function installAll(
       writeJson(join(cwd, '.claude', 'settings.json'), settings)
       log('.claude/settings.json')
     }
-    installOwnedSkills(cwd, log)
+    installOwnedSkills(cwd, config, log)
     installProjectSkills(cwd, config, log, warn)
   }
 
@@ -477,12 +477,20 @@ function installProjectSkills(
  * These are always copied, regardless of superpower selection, because
  * they're referenced by the kernel CLAUDE.md.
  */
-function installOwnedSkills(cwd: string, log: (msg: string) => void): void {
+const BD_ONLY_SKILLS = new Set<string>(['to-bd-issues', 'spec-verifier'])
+
+function installOwnedSkills(
+  cwd: string,
+  config: DevConfig,
+  log: (msg: string) => void,
+): void {
   const srcDir = join(TEMPLATES_DIR, 'skills')
   if (!existsSync(srcDir)) return
   const destRoot = join(cwd, '.claude', 'skills')
   mkdirSync(destRoot, { recursive: true })
+  const beadsEnabled = config.tools.includes('beads')
   for (const entry of readdirSync(srcDir)) {
+    if (BD_ONLY_SKILLS.has(entry) && !beadsEnabled) continue
     const src = join(srcDir, entry)
     const dest = join(destRoot, entry)
     cpSync(src, dest, { recursive: true, dereference: true })

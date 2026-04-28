@@ -113,6 +113,17 @@ describe('installAll', () => {
     expect(grillLicense).toContain('MIT License')
     expect(grillLicense).toContain('Matt Pocock')
 
+    // Spec-verifier skill ships when beads is enabled (it's in fakeAnswers.tools)
+    expect(existsSync(join(dir, '.claude/skills/spec-verifier/SKILL.md'))).toBe(true)
+    const verifierBody = readFileSync(
+      join(dir, '.claude/skills/spec-verifier/SKILL.md'),
+      'utf8',
+    )
+    expect(verifierBody).toContain('fresh-context verifier')
+    expect(verifierBody).toContain('PASS-WITH-FOLLOWUPS')
+    expect(verifierBody).toContain('discovered-from')
+    expect(verifierBody).toContain('Forbidden actions')
+
     // Vendored + forked to-bd-issues skill ships with MIT attribution
     expect(existsSync(join(dir, '.claude/skills/to-bd-issues/SKILL.md'))).toBe(true)
     expect(existsSync(join(dir, '.claude/skills/to-bd-issues/LICENSE'))).toBe(true)
