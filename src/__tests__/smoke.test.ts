@@ -604,6 +604,15 @@ describe('generateRules', () => {
     expect(yml).not.toContain('bd-ticket-ref')
   })
 
+  it('emits scope-discipline.md when beads tool is selected', () => {
+    const rules = generateRules(tsFrontendConfig, TEMPLATES_DIR)
+    const scope = rules.find((r) => r.filename === 'scope-discipline.md')
+    expect(scope?.content).toContain('Scope Discipline')
+    expect(scope?.content).toContain('discovered-from')
+    expect(scope?.content).toContain('Files Likely Touched')
+    expect(scope?.content).toContain('Never silently fix')
+  })
+
   it('emits verifier-loop.md when beads tool is selected', () => {
     const rules = generateRules(tsFrontendConfig, TEMPLATES_DIR)
     const verifier = rules.find((r) => r.filename === 'verifier-loop.md')

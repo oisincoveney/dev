@@ -48,6 +48,10 @@ export function generateRules(config: DevConfig, templatesDir: string): RuleFile
       filename: 'verifier-loop.md',
       content: readFileSync(resolve(templatesDir, 'rules', 'verifier-loop.md'), 'utf8'),
     })
+    files.push({
+      filename: 'scope-discipline.md',
+      content: readFileSync(resolve(templatesDir, 'rules', 'scope-discipline.md'), 'utf8'),
+    })
   }
   if (config.contractDriven) {
     files.push({ filename: 'contract-driven.md', content: contractDrivenRule(config.language) })
