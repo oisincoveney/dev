@@ -563,6 +563,16 @@ describe('generateRules', () => {
     expect(rules.some((r) => r.filename === 'planning-ux.md')).toBe(false)
   })
 
+  it('emits verifier-loop.md when beads tool is selected', () => {
+    const rules = generateRules(tsFrontendConfig, TEMPLATES_DIR)
+    const verifier = rules.find((r) => r.filename === 'verifier-loop.md')
+    expect(verifier?.content).toContain('Verifier Loop')
+    expect(verifier?.content).toContain('code-review')
+    expect(verifier?.content).toContain('PASS-WITH-FOLLOWUPS')
+    expect(verifier?.content).toContain('discovered-from')
+    expect(verifier?.content).toContain('No silent inline fixes')
+  })
+
   it('emits bd-native workflow when workflow is bd', () => {
     const cfg: DevConfig = { ...tsFrontendConfig, workflow: 'bd' as never }
     const rules = generateRules(cfg, TEMPLATES_DIR)
