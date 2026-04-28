@@ -112,6 +112,18 @@ describe('installAll', () => {
     const grillLicense = readFileSync(join(dir, '.claude/skills/grill-me/LICENSE'), 'utf8')
     expect(grillLicense).toContain('MIT License')
     expect(grillLicense).toContain('Matt Pocock')
+
+    // Vendored + forked to-bd-issues skill ships with MIT attribution
+    expect(existsSync(join(dir, '.claude/skills/to-bd-issues/SKILL.md'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/skills/to-bd-issues/LICENSE'))).toBe(true)
+    const toBdBody = readFileSync(join(dir, '.claude/skills/to-bd-issues/SKILL.md'), 'utf8')
+    expect(toBdBody).toContain('tracer bullet')
+    expect(toBdBody).toContain('bd create --graph')
+    expect(toBdBody).toContain('NEEDS CLARIFICATION')
+    expect(toBdBody).toContain('do not write to bd')
+    const toBdLicense = readFileSync(join(dir, '.claude/skills/to-bd-issues/LICENSE'), 'utf8')
+    expect(toBdLicense).toContain('Matt Pocock')
+    expect(toBdLicense).toContain('derivative work')
   })
 
   it('settings.json has valid JSON and correct structure', async () => {
