@@ -59,12 +59,15 @@ Steps:
    - PASS or PASS-WITH-FOLLOWUPS: bd close <id> --reason "verified by spec-verifier".
    - PARTIAL or FAIL: report failure summary; do NOT close; do NOT commit.
 7. If close succeeded, commit with `feat(<id>): <one-line subject>` (or fix:/refactor:/etc.) — lefthook commit-msg enforces this format.
-8. Return a one-line status to the caller: "<id>: PASS | FAIL | PARTIAL — <message>".
+8. Push the worktree's ticket branch (`git push -u origin HEAD`). The branch is the sandbox; pushing it is part of completing the ticket.
+9. Return a one-line status to the caller: "<id>: PASS | FAIL | PARTIAL — <message>".
 
 Forbidden:
 - Editing files outside Files Likely Touched (file a discovered-from ticket instead).
 - Closing the ticket without a verifier PASS or PASS-WITH-FOLLOWUPS.
-- Calling `git push`. Pushing is the user's call, not the worker's.
+- `git push --force` / `--force-with-lease` without the user explicitly authorizing it for this branch.
+- Pushing to `main` / `master` directly. The worker only pushes its own ticket branch.
+- Merging or opening a PR. Merging is the user's call.
 ```
 
 ### 4. Failure isolation
@@ -99,5 +102,5 @@ When the agent surfaces a planning menu and the user picks "fan out," that's the
 
 - Do NOT spawn more than 3 sub-agents concurrently. If the swarm has >3 ready fronts, do them in waves of 3 (after a wave completes, claim the next 3).
 - Do NOT spawn sub-agents recursively. Sub-agents cannot spawn their own sub-agents.
-- Do NOT commit or push from the orchestrator. The sub-agents commit; the user pushes.
+- Do NOT commit or push from the orchestrator. The orchestrator usually sits on the parent branch (often `main`); sub-agents commit and push their own ticket branches from inside their worktrees.
 - Do NOT auto-merge sub-agent branches. Merging is the user's call.

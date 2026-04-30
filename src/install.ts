@@ -1031,7 +1031,7 @@ export function trimBeadsIntegrationBlock(path: string): void {
   if (sessionStart === -1 || sessionStart > end) return
 
   const replacement =
-    '- Pushing to remote is the user\'s call, not the agent\'s. Project policy stands: never push without explicit user approval.\n'
+    '- Committing is always fine — on a ticket branch, a worktree, or directly on `main`. On a ticket branch or worktree the agent also pushes freely (that\'s the sandbox). Pushing `main` / `master` and any force-push still require explicit user approval.\n'
   const trimmed = raw.slice(0, sessionStart) + replacement + raw.slice(end)
   writeFileSync(path, trimmed)
 }

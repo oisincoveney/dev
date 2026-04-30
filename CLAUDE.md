@@ -39,5 +39,5 @@ bd close <id>         # Complete work
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-- Pushing to remote is the user's call, not the agent's. Project policy stands: never push without explicit user approval.
+- Committing is always fine — on a ticket branch, a worktree, or directly on `main`. On a ticket branch or worktree the agent also pushes freely (that's the sandbox). Pushing `main` / `master` and any force-push still require explicit user approval.
 <!-- END BEADS INTEGRATION -->

@@ -57,7 +57,10 @@ The `pre-stop-verification.sh` hook inspects the session transcript — it block
 
 ## Git Safety
 
-- Prefer `git push --force-with-lease` over `--force` if a force-push is ever explicitly authorized.
+- **Committing is always fine.** Local commits — on a ticket branch, a worktree, or directly on `main` / `master` — do not require user approval. Commits are reversible, stay local until pushed, and are the unit of work the agent is expected to produce.
+- **Pushing is scoped.** On a ticket branch or `.claude/worktrees/*` worktree, the agent pushes its own work without asking — that's the sandbox. Pushing `main` / `master` (or any other shared/long-lived branch) requires explicit user approval each time.
+- Prefer `git push --force-with-lease` over `--force` if a force-push is ever explicitly authorized. Force-push always requires explicit per-branch approval — authorization on one branch does not carry over to another.
 - Never force-push to `main` / `master` without the user explicitly naming the branch.
+- Never open or merge a PR without explicit user approval. Merging is the user's call.
 - Investigate unexpected files, branches, or lock files before deleting or overwriting them — they may be the user's in-progress work.
 - Merge conflicts: resolve, don't discard.
