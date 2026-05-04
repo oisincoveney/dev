@@ -37,6 +37,10 @@ export function generateRules(config: DevConfig, templatesDir: string): RuleFile
   // 2. Dynamic rule files built from config.
   files.push({ filename: 'commands.md', content: commandsRule(config) })
   files.push({ filename: 'workflow.md', content: workflowRule(config) })
+  files.push({
+    filename: 'communication-style.md',
+    content: readFileSync(resolve(templatesDir, 'rules', 'communication-style.md'), 'utf8'),
+  })
 
   if (config.tools.includes('beads')) {
     files.push({ filename: 'beads.md', content: beadsRule() })
