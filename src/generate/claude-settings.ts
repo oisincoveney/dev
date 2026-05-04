@@ -94,6 +94,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
         {
           matcher: 'Write|Edit',
           hooks: [
+            hook('worktree-write-guard.sh', 5),
             ...(beadsEnabled
               ? [hook('require-claim.sh', 5), hook('require-swarm.sh', 5)]
               : []),
@@ -124,6 +125,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
       Stop: [
         {
           hooks: [
+            hook('worktree-stop-guard.sh', 10),
             hook('pre-stop-verification.sh', 30),
             hook('baseline-compare.sh', 120),
             hook('citation-check.sh', 10),
