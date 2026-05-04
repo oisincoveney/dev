@@ -1,4 +1,4 @@
 {
   "skipped": true,
-  "reason": "current ref is at merge-base; nothing to baseline against"
+  "reason": "dirty checkout"
 }

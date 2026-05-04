@@ -33,6 +33,9 @@ describe.skipIf(!canRun)('worktree-stop-guard.sh', () => {
   let remoteRepo: string
   let worktreeRoot: string
 
+  // `beforeEach` runs ~10 git operations (init bare + init + config + commit +
+  // push + worktree add). Default vitest hookTimeout is 10s; under concurrent
+  // vitest workers + git fork overhead this drifts over the limit. Bump to 30s.
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'wsg-'))
     mainRepo = join(baseDir, 'main')
@@ -54,7 +57,7 @@ describe.skipIf(!canRun)('worktree-stop-guard.sh', () => {
     git(mainRepo, 'worktree', 'add', '-b', 'ticket/abc', worktreeRoot)
     git(worktreeRoot, 'config', 'user.email', 'test@example.com')
     git(worktreeRoot, 'config', 'user.name', 'Test')
-  })
+  }, 30_000)
 
   afterEach(() => {
     rmSync(baseDir, { recursive: true, force: true })
