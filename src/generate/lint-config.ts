@@ -5,12 +5,20 @@
  * Go: .golangci.yml
  */
 
-import type { DevConfig } from '../config.js'
+import type { DevConfig, Language } from '../config.js'
 
 export function generateLintConfig(config: DevConfig): Record<string, string> {
-  switch (config.language) {
+  // Polyglot projects (e.g. Go + TS) get one lint config per language.
+  const out: Record<string, string> = {}
+  for (const language of effectiveLanguages(config)) {
+    Object.assign(out, lintConfigForLanguage(language))
+  }
+  return out
+}
+
+function lintConfigForLanguage(language: Language): Record<string, string> {
+  switch (language) {
     case 'typescript':
-      // Vite+ owns TS lint config via vp check
       return {}
     case 'rust':
       return {
@@ -25,6 +33,11 @@ export function generateLintConfig(config: DevConfig): Record<string, string> {
     case 'other':
       return {}
   }
+}
+
+function effectiveLanguages(config: DevConfig): ReadonlyArray<Language> {
+  if (config.languages !== undefined && config.languages.length > 0) return config.languages
+  return [config.language]
 }
 
 function rustClippyConfig(): string {

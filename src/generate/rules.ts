@@ -70,7 +70,11 @@ export function generateRules(config: DevConfig, templatesDir: string): RuleFile
     })
   }
   if (config.contractDriven) {
-    files.push({ filename: 'contract-driven.md', content: contractDrivenRule(config.language) })
+    const languages =
+      config.languages !== undefined && config.languages.length > 0
+        ? config.languages
+        : [config.language]
+    files.push({ filename: 'contract-driven.md', content: contractDrivenRule(languages) })
   }
 
   return files
@@ -193,8 +197,8 @@ bd close <id>         # Complete work
 `
 }
 
-function contractDrivenRule(language: Language): string {
-  const structureByLanguage: Record<string, string> = {
+function contractDrivenRule(languages: ReadonlyArray<Language>): string {
+  const structureByLanguage: Record<Language, string> = {
     typescript: `src/modules/trip/
   index.ts          # Public interface — the ONLY thing other modules import
   trip.ts           # Implementation (internal)
@@ -219,7 +223,7 @@ Tests/TripTests/
   tests             # Tests that verify the contract`,
   }
 
-  const pathsByLanguage: Record<string, string[]> = {
+  const pathsByLanguage: Record<Language, string[]> = {
     typescript: ['src/**/*.ts', 'src/**/*.tsx'],
     rust: ['src/**/*.rs'],
     go: ['**/*.go'],
@@ -227,8 +231,29 @@ Tests/TripTests/
     other: ['src/**/*'],
   }
 
-  const paths = pathsByLanguage[language] ?? ['src/**/*']
-  const pathsYaml = paths.map((p) => `  - "${p}"`).join('\n')
+  const labelByLanguage: Record<Language, string> = {
+    typescript: 'TypeScript',
+    rust: 'Rust',
+    go: 'Go',
+    swift: 'Swift',
+    other: 'Other',
+  }
+
+  const allPaths = new Set<string>()
+  for (const lang of languages) {
+    for (const p of pathsByLanguage[lang] ?? ['src/**/*']) allPaths.add(p)
+  }
+  const pathsYaml = [...allPaths].map((p) => `  - "${p}"`).join('\n')
+
+  // Polyglot projects get one structure block per language so the rule covers
+  // each layout the project actually uses.
+  const structureSections = languages
+    .map((lang) =>
+      languages.length === 1
+        ? `**Structure:**\n\`\`\`\n${structureByLanguage[lang]}\n\`\`\``
+        : `**Structure (${labelByLanguage[lang]}):**\n\`\`\`\n${structureByLanguage[lang]}\n\`\`\``,
+    )
+    .join('\n\n')
 
   return `---
 name: contract-driven
@@ -245,10 +270,7 @@ Every module has an explicit contract file defining:
 - Invariants (what must always be true)
 - Example usage (executable via test runner)
 
-**Structure:**
-\`\`\`
-${structureByLanguage[language]}
-\`\`\`
+${structureSections}
 
 **Rules:**
 - Never import from another module's internals. Only import from its public interface.

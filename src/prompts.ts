@@ -23,6 +23,8 @@ import {
 export interface Answers {
   language: Language
   variant: ProjectVariant
+  languages?: ReadonlyArray<Language>
+  variants?: ReadonlyArray<ProjectVariant>
   framework: string | null
   packageManager: PackageManager
   commands: {
@@ -57,69 +59,11 @@ function cancelGuard<T>(value: T | symbol): T {
 }
 
 export async function runPrompts(detected: Detected): Promise<Answers> {
-  const variant = cancelGuard(
-    await p.select<ProjectVariant>({
-      message: 'What are you building?',
-      initialValue: detected.variant ?? undefined,
-      options: [
-        { value: 'ts-frontend', label: 'TypeScript Frontend (Vite+)' },
-        { value: 'ts-backend', label: 'TypeScript Backend' },
-        { value: 'ts-fullstack', label: 'TypeScript Full-Stack' },
-        { value: 'ts-library', label: 'TypeScript Library' },
-        { value: 'ts-monorepo', label: 'TypeScript Monorepo (Vite+ workspaces)' },
-        { value: 'rust-bin', label: 'Rust (binary)' },
-        { value: 'rust-lib', label: 'Rust (library)' },
-        { value: 'rust-workspace', label: 'Rust Workspace (monorepo)' },
-        { value: 'go-bin', label: 'Go (binary)' },
-        { value: 'go-lib', label: 'Go (library)' },
-        { value: 'go-workspace', label: 'Go Workspace (multi-module)' },
-        { value: 'swift-app', label: 'Swift App (Xcode / SwiftUI)' },
-        { value: 'swift-lib', label: 'Swift Library (Swift Package Manager)' },
-        { value: 'swift-package', label: 'Swift Package / CLI (Swift Package Manager)' },
-        { value: 'other-app', label: 'Other language — language-agnostic rules only' },
-      ],
-    }),
-  )
-
+  const variants = await promptVariants(detected.variant ?? undefined)
+  const variant = variants[0]
   const language = languageForVariant(variant)
-
-  let framework: string | null = null
-  if (variant === 'ts-frontend' || variant === 'ts-fullstack') {
-    framework = cancelGuard(
-      await p.select<string>({
-        message: 'Frontend framework?',
-        options: [
-          { value: 'react', label: 'React' },
-          { value: 'vue', label: 'Vue' },
-          { value: 'svelte', label: 'Svelte' },
-          { value: 'tanstack-start', label: '@tanstack/start' },
-        ],
-      }),
-    )
-  } else if (variant === 'ts-backend') {
-    framework = cancelGuard(
-      await p.select<string>({
-        message: 'Backend framework?',
-        options: [
-          { value: 'hono', label: 'Hono' },
-          { value: 'fastify', label: 'Fastify' },
-          { value: 'express', label: 'Express' },
-          { value: 'none', label: 'None (library/CLI)' },
-        ],
-      }),
-    )
-  } else if (variant === 'swift-app') {
-    framework = cancelGuard(
-      await p.select<string>({
-        message: 'UI framework?',
-        options: [
-          { value: 'swiftui', label: 'SwiftUI' },
-          { value: 'uikit', label: 'UIKit' },
-          { value: 'appkit', label: 'AppKit (macOS)' },
-        ],
-      }),
-    )
-  }
+  const languages = uniqueLanguages(variants)
+  const framework = await promptFrameworkForPrimary(variant)
 
   const packageManager = resolvePackageManager(detected, language)
 
@@ -277,6 +221,8 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
   return {
     language,
     variant,
+    languages,
+    variants,
     framework,
     packageManager,
     commands,
@@ -288,6 +234,96 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
     mcpServers,
     models,
   }
+}
+
+export const ALL_VARIANT_OPTIONS: ReadonlyArray<{ value: ProjectVariant; label: string }> = [
+  { value: 'ts-frontend', label: 'TypeScript Frontend (Vite+)' },
+  { value: 'ts-backend', label: 'TypeScript Backend' },
+  { value: 'ts-fullstack', label: 'TypeScript Full-Stack' },
+  { value: 'ts-library', label: 'TypeScript Library' },
+  { value: 'ts-monorepo', label: 'TypeScript Monorepo (Vite+ workspaces)' },
+  { value: 'rust-bin', label: 'Rust (binary)' },
+  { value: 'rust-lib', label: 'Rust (library)' },
+  { value: 'rust-workspace', label: 'Rust Workspace (monorepo)' },
+  { value: 'go-bin', label: 'Go (binary)' },
+  { value: 'go-lib', label: 'Go (library)' },
+  { value: 'go-workspace', label: 'Go Workspace (multi-module)' },
+  { value: 'swift-app', label: 'Swift App (Xcode / SwiftUI)' },
+  { value: 'swift-lib', label: 'Swift Library (Swift Package Manager)' },
+  { value: 'swift-package', label: 'Swift Package / CLI (Swift Package Manager)' },
+  { value: 'other-app', label: 'Other language — language-agnostic rules only' },
+]
+
+export async function promptVariants(
+  detected?: ProjectVariant,
+): Promise<ReadonlyArray<ProjectVariant>> {
+  // Multiselect — for polyglot projects (Go + TS, etc.) the user picks every
+  // variant in the project. The first toggled becomes the "primary" used for
+  // single-variant defaults (commands, package manager, framework prompt).
+  const selection = cancelGuard(
+    await p.multiselect<ProjectVariant>({
+      message: 'What are you building? (Space to toggle. The first one selected is the primary.)',
+      options: ALL_VARIANT_OPTIONS.map((opt) => ({ ...opt })),
+      initialValues: detected ? [detected] : undefined,
+      required: true,
+    }),
+  )
+  return selection
+}
+
+async function promptFrameworkForPrimary(variant: ProjectVariant): Promise<string | null> {
+  if (variant === 'ts-frontend' || variant === 'ts-fullstack') {
+    return cancelGuard(
+      await p.select<string>({
+        message: 'Frontend framework?',
+        options: [
+          { value: 'react', label: 'React' },
+          { value: 'vue', label: 'Vue' },
+          { value: 'svelte', label: 'Svelte' },
+          { value: 'tanstack-start', label: '@tanstack/start' },
+        ],
+      }),
+    )
+  }
+  if (variant === 'ts-backend') {
+    return cancelGuard(
+      await p.select<string>({
+        message: 'Backend framework?',
+        options: [
+          { value: 'hono', label: 'Hono' },
+          { value: 'fastify', label: 'Fastify' },
+          { value: 'express', label: 'Express' },
+          { value: 'none', label: 'None (library/CLI)' },
+        ],
+      }),
+    )
+  }
+  if (variant === 'swift-app') {
+    return cancelGuard(
+      await p.select<string>({
+        message: 'UI framework?',
+        options: [
+          { value: 'swiftui', label: 'SwiftUI' },
+          { value: 'uikit', label: 'UIKit' },
+          { value: 'appkit', label: 'AppKit (macOS)' },
+        ],
+      }),
+    )
+  }
+  return null
+}
+
+function uniqueLanguages(variants: ReadonlyArray<ProjectVariant>): ReadonlyArray<Language> {
+  const seen = new Set<Language>()
+  const out: Language[] = []
+  for (const v of variants) {
+    const lang = languageForVariant(v)
+    if (!seen.has(lang)) {
+      seen.add(lang)
+      out.push(lang)
+    }
+  }
+  return out
 }
 
 const DEFAULT_MODELS = {

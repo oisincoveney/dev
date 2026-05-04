@@ -23,16 +23,29 @@ interface RuleFrontmatter {
 
 export function generateCursorRules(config: DevConfig, templatesDir: string): CursorRule[] {
   const selected = RULE_SKILLS.filter((skill) => config.skills.includes(skill.id))
+  const languages =
+    config.languages !== undefined && config.languages.length > 0
+      ? config.languages
+      : [config.language]
+  const fallbackGlobs = unionGlobsForLanguages(languages)
   return selected.map((skill) => {
     const source = resolve(templatesDir, 'rules', basename(skill.sourceFile))
     const raw = readFileSync(source, 'utf8')
     const { description, paths, body } = parseFrontmatter(raw)
-    const globs = paths && paths.length > 0 ? paths : globsForLanguage(config.language)
+    const globs = paths && paths.length > 0 ? paths : fallbackGlobs
     return {
       filename: `${skill.id}.mdc`,
       content: buildCursorRule(skill.name, description ?? skill.description, globs, body),
     }
   })
+}
+
+function unionGlobsForLanguages(languages: ReadonlyArray<DevConfig['language']>): string[] {
+  const seen = new Set<string>()
+  for (const lang of languages) {
+    for (const glob of globsForLanguage(lang)) seen.add(glob)
+  }
+  return [...seen]
 }
 
 function parseFrontmatter(raw: string): RuleFrontmatter {

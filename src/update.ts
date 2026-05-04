@@ -11,7 +11,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
-import { readConfig } from './config.js'
+import { type DevConfig, type Language, readConfig, writeConfig } from './config.js'
 import {
   installAll,
   removeLegacyRetiredPaths,
@@ -20,6 +20,8 @@ import {
   trimBeadsIntegrationOnAgentDocs,
 } from './install.js'
 import type { DriftCandidate, DriftDecision } from './manifest.js'
+import { ALL_VARIANT_OPTIONS, promptVariants } from './prompts.js'
+import type { ProjectVariant } from './skills.js'
 
 export async function runUpdate(): Promise<void> {
   p.intro('@oisincoveney/dev update')
@@ -31,6 +33,14 @@ export async function runUpdate(): Promise<void> {
     p.log.error('No .dev.config.json found. Run `init` first.')
     process.exit(1)
   }
+
+  // Default `update` runs without language prompts. Opt in via flags:
+  //   --reconfigure-languages         interactive multiselect (re-run variants prompt)
+  //   --languages=<v1>,<v2>,...       set variants explicitly (non-interactive)
+  //   --add-language=<variant>        append a variant (repeatable)
+  //   --remove-language=<variant>     drop a variant (repeatable)
+  const reconfigured = await maybeReconfigureLanguages(cwd, config)
+  if (reconfigured) p.log.success('Languages updated.')
 
   if (existsSync(join(cwd, '.claude', 'docs'))) {
     p.log.warn(
@@ -116,6 +126,149 @@ async function promptDrift(candidate: DriftCandidate): Promise<DriftDecision> {
 
     showDiff(candidate)
   }
+}
+
+async function maybeReconfigureLanguages(cwd: string, config: DevConfig): Promise<boolean> {
+  const argv = process.argv.slice(2)
+  const reconfigure = argv.includes('--reconfigure-languages')
+  const explicit = pickArgValue(argv, '--languages')
+  const adds = pickAllArgValues(argv, '--add-language')
+  const removes = pickAllArgValues(argv, '--remove-language')
+
+  if (!reconfigure && explicit === null && adds.length === 0 && removes.length === 0) {
+    return false
+  }
+
+  const current = currentVariants(config)
+  let next: ReadonlyArray<ProjectVariant> = current
+
+  if (explicit !== null) {
+    next = parseVariantList(explicit)
+  } else if (reconfigure) {
+    next = await promptVariants(current[0])
+  }
+
+  if (adds.length > 0 || removes.length > 0) {
+    const set = new Set<ProjectVariant>(next)
+    for (const v of adds) {
+      const parsed = parseVariant(v)
+      if (parsed) set.add(parsed)
+    }
+    for (const v of removes) {
+      const parsed = parseVariant(v)
+      if (parsed) set.delete(parsed)
+    }
+    const ordered: ProjectVariant[] = []
+    for (const v of next) if (set.has(v)) ordered.push(v)
+    for (const v of adds) {
+      const parsed = parseVariant(v)
+      if (parsed && !ordered.includes(parsed)) ordered.push(parsed)
+    }
+    next = ordered
+  }
+
+  if (next.length === 0) {
+    p.log.error('At least one variant is required. Aborting language reconfiguration.')
+    process.exit(1)
+  }
+
+  if (sameVariants(current, next)) {
+    p.log.info('Languages unchanged.')
+    return false
+  }
+
+  const updated: DevConfig = {
+    ...config,
+    variant: next[0],
+    language: languageForVariant(next[0]),
+    variants: next,
+    languages: uniqueLanguages(next),
+  }
+  writeConfig(cwd, updated)
+  Object.assign(config, updated)
+  return true
+}
+
+function pickArgValue(argv: string[], name: string): string | null {
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (arg === name) {
+      const next = argv[i + 1]
+      if (next !== undefined && !next.startsWith('--')) return next
+    }
+    if (arg.startsWith(`${name}=`)) return arg.slice(name.length + 1)
+  }
+  return null
+}
+
+function pickAllArgValues(argv: string[], name: string): string[] {
+  const out: string[] = []
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (arg === name) {
+      const next = argv[i + 1]
+      if (next !== undefined && !next.startsWith('--')) {
+        out.push(next)
+        i += 1
+      }
+    } else if (arg.startsWith(`${name}=`)) {
+      out.push(arg.slice(name.length + 1))
+    }
+  }
+  return out
+}
+
+function parseVariantList(raw: string): ReadonlyArray<ProjectVariant> {
+  const out: ProjectVariant[] = []
+  for (const part of raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0)) {
+    const parsed = parseVariant(part)
+    if (parsed === null) {
+      p.log.error(`Unknown variant "${part}". Valid: ${variantNames().join(', ')}`)
+      process.exit(1)
+    }
+    if (!out.includes(parsed)) out.push(parsed)
+  }
+  return out
+}
+
+function parseVariant(value: string): ProjectVariant | null {
+  return ALL_VARIANT_OPTIONS.some((opt) => opt.value === value) ? (value as ProjectVariant) : null
+}
+
+function variantNames(): string[] {
+  return ALL_VARIANT_OPTIONS.map((opt) => opt.value)
+}
+
+function currentVariants(config: DevConfig): ReadonlyArray<ProjectVariant> {
+  if (config.variants !== undefined && config.variants.length > 0) return config.variants
+  return [config.variant]
+}
+
+function sameVariants(a: ReadonlyArray<ProjectVariant>, b: ReadonlyArray<ProjectVariant>): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+function languageForVariant(variant: ProjectVariant): Language {
+  if (variant.startsWith('ts-')) return 'typescript'
+  if (variant.startsWith('rust-')) return 'rust'
+  if (variant.startsWith('swift-')) return 'swift'
+  if (variant.startsWith('other-')) return 'other'
+  return 'go'
+}
+
+function uniqueLanguages(variants: ReadonlyArray<ProjectVariant>): ReadonlyArray<Language> {
+  const seen = new Set<Language>()
+  const out: Language[] = []
+  for (const v of variants) {
+    const lang = languageForVariant(v)
+    if (!seen.has(lang)) {
+      seen.add(lang)
+      out.push(lang)
+    }
+  }
+  return out
 }
 
 function showDiff(candidate: DriftCandidate): void {

@@ -4,37 +4,50 @@
  * strict tsconfig override.
  */
 
-import type { DevConfig } from '../config.js'
+import type { DevConfig, Language } from '../config.js'
 
 export function generateToolConfigs(config: DevConfig): Record<string, string> {
   const out: Record<string, string> = {
     '.semgrep.yml': semgrepConfig(),
   }
 
-  if (config.language === 'typescript') {
+  const languages = effectiveLanguages(config)
+  if (languages.includes('typescript')) {
     out['commitlint.config.cjs'] = commitlintConfig()
   }
 
-  switch (config.language) {
-    case 'typescript':
-      out['stryker.conf.json'] = strykerConfig(config)
-      if (config.contractDriven) {
-        out['.dependency-cruiser.cjs'] = dependencyCruiserConfig()
-      }
-      out['tsconfig.strict.json'] = strictTsconfig()
-      break
-    case 'rust':
-      out['.cargo-mutants.toml'] = cargoMutantsConfig()
-      break
-    case 'go':
-      out['.go-mutesting.yml'] = goMutestingConfig()
-      break
-    case 'swift':
-    case 'other':
-      break
+  for (const language of languages) {
+    Object.assign(out, toolConfigsForLanguage(language, config))
   }
 
   return out
+}
+
+function toolConfigsForLanguage(language: Language, config: DevConfig): Record<string, string> {
+  switch (language) {
+    case 'typescript': {
+      const out: Record<string, string> = {
+        'stryker.conf.json': strykerConfig(config),
+        'tsconfig.strict.json': strictTsconfig(),
+      }
+      if (config.contractDriven) {
+        out['.dependency-cruiser.cjs'] = dependencyCruiserConfig()
+      }
+      return out
+    }
+    case 'rust':
+      return { '.cargo-mutants.toml': cargoMutantsConfig() }
+    case 'go':
+      return { '.go-mutesting.yml': goMutestingConfig() }
+    case 'swift':
+    case 'other':
+      return {}
+  }
+}
+
+function effectiveLanguages(config: DevConfig): ReadonlyArray<Language> {
+  if (config.languages !== undefined && config.languages.length > 0) return config.languages
+  return [config.language]
 }
 
 function semgrepConfig(): string {
@@ -65,7 +78,9 @@ module.exports = {
 }
 
 function strykerConfig(config: DevConfig): string {
-  const testRunner = config.framework === 'vitest' || config.variant.startsWith('ts-') ? 'vitest' : 'jest'
+  const variants = config.variants ?? [config.variant]
+  const hasTsVariant = variants.some((v) => v.startsWith('ts-'))
+  const testRunner = config.framework === 'vitest' || hasTsVariant ? 'vitest' : 'jest'
   return `{
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "packageManager": "${config.packageManager}",

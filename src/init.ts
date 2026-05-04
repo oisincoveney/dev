@@ -74,6 +74,8 @@ async function writeConfigAndInstall(dir: string, answers: Answers): Promise<voi
   const config: DevConfig = {
     language: answers.language,
     variant: answers.variant,
+    languages: answers.languages,
+    variants: answers.variants,
     framework: answers.framework,
     packageManager: answers.packageManager,
     commands: answers.commands,

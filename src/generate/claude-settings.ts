@@ -67,6 +67,8 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
   ].join('|')
 
   const beadsEnabled = config.tools.includes('beads')
+  const languages = config.languages ?? [config.language]
+  const hasTypescript = languages.includes('typescript')
 
   const settings: ClaudeSettings = {
     hooks: {
@@ -98,7 +100,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
             ...(beadsEnabled
               ? [hook('require-claim.sh', 5), hook('require-swarm.sh', 5)]
               : []),
-            ...(config.language === 'typescript'
+            ...(hasTypescript
               ? [hook('ts-style-guard.sh', 30), hook('import-validator.sh', 10)]
               : []),
             hook('ai-antipattern-guard.sh', 10),

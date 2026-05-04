@@ -13,16 +13,24 @@ const COMMANDS: Record<string, string> = {
 }
 
 function printHelp(): void {
-  console.log(`
+  // CLI help is stdout, not a runtime log.
+  process.stdout.write(`
 @oisincoveney/dev — Opinionated AI dev environment
 
 Usage:
-  npx @oisincoveney/dev <command>
+  npx @oisincoveney/dev <command> [flags]
 
 Commands:
 ${Object.entries(COMMANDS)
   .map(([cmd, desc]) => `  ${cmd.padEnd(10)} ${desc}`)
   .join('\n')}
+
+Update flags (polyglot projects):
+  --reconfigure-languages       Re-prompt the variants multiselect.
+  --languages=<v1>,<v2>...      Set variants explicitly (e.g. ts-library,go-bin).
+  --add-language=<variant>      Append a variant. Repeatable.
+  --remove-language=<variant>   Drop a variant. Repeatable.
+
 `)
 }
 

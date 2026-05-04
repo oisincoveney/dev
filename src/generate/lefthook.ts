@@ -19,6 +19,10 @@ export function generateLefthook(config: DevConfig): string {
   const typecheck = config.commands.typecheck
   const test = config.commands.test
   const e2e = config.commands.e2e
+  const variants = config.variants ?? [config.variant]
+  const languages = config.languages ?? [config.language]
+  const hasFrontendVariant = variants.some(isFrontendVariant)
+  const hasTypescript = languages.includes('typescript')
 
   const typecheckStep = typecheck
     ? `    typecheck:
@@ -37,7 +41,7 @@ export function generateLefthook(config: DevConfig): string {
     : ''
 
   const playwrightStep =
-    isFrontendVariant(config.variant) && e2e
+    hasFrontendVariant && e2e
       ? `    playwright:
       run: |
         if command -v playwright >/dev/null 2>&1; then
@@ -47,7 +51,7 @@ export function generateLefthook(config: DevConfig): string {
       : ''
 
   const tsStyleGuardStep =
-    config.language === 'typescript'
+    hasTypescript
       ? `    ts-style-guard:
       glob: "**/*.{ts,tsx}"
       exclude: "**/components/ui/**"
