@@ -27,13 +27,17 @@ Spawn Agent with `subagent_type=general-purpose`, self-contained prompt:
 |---|---|
 | Always | `code-review` |
 | Always | `tech-debt` |
+| `.ts` / `.tsx` / `.js` / `.jsx` / `.mjs` / `.cjs` in diff | `typescript-advanced-types` |
+| `.tsx` under `app/` or `pages/` (Next.js) | `nextjs-app-router-patterns`, `vercel-react-best-practices` |
+| `.go` in diff | `golang-pro`, `golang-error-handling`, `golang-code-style` |
+| `.py` in diff | language reviewer (load `code-review` only — no Python-specific skill ships with the harness yet) |
 | Multi-layer / cross-boundary | `architecture` |
 | Test surfaces touched | `testing-strategy` |
 | Auth, input, secrets, parsing | `security-review` |
 | UI / frontend touched | `accessibility` |
 | Hot-path (renders, request handlers, loops) | `performance` |
 
-Verifier inspect `git diff` to decide. Load via `Skill` tool.
+Verifier inspect `git diff` to decide. Load via `Skill` tool. **Skill loading is not optional** — every row whose trigger matches the diff MUST be loaded. The `verifier-skill-guard.sh` Stop hook scans the transcript for these invocations and blocks completion claims / `bd close` if they're missing.
 
 ## Output format
 

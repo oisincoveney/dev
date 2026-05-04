@@ -135,6 +135,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
             hook('worktree-stop-guard.sh', 10),
             ...(beadsEnabled ? [hook('swarm-digest.sh', 10)] : []),
             hook('pre-stop-verification.sh', 30),
+            hook('verifier-skill-guard.sh', 30),
             hook('baseline-compare.sh', 120),
             hook('citation-check.sh', 10),
             hook('ai-antipattern-guard.sh', 10),

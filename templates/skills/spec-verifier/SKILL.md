@@ -28,18 +28,23 @@ Run `git diff $(bd show <id> | grep -oE '[a-z0-9]{40}' | head -1)..HEAD 2>/dev/n
 
 ### 3. Load skills
 
+**Skill loading is not optional.** Every row below whose trigger matches the diff MUST be loaded via the `Skill` tool. Skipping skills and substituting your own judgement is the failure mode this verifier exists to prevent — the `verifier-skill-guard.sh` Stop hook scans the transcript and blocks completion claims / `bd close` when required skills weren't invoked. Skill not installed → note + continue.
+
 Always:
 - `code-review` — primary review framework.
 - `tech-debt` — flags refactor opportunities.
 
-Conditional on diff:
+Conditional on diff (language):
+- `typescript-advanced-types` — `.ts` / `.tsx` / `.js` / `.jsx` / `.mjs` / `.cjs` in diff.
+- `nextjs-app-router-patterns`, `vercel-react-best-practices` — `.tsx` under `app/` or `pages/`.
+- `golang-pro`, `golang-error-handling`, `golang-code-style` — `.go` in diff.
+
+Conditional on diff (concern):
 - `architecture` — diff crosses layer boundaries (controllers ↔ services ↔ repositories, frontend ↔ backend).
 - `testing-strategy` — test files in diff or coverage thin.
 - `security-review` — diff touches auth, input handling, secrets, parsing, external-input boundaries.
 - `accessibility` — UI / frontend / template files in diff.
 - `performance` — hot-path code in diff (request handlers, render fns, tight loops, hot data-structure ops).
-
-Load each via `Skill` tool. Skill not installed → note + continue.
 
 ### 4. Per-criterion review
 
