@@ -987,7 +987,11 @@ export function seedConstitutionDecisions(
   return { ok: true, created }
 }
 
-const LEGACY_RETIRED_PATHS = ['.claude/commands/spec.md', '.claude/specs/TEMPLATE.md']
+const LEGACY_RETIRED_PATHS = [
+  '.claude/commands/spec.md',
+  '.claude/specs/TEMPLATE.md',
+  '.claude/hooks/bin/oisin-dev',
+]
 const WARN_IF_PRESENT = ['.claude/specs', '.claude/plans', 'docs/research']
 const REMOVED_CONFIG_FIELDS = ['enforcement', 'beadsWorkflow', 'mcp']
 
