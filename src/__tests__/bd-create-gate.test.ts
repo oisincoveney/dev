@@ -1,26 +1,19 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, copyFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { bdCreateGate } from '../hooks/handlers/bd-create-gate.js'
+import type { HookInput } from '../hooks/types.js'
 
-const HOOK = resolve(__dirname, '..', '..', 'templates', 'hooks', 'bd-create-gate.sh')
 const RUBRIC_SRC = resolve(__dirname, '..', '..', 'templates', 'bd', 'ticket-rubric.json')
 const PARSE_SRC = resolve(__dirname, '..', '..', 'templates', 'bd', 'dsl', 'parse.mjs')
 
-function hasCmd(name: string): boolean {
-  const r = spawnSync('command', ['-v', name], { shell: true, stdio: 'ignore' })
-  return r.status === 0
-}
-
-const canRun = hasCmd('bash') && hasCmd('jq') && hasCmd('node')
-
-describe.skipIf(!canRun)('bd-create-gate.sh', () => {
+describe('bd-create-gate', () => {
   let dir: string
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'bd-gate-test-'))
-    // Init a fake repo so `git rev-parse --show-toplevel` works.
     spawnSync('git', ['init'], { cwd: dir, stdio: 'ignore' })
     mkdirSync(join(dir, '.beads/dsl'), { recursive: true })
     copyFileSync(RUBRIC_SRC, join(dir, '.beads/ticket-rubric.json'))
@@ -31,26 +24,17 @@ describe.skipIf(!canRun)('bd-create-gate.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  function runHook(command: string): { status: number; stderr: string } {
-    const input = JSON.stringify({ tool_input: { command } })
-    // Stub `bd` on PATH so `command -v bd` succeeds; the gate doesn't actually
-    // call bd in body-validation paths.
-    const stubBin = join(dir, '.bin')
-    mkdirSync(stubBin, { recursive: true })
-    writeFileSync(join(stubBin, 'bd'), '#!/usr/bin/env bash\nexit 0\n')
-    spawnSync('chmod', ['+x', join(stubBin, 'bd')])
-    const env = { ...process.env, PATH: `${stubBin}:${process.env.PATH ?? ''}` }
-    const r = spawnSync('bash', [HOOK], { cwd: dir, input, encoding: 'utf8', env })
-    return { status: r.status ?? -1, stderr: r.stderr }
+  function run(command: string) {
+    return bdCreateGate({ cwd: dir, tool_input: { command } } as HookInput)
   }
 
-  it('exits 0 on non-`bd create` commands', () => {
-    expect(runHook('git status').status).toBe(0)
-    expect(runHook('bd ready').status).toBe(0)
-    expect(runHook('bd show foo').status).toBe(0)
+  it('allows non-`bd create` commands', () => {
+    expect(run('git status').kind).toBe('allow')
+    expect(run('bd ready').kind).toBe('allow')
+    expect(run('bd show foo').kind).toBe('allow')
   })
 
-  it('exits 0 on epic with valid DSL frontmatter', () => {
+  it('allows epic with valid DSL frontmatter', () => {
     const body = `---
 type: epic
 domain: auth.sso
@@ -63,11 +47,10 @@ ac:
 ---
 Goal sentence.`
     const cmd = `bd create --type=epic --title="t" --silent --body-file=- <<'EOF'\n${body}\nEOF`
-    const r = runHook(cmd)
-    expect(r.status).toBe(0)
+    expect(run(cmd).kind).toBe('allow')
   })
 
-  it('exits 2 on epic missing domain', () => {
+  it('blocks epic missing domain', () => {
     const body = `---
 type: epic
 artifact: "thing"
@@ -76,12 +59,12 @@ out_of_scope:
 ---
 body`
     const cmd = `bd create --type=epic --title="t" --silent --body-file=- <<'EOF'\n${body}\nEOF`
-    const r = runHook(cmd)
-    expect(r.status).toBe(2)
-    expect(r.stderr).toContain('epic.domain')
+    const r = run(cmd)
+    expect(r.kind).toBe('block')
+    expect((r as { reason: string }).reason).toContain('epic.domain')
   })
 
-  it('exits 2 on epic missing out_of_scope', () => {
+  it('blocks epic missing out_of_scope', () => {
     const body = `---
 type: epic
 domain: auth.sso
@@ -89,12 +72,12 @@ artifact: "thing"
 ---
 body`
     const cmd = `bd create --type=epic --title="t" --silent --body-file=- <<'EOF'\n${body}\nEOF`
-    const r = runHook(cmd)
-    expect(r.status).toBe(2)
-    expect(r.stderr).toContain('epic.out_of_scope')
+    const r = run(cmd)
+    expect(r.kind).toBe('block')
+    expect((r as { reason: string }).reason).toContain('epic.out_of_scope')
   })
 
-  it('exits 2 on task missing files[]', () => {
+  it('blocks task missing files[]', () => {
     const body = `---
 type: task
 verify:
@@ -104,12 +87,12 @@ ac:
 ---
 body`
     const cmd = `bd create --type=task --title="t" --silent --body-file=- <<'EOF'\n${body}\nEOF`
-    const r = runHook(cmd)
-    expect(r.status).toBe(2)
-    expect(r.stderr).toContain('task.files')
+    const r = run(cmd)
+    expect(r.kind).toBe('block')
+    expect((r as { reason: string }).reason).toContain('task.files')
   })
 
-  it('exits 2 on task missing verify[]', () => {
+  it('blocks task missing verify[]', () => {
     const body = `---
 type: task
 files:
@@ -119,9 +102,9 @@ ac:
 ---
 body`
     const cmd = `bd create --type=task --title="t" --silent --body-file=- <<'EOF'\n${body}\nEOF`
-    const r = runHook(cmd)
-    expect(r.status).toBe(2)
-    expect(r.stderr).toContain('task.verify')
+    const r = run(cmd)
+    expect(r.kind).toBe('block')
+    expect((r as { reason: string }).reason).toContain('task.verify')
   })
 
   it('allows --gate-bypass with logging', () => {
@@ -130,14 +113,12 @@ type: epic
 ---
 empty`
     const cmd = `bd create --type=epic --gate-bypass --design "spec-verifier filed this" --title="t" --silent --body-file=- <<'EOF'\n${body}\nEOF`
-    const r = runHook(cmd)
-    expect(r.status).toBe(0)
+    expect(run(cmd).kind).toBe('allow')
   })
 
-  it('exits 0 (legacy passthrough) when body has no DSL frontmatter', () => {
+  it('allows (legacy passthrough) when body has no DSL frontmatter', () => {
     const body = `## User story\nAs dev I want X.\n\n## Acceptance Criteria\n1. WHEN x THE SYSTEM SHALL y.`
     const cmd = `bd create --type=task --title="t" --silent --body-file=- <<'EOF'\n${body}\nEOF`
-    const r = runHook(cmd)
-    expect(r.status).toBe(0)
+    expect(run(cmd).kind).toBe('allow')
   })
 })

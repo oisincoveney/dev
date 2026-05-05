@@ -214,7 +214,35 @@ function getPackageVersion(): string {
 /** Hook script base names migrated to the TS dispatcher. Mirrors
  * MIGRATED_HOOKS in src/generate/claude-settings.ts. The `.sh` files are
  * skipped during install so the legacy shell version stops shipping. */
-const MIGRATED_HOOK_SCRIPTS = new Set<string>(['block-coauthor.sh'])
+const MIGRATED_HOOK_SCRIPTS = new Set<string>([
+  'ai-antipattern-guard.sh',
+  'audit-log.sh',
+  'banned-words-guard.sh',
+  'baseline-compare.sh',
+  'baseline-pin.sh',
+  'bd-context-inject.sh',
+  'bd-create-gate.sh',
+  'bd-remember-protect.sh',
+  'block-coauthor.sh',
+  'block-todowrite.sh',
+  'citation-check.sh',
+  'context-bootstrap.sh',
+  'context-injector.sh',
+  'destructive-command-guard.sh',
+  'docs-first.sh',
+  'import-validator.sh',
+  'plan-approval-guard.sh',
+  'post-edit-check.sh',
+  'pre-compact-prime.sh',
+  'pre-stop-verification.sh',
+  'require-claim.sh',
+  'require-swarm.sh',
+  'swarm-digest.sh',
+  'ts-style-guard.sh',
+  'verifier-skill-guard.sh',
+  'worktree-stop-guard.sh',
+  'worktree-write-guard.sh',
+])
 
 function gatherClaudeHooks(): Map<string, string> {
   const srcDir = join(TEMPLATES_DIR, 'hooks')

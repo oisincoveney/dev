@@ -51,7 +51,35 @@ interface ClaudeSettings {
 /** Hook script base names that have been migrated to the in-process TS
  * dispatcher (`oisin-dev hook <name>`). The legacy `.sh` is no longer
  * installed for these — install.ts skips them in gatherClaudeHooks(). */
-const MIGRATED_HOOKS = new Set<string>(['block-coauthor'])
+const MIGRATED_HOOKS = new Set<string>([
+  'ai-antipattern-guard',
+  'audit-log',
+  'banned-words-guard',
+  'baseline-compare',
+  'baseline-pin',
+  'bd-context-inject',
+  'bd-create-gate',
+  'bd-remember-protect',
+  'block-coauthor',
+  'block-todowrite',
+  'citation-check',
+  'context-bootstrap',
+  'context-injector',
+  'destructive-command-guard',
+  'docs-first',
+  'import-validator',
+  'plan-approval-guard',
+  'post-edit-check',
+  'pre-compact-prime',
+  'pre-stop-verification',
+  'require-claim',
+  'require-swarm',
+  'swarm-digest',
+  'ts-style-guard',
+  'verifier-skill-guard',
+  'worktree-stop-guard',
+  'worktree-write-guard',
+])
 
 /** Strip `.sh` from a script name so it matches the dispatcher registry. */
 function handlerName(script: string): string {
@@ -176,7 +204,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
     },
     statusLine: {
       type: 'command',
-      command: `cd "$(git rev-parse --show-toplevel)" && .claude/hooks/statusline.sh`,
+      command: `cd "$(git rev-parse --show-toplevel)" && oisin-dev statusline`,
     },
     permissions: {
       mode: 'default',

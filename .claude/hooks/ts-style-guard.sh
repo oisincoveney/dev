@@ -19,7 +19,7 @@ esac
 
 # Skip code-generation files — they contain patterns as strings, not actual usage
 case "$FILE_PATH" in
-  */generate/*.ts|*/generators/*.ts|*/templates/*.ts|*/.claude/hooks/*) exit 0 ;;
+  */generate/*.ts|*/generators/*.ts|*/templates/*.ts|*/.claude/hooks/*|*/hooks/handlers/*) exit 0 ;;
 esac
 
 block() {
