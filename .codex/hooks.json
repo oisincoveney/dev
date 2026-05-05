@@ -5,12 +5,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/context-bootstrap.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook context-bootstrap",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/baseline-pin.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook baseline-pin",
             "timeout": 120
           }
         ]
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/context-injector.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook context-injector",
             "timeout": 5
           }
         ]
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/audit-log.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook audit-log",
             "timeout": 5
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/docs-first.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook docs-first",
             "timeout": 5
           }
         ]
@@ -52,17 +52,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/ts-style-guard.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook worktree-write-guard",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook ts-style-guard",
             "timeout": 30
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/import-validator.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook import-validator",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/ai-antipattern-guard.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook ai-antipattern-guard",
             "timeout": 10
           }
         ]
@@ -72,12 +77,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/destructive-command-guard.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook destructive-command-guard",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/block-coauthor.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook block-coauthor",
             "timeout": 5
           }
         ]
@@ -87,7 +92,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/block-todowrite.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook block-todowrite",
             "timeout": 5
           }
         ]
@@ -99,12 +104,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/post-edit-check.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook post-edit-check",
             "timeout": 60
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/ai-antipattern-guard.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook ai-antipattern-guard",
             "timeout": 10
           }
         ]
@@ -115,27 +120,37 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/pre-stop-verification.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook worktree-stop-guard",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook pre-stop-verification",
             "timeout": 30
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/baseline-compare.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook verifier-skill-guard",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook baseline-compare",
             "timeout": 120
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/citation-check.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook citation-check",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/ai-antipattern-guard.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook ai-antipattern-guard",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/banned-words-guard.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook banned-words-guard",
             "timeout": 10
           }
         ]
@@ -146,7 +161,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && .codex/hooks/pre-compact-prime.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" oisin-dev hook pre-compact-prime",
             "timeout": 10
           }
         ]
