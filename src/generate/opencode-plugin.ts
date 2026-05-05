@@ -40,6 +40,25 @@ function runHook(name: string, input: unknown): { allowed: boolean; message?: st
   return { allowed: true }
 }
 
+// Migrated hooks (0t6) live in the TS dispatcher — run them via the package CLI
+// instead of shelling out to a .sh file. Same JSON stdin protocol, same exit
+// codes (0 = allow, 2 = block).
+function runDispatchedHook(
+  name: string,
+  input: unknown,
+): { allowed: boolean; message?: string } {
+  const result = spawnSync('oisin-dev', ['hook', name], {
+    input: JSON.stringify(input),
+    encoding: 'utf8',
+    timeout: 30_000,
+  })
+
+  if (result.status === 2) {
+    return { allowed: false, message: result.stderr || 'Blocked by hook' }
+  }
+  return { allowed: true }
+}
+
 export default {
   name: 'dev-enforcer',
   async 'tool.execute.before'(event: ToolEvent): Promise<void> {
@@ -51,7 +70,7 @@ export default {
       if (!destructive.allowed) {
         throw new Error(destructive.message)
       }
-      const coauthor = runHook('block-coauthor.sh', toolInput)
+      const coauthor = runDispatchedHook('block-coauthor', toolInput)
       if (!coauthor.allowed) {
         throw new Error(coauthor.message)
       }

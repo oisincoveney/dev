@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runAcceptLefthook } from './accept-lefthook.js'
+import { runHookDispatcher } from './hooks/dispatch.js'
 import { runInit } from './init.js'
 import { runSetCommands } from './set-commands.js'
 import { runUpdate } from './update.js'
@@ -9,6 +10,7 @@ const COMMANDS: Record<string, string> = {
   update:           'Re-sync generated files (hooks, docs, settings) from .dev.config.json',
   'set-commands':   'Fill in or update dev/build/test/typecheck/lint/format commands',
   'accept-lefthook': "Mark the current lefthook.yml as canonical (clears manifest drift warning)",
+  hook:             'Run a TS-native hook handler (internal — invoked by Claude Code)',
   help:             'Show this help message',
 }
 
@@ -50,6 +52,15 @@ async function main(): Promise<void> {
     case 'accept-lefthook':
       await runAcceptLefthook()
       break
+    case 'hook': {
+      const handlerName = process.argv[3]
+      if (handlerName === undefined || handlerName.length === 0) {
+        process.stderr.write('Usage: oisin-dev hook <name>\n')
+        process.exit(1)
+      }
+      await runHookDispatcher(handlerName)
+      break
+    }
     case 'help':
     case '--help':
     case '-h':

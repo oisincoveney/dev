@@ -47,7 +47,26 @@ interface ClaudeSettings {
 // Also PATH-prepend .claude/hooks/bin/ so the per-repo `bd` shim wins over any
 // global install. Hooks (and any subprocess they spawn) get the same bd binary
 // the rest of the harness uses, regardless of how the user installed beads.
+
+/** Hook script base names that have been migrated to the in-process TS
+ * dispatcher (`oisin-dev hook <name>`). The legacy `.sh` is no longer
+ * installed for these — install.ts skips them in gatherClaudeHooks(). */
+const MIGRATED_HOOKS = new Set<string>(['block-coauthor'])
+
+/** Strip `.sh` from a script name so it matches the dispatcher registry. */
+function handlerName(script: string): string {
+  return script.replace(/\.sh$/, '')
+}
+
 function hook(script: string, timeout?: number): HookCommand {
+  const name = handlerName(script)
+  if (MIGRATED_HOOKS.has(name)) {
+    return {
+      type: 'command',
+      command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.claude/hooks/bin:$PATH" oisin-dev hook ${name}`,
+      ...(timeout !== undefined ? { timeout } : {}),
+    }
+  }
   return {
     type: 'command',
     command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.claude/hooks/bin:$PATH" .claude/hooks/${script}`,

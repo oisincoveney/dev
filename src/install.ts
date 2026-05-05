@@ -211,10 +211,21 @@ function getPackageVersion(): string {
   return pkg.version
 }
 
+/** Hook script base names migrated to the TS dispatcher. Mirrors
+ * MIGRATED_HOOKS in src/generate/claude-settings.ts. The `.sh` files are
+ * skipped during install so the legacy shell version stops shipping. */
+const MIGRATED_HOOK_SCRIPTS = new Set<string>(['block-coauthor.sh'])
+
 function gatherClaudeHooks(): Map<string, string> {
   const srcDir = join(TEMPLATES_DIR, 'hooks')
   const files = new Map<string, string>()
   walkDirIntoMap(srcDir, '.claude/hooks', files)
+  for (const key of [...files.keys()]) {
+    const base = key.split('/').pop() ?? key
+    if (MIGRATED_HOOK_SCRIPTS.has(base)) {
+      files.delete(key)
+    }
+  }
   return files
 }
 
@@ -1178,14 +1189,19 @@ const RETIRED_HOOK_COMMANDS_BY_EVENT: Record<string, Set<string>> = {
   PreCompact: new Set(['bd prime']),
 }
 
-/** Extracts the .claude/hooks/foo.sh filename from a hook command, regardless of prefix.
+/** Extracts a stable handler key from a hook command — the value used to
+ * dedupe across merges. For legacy `.sh` hooks this is the script filename
+ * minus the extension. For TS-native dispatched hooks (`oisin-dev hook foo`)
+ * this is the handler name. Both produce the same key so a hook migration
+ * (script → dispatcher) replaces the old entry instead of duplicating it.
  *
- * Only matches hook script files (must end in `.sh`) so that the PATH-prepend
- * segment (`PATH="$PWD/.claude/hooks/bin:$PATH"`) doesn't get misread as a
- * `bin` script during merge. */
+ * The `.sh` match is intentionally strict so the PATH-prepend segment
+ * (`PATH="$PWD/.claude/hooks/bin:$PATH"`) doesn't get misread as a script. */
 function extractHookScript(command: string): string | null {
-  const match = command.match(/\.claude\/hooks\/([^\s'"]+\.sh)/)
-  return match ? match[1] : null
+  const dispatchMatch = command.match(/oisin-dev hook ([a-z0-9-]+)/)
+  if (dispatchMatch) return `${dispatchMatch[1]}.sh`
+  const scriptMatch = command.match(/\.claude\/hooks\/([^\s'"]+\.sh)/)
+  return scriptMatch ? scriptMatch[1] : null
 }
 
 function pruneRetiredHooks(hooks: Record<string, HookEntry[]>): Record<string, HookEntry[]> {
