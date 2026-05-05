@@ -1,6 +1,18 @@
 ---
 name: performance
 description: Fine-grained subscriptions, stable references, lazy loading
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.jsx"
+  - "**/*.mjs"
+  - "**/*.cjs"
+  - "**/*.rs"
+  - "**/*.go"
+  - "**/*.swift"
+  - "**/*.py"
+  - "**/*.rb"
 ---
 
 # Performance

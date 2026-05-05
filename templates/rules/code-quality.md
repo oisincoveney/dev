@@ -1,6 +1,18 @@
 ---
 name: code-quality
 description: Strict type systems, no hacks, meaningful names, early returns
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.jsx"
+  - "**/*.mjs"
+  - "**/*.cjs"
+  - "**/*.rs"
+  - "**/*.go"
+  - "**/*.swift"
+  - "**/*.py"
+  - "**/*.rb"
 ---
 
 # Code Quality & Strictness

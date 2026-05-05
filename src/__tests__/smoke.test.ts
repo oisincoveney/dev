@@ -863,7 +863,9 @@ describe('installAll update mode', () => {
       mkdirSync(claudeDir, { recursive: true })
       const existing = {
         hooks: {
-          PreCompact: [{ matcher: '', hooks: [{ type: 'command', command: 'bd prime' }] }],
+          PreCompact: [
+            { matcher: '', hooks: [{ type: 'command', command: 'my-custom-precompact.sh' }] },
+          ],
           SessionStart: [{ hooks: [{ type: 'command', command: 'existing-hook.sh' }] }],
         },
       }
@@ -873,9 +875,11 @@ describe('installAll update mode', () => {
         isUpdate: true,
       })
       const merged = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'))
-      // User-added PreCompact event preserved
+      // User-added PreCompact event preserved (note: `bd prime` is no longer
+      // a valid example here — it's now retired and pruned by the merge logic
+      // because the beads marketplace plugin owns that hook).
       expect(merged.hooks.PreCompact).toBeDefined()
-      expect(JSON.stringify(merged.hooks.PreCompact)).toContain('bd prime')
+      expect(JSON.stringify(merged.hooks.PreCompact)).toContain('my-custom-precompact.sh')
       // Tool-managed context-bootstrap.sh added to SessionStart (appended, not replaced)
       expect(JSON.stringify(merged.hooks.SessionStart)).toContain('context-bootstrap.sh')
       // Existing hook within SessionStart is preserved (not lost)

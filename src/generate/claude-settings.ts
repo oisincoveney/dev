@@ -43,10 +43,14 @@ interface ClaudeSettings {
 // Hook commands use relative paths (.claude/hooks/foo.sh), but Claude Code may
 // run them from a subdirectory (common in monorepos). Prefix every command with
 // a cd to the git root so the path resolves correctly regardless of cwd.
+//
+// Also PATH-prepend .claude/hooks/bin/ so the per-repo `bd` shim wins over any
+// global install. Hooks (and any subprocess they spawn) get the same bd binary
+// the rest of the harness uses, regardless of how the user installed beads.
 function hook(script: string, timeout?: number): HookCommand {
   return {
     type: 'command',
-    command: `cd "$(git rev-parse --show-toplevel)" && .claude/hooks/${script}`,
+    command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.claude/hooks/bin:$PATH" .claude/hooks/${script}`,
     ...(timeout !== undefined ? { timeout } : {}),
   }
 }

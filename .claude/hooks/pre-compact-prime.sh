@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# PreCompact hook — re-primes project-specific context after /compact.
+# PreCompact hook — re-primes harness-specific context after /compact.
 #
-# CLAUDE.md is re-injected automatically after compaction (per Claude Code
-# docs). Project state that does NOT survive — beads queue, .dev.config.json
-# values stringified into the session — needs an explicit re-prime here.
+# CLAUDE.md re-injects automatically post-compact. The beads marketplace
+# plugin's own PreCompact hook re-runs `bd prime`, so this hook only needs
+# to re-emit the harness-managed metadata that does not survive compaction
+# (project type, workflow, communication mode reminder).
 set -euo pipefail
 
 CONFIG_FILE=".dev.config.json"
-context="Context restored after /compact."
+context="Context restored after /compact. Caveman mode persists from session start (off only with: stop caveman / normal mode)."
 
 if [[ -f "$CONFIG_FILE" ]]; then
   language=$(jq -r '.language // empty' "$CONFIG_FILE")
@@ -15,23 +16,6 @@ if [[ -f "$CONFIG_FILE" ]]; then
   workflow=$(jq -r '.workflow // empty' "$CONFIG_FILE")
   context="$context
 Project: $variant ($language) | workflow: $workflow"
-
-  if command -v bd >/dev/null 2>&1; then
-    # bd prime is the "full workflow reminder" — it's the canonical re-prime.
-    bd_prime=$(bd prime 2>/dev/null || true)
-    ready=$(bd ready 2>/dev/null | head -5 || true)
-    if [[ -n "$bd_prime" ]]; then
-      context="$context
-
-$bd_prime"
-    fi
-    if [[ -n "$ready" ]]; then
-      context="$context
-
-Beads ready queue:
-$ready"
-    fi
-  fi
 fi
 
 jq -n --arg ctx "$context" '{

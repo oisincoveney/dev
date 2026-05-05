@@ -350,7 +350,10 @@ describe('installAll', () => {
     expect(componentRule).toContain('"**/*.tsx"')
 
     const codeQuality = readFileSync(join(dir, '.claude/rules/code-quality.md'), 'utf8')
-    expect(codeQuality).not.toContain('paths:')
+    // code-quality, performance, testing are now path-scoped to source-shaped files
+    // — they only inject when matching code is actually being read or edited (r4c).
+    expect(codeQuality).toContain('paths:')
+    expect(codeQuality).toContain('"**/*.ts"')
     expect(codeQuality).toContain('name: code-quality')
   })
 
@@ -448,6 +451,47 @@ describe('installAll', () => {
     )
     expect(allCommands.some((c) => c.trim() === 'bd prime')).toBe(false)
     expect(allCommands.some((c) => c.includes('context-bootstrap.sh'))).toBe(true)
+  })
+
+  it('prunes orphaned `bd prime` PreCompact hook on settings merge', () => {
+    // Same dedupe story as SessionStart: the beads marketplace plugin owns the
+    // PreCompact `bd prime` hook, so the harness must drop any project-level
+    // bd prime registration left behind by older versions.
+    const existing = {
+      hooks: {
+        PreCompact: [
+          {
+            hooks: [{ type: 'command', command: 'bd prime' }],
+            matcher: '',
+          },
+        ],
+      },
+    }
+    const generated = {
+      hooks: {
+        PreCompact: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command:
+                  'cd "$(git rev-parse --show-toplevel)" && .claude/hooks/pre-compact-prime.sh',
+              },
+            ],
+          },
+        ],
+      },
+    }
+
+    const merged = mergeClaudeSettings(existing, generated) as {
+      hooks: { PreCompact: { hooks: { command: string }[] }[] }
+    }
+
+    const allCommands = merged.hooks.PreCompact.flatMap((entry) =>
+      entry.hooks.map((h) => h.command),
+    )
+    expect(allCommands.some((c) => c.trim() === 'bd prime')).toBe(false)
+    expect(allCommands.some((c) => c.includes('pre-compact-prime.sh'))).toBe(true)
   })
 
   it('backs up existing lint configs to .user-backup before overwriting (manifest .user-backup, not legacy .dev-backup)', async () => {

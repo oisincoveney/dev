@@ -214,17 +214,19 @@ function getPackageVersion(): string {
 function gatherClaudeHooks(): Map<string, string> {
   const srcDir = join(TEMPLATES_DIR, 'hooks')
   const files = new Map<string, string>()
-  for (const file of readdirSync(srcDir)) {
-    const content = readFileSync(join(srcDir, file), 'utf8')
-    files.set(`.claude/hooks/${file}`, content)
-  }
+  walkDirIntoMap(srcDir, '.claude/hooks', files)
   return files
 }
 
 function chmodHooksDir(dir: string): void {
   if (!existsSync(dir)) return
-  for (const file of readdirSync(dir)) {
-    chmodSync(join(dir, file), 0o755)
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const child = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      chmodHooksDir(child)
+    } else if (entry.isFile()) {
+      chmodSync(child, 0o755)
+    }
   }
 }
 
@@ -444,9 +446,20 @@ function mergeManagedRoot(cwd: string, file: string, managed: string): string {
 }
 
 function installClaudeHooks(cwd: string, log: (msg: string) => void): void {
-  for (const file of readdirSync(join(cwd, '.claude', 'hooks'))) {
-    chmodSync(join(cwd, '.claude', 'hooks', file), 0o755)
-    log(`.claude/hooks/${file}`)
+  const root = join(cwd, '.claude', 'hooks')
+  const stack: string[] = [root]
+  while (stack.length > 0) {
+    const dir = stack.pop()
+    if (dir === undefined) break
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(path)
+      } else if (entry.isFile()) {
+        chmodSync(path, 0o755)
+        log(`.claude/hooks/${path.slice(root.length + 1)}`)
+      }
+    }
   }
 }
 
@@ -1156,17 +1169,22 @@ type HookEntry = { matcher?: string; hooks: { type: string; command: string; tim
 const RETIRED_HOOK_SCRIPTS = new Set(['verify-grounding.sh'])
 
 /** Per-event raw hook commands that should be pruned on update. The harness
- * once registered `bd prime` on SessionStart, but the beads marketplace
- * plugin now provides the same hook — running both fires bd prime twice and
- * wastes ~3K tokens per cold start. Only SessionStart is pruned so that
- * user-added bd prime hooks on other events (e.g. PreCompact) survive. */
+ * once registered `bd prime` on both SessionStart and PreCompact, but the
+ * beads marketplace plugin now owns both events — running both fires bd prime
+ * twice and wastes ~1K tokens per cold start (and again per /compact). Both
+ * events are pruned because the plugin is the canonical source. */
 const RETIRED_HOOK_COMMANDS_BY_EVENT: Record<string, Set<string>> = {
   SessionStart: new Set(['bd prime']),
+  PreCompact: new Set(['bd prime']),
 }
 
-/** Extracts the .claude/hooks/foo.sh filename from a hook command, regardless of prefix. */
+/** Extracts the .claude/hooks/foo.sh filename from a hook command, regardless of prefix.
+ *
+ * Only matches hook script files (must end in `.sh`) so that the PATH-prepend
+ * segment (`PATH="$PWD/.claude/hooks/bin:$PATH"`) doesn't get misread as a
+ * `bin` script during merge. */
 function extractHookScript(command: string): string | null {
-  const match = command.match(/\.claude\/hooks\/([^\s'"]+)/)
+  const match = command.match(/\.claude\/hooks\/([^\s'"]+\.sh)/)
   return match ? match[1] : null
 }
 

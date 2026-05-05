@@ -1,6 +1,18 @@
 ---
 name: testing
 description: Test-driven development, co-located tests, property-based testing
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.jsx"
+  - "**/*.mjs"
+  - "**/*.cjs"
+  - "**/*.rs"
+  - "**/*.go"
+  - "**/*.swift"
+  - "**/*.py"
+  - "**/*.rb"
 ---
 
 # Testing

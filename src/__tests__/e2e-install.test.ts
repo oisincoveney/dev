@@ -301,9 +301,11 @@ just rules, no session completion
       }
     }
 
-    // Every referenced .claude/hooks/ script actually exists on disk
+    // Every referenced .claude/hooks/ script actually exists on disk. Match
+    // only on `.sh` filenames so the PATH-prepend `.claude/hooks/bin` segment
+    // (which is a directory, not a script) doesn't get checked.
     for (const cmd of allCommands) {
-      const match = cmd.match(/\.claude\/hooks\/([^\s'"]+)/)
+      const match = cmd.match(/\.claude\/hooks\/([^\s'"]+\.sh)/)
       if (match) {
         expect(existsSync(join(dir, '.claude', 'hooks', match[1]))).toBe(true)
       }
@@ -322,7 +324,7 @@ just rules, no session completion
     for (const entries of Object.values(codex.hooks)) {
       for (const entry of entries) {
         for (const hook of entry.hooks) {
-          const match = hook.command.match(/\.codex\/hooks\/([^\s'"]+)/)
+          const match = hook.command.match(/\.codex\/hooks\/([^\s'"]+\.sh)/)
           expect(match).not.toBeNull()
           if (match) {
             expect(existsSync(join(dir, '.codex', 'hooks', match[1]))).toBe(true)

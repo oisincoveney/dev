@@ -8,8 +8,10 @@ import { generateClaudeSettings } from './claude-settings.js'
 
 export function generateCodexHooks(config: DevConfig): unknown {
   const claude = generateClaudeSettings(config)
-  // Re-path the commands from .claude/hooks/ to .codex/hooks/
-  const retarget = (cmd: string): string => cmd.replace('.claude/', '.codex/')
+  // Re-path the commands from .claude/hooks/ to .codex/hooks/. Both the PATH
+  // shim segment and the script path itself need rewriting (replaceAll covers
+  // both occurrences in a single command).
+  const retarget = (cmd: string): string => cmd.replaceAll('.claude/', '.codex/')
   const hooks = claude.hooks
   for (const event of Object.keys(hooks) as Array<keyof typeof hooks>) {
     const entries = hooks[event]
