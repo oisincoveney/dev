@@ -5,16 +5,16 @@ description: Ousterhout deep modules, clean architecture layers, file size limit
 
 # Architecture
 
-**Deep modules over shallow ones** (Ousterhout):
-- A module's interface should be much simpler than its implementation
-- Information hiding is the goal — hide complexity behind simple APIs
-- Red flags: pass-through methods, shallow modules that leak implementation details
+**Deep modules > shallow** (Ousterhout):
+- Interface much simpler than implementation.
+- Information hiding = goal. Hide complexity behind simple APIs.
+- Red flags: pass-through methods, shallow modules leaking impl detail.
 
 **Layer discipline** (Clean Architecture):
-- Domain/core layer cannot import from infrastructure/framework layer
-- Dependencies point inward toward the core
-- Enforced by dependency-cruiser (TS) or depguard (Go) or crate boundaries (Rust)
+- Domain/core can't import from infrastructure/framework.
+- Deps point inward toward core.
+- Enforced by dependency-cruiser (TS), depguard (Go), crate boundaries (Rust).
 
-**File size limits**: max 300 lines per file, max 50 lines per function. Split if exceeded.
+**File size**: max 300 lines/file, max 50 lines/fn. Exceeded → split.
 
-**Folder naming**: kebab-case for all folder names.
+**Folder naming**: kebab-case.
