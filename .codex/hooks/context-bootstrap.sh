@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
-# SessionStart hook — injects one-shot project context that stays in-session.
+# SessionStart hook — injects per-session static context.
 #
-# Carries the static-per-session bits (project type, commands, dependency
-# list, bd ready queue). Dynamic per-turn state (branch, current task) lives
-# in the UserPromptSubmit hook instead. The static payload used to be re-
-# emitted on every prompt before v0.4.1 — that was a token tax.
+# Static-per-session: communication mode, project metadata, commands, deps.
+# Dynamic per-turn state (branch) lives in UserPromptSubmit hook.
+# bd ready queue handled by beads marketplace plugin's own SessionStart hook.
+#
+# Layout: cache-friendly static content first (caveman + project), mutable
+# content (deps) last. Maximizes Anthropic prompt-cache hit across sessions.
 set -euo pipefail
 
 CONFIG_FILE=".dev.config.json"
 
-# Always-on: force using-superpowers as the first action.
-context="IMPORTANT: Your FIRST action this session must be to invoke the using-superpowers skill via the Skill tool, before responding to the user or taking any other action."
+# Communication mode — caveman (full) inlined. Skips Skill round-trip and
+# replaces the now-retired communication-style.md rule. Off switch:
+# "stop caveman" / "normal mode".
+read -r -d '' caveman_mode <<'CAVEMAN' || true
+COMMUNICATION MODE — caveman (full). Active every response this session unless user says "stop caveman" or "normal mode".
+
+Drop: articles (a/an/the), filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course/happy to), hedging. Fragments OK. Short synonyms (big not extensive, fix not "implement a solution"). Technical terms exact. Code blocks unchanged. Errors quoted exact.
+
+Pattern: [thing] [action] [reason]. [next step].
+
+Drop caveman temporarily for: security warnings, irreversible action confirmations, multi-step sequences where order is ambiguous, user clarification requests. Resume after clear part done.
+
+Code/commits/PRs: write normal. Caveman applies to user-facing text only.
+CAVEMAN
+
+context="$caveman_mode"
 
 if [[ -f "$CONFIG_FILE" ]]; then
   language=$(jq -r '.language // empty' "$CONFIG_FILE")
@@ -33,8 +49,13 @@ Commands (use these exact strings — do not guess alternatives):
   lint:      $lint
   format:    $format"
 
-  # Dependency inventory — helps the import validator hook's negative case
-  # (blocking fabricated imports) land before Claude writes a bad import.
+  context="$context
+
+$project_info"
+
+  # Dependency inventory — pre-empts the import-validator hook by giving
+  # Claude the dep list before it writes a fabricated import. Goes last
+  # because dep lists change more often than commands/metadata.
   deps=""
   case "$language" in
     typescript)
@@ -54,23 +75,11 @@ Commands (use these exact strings — do not guess alternatives):
       ;;
   esac
   if [[ -n "$deps" ]]; then
-    project_info="$project_info
+    context="$context
 
 Installed dependencies: $deps
-Do not import packages that are not in this list — the import validator hook will block fabricated imports."
+Do not import packages not in this list — import-validator hook blocks fabricated imports."
   fi
-
-  if command -v bd >/dev/null 2>&1; then
-    ready=$(bd ready 2>/dev/null | head -5 || echo "(bd not initialized or no ready work)")
-    project_info="$project_info
-
-Beads ready queue:
-$ready"
-  fi
-
-  context="$context
-
-$project_info"
 fi
 
 jq -n --arg ctx "$context" '{
