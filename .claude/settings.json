@@ -5,12 +5,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook post-edit-check",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/post-edit-check.sh",
             "timeout": 60
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook ai-antipattern-guard",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/ai-antipattern-guard.sh",
             "timeout": 10
           }
         ],
@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook pre-compact-prime",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/pre-compact-prime.sh",
             "timeout": 10
           }
         ]
@@ -33,23 +33,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook ts-style-guard",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/ts-style-guard.sh",
             "timeout": 30
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook import-validator",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/import-validator.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook ai-antipattern-guard",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/ai-antipattern-guard.sh",
             "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook worktree-write-guard",
-            "timeout": 5
           }
         ],
         "matcher": "Write|Edit"
@@ -58,12 +53,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook destructive-command-guard",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/destructive-command-guard.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook block-coauthor",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/block-coauthor.sh",
             "timeout": 5
           }
         ],
@@ -73,7 +68,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook block-todowrite",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/block-todowrite.sh",
             "timeout": 5
           }
         ],
@@ -83,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook audit-log",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/audit-log.sh",
             "timeout": 5
           }
         ]
@@ -93,7 +88,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook docs-first",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/docs-first.sh",
             "timeout": 5
           }
         ]
@@ -104,12 +99,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook context-bootstrap",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/context-bootstrap.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook baseline-pin",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/baseline-pin.sh",
             "timeout": 120
           }
         ]
@@ -120,38 +115,28 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook pre-stop-verification",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/pre-stop-verification.sh",
             "timeout": 30
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook banned-words-guard",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/banned-words-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook baseline-compare",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/baseline-compare.sh",
             "timeout": 120
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook citation-check",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/citation-check.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook ai-antipattern-guard",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/ai-antipattern-guard.sh",
             "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook worktree-stop-guard",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook verifier-skill-guard",
-            "timeout": 30
           }
         ]
       }
@@ -161,7 +146,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" oisin-dev hook context-injector",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/context-injector.sh",
             "timeout": 5
           }
         ]
@@ -218,6 +203,6 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "cd \"$(git rev-parse --show-toplevel)\" && oisin-dev statusline"
+    "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/statusline.sh"
   }
 }

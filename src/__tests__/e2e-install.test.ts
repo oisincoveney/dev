@@ -239,34 +239,37 @@ just rules, no session completion
   it('generates all target files with valid content', async () => {
     await installAll(dir, config, answers, { skipSideEffects: true })
 
-    // All Claude Code hooks are now migrated to `oisin-dev hook <name>` (TS dispatcher).
-    // Only non-migrated Lefthook hooks ship as .sh files.
+    // Every hook script is executable
     const hookDir = join(dir, '.claude', 'hooks')
-    const shHooks = ['tdd-guard.sh', 'pr-size-check.sh']
-    for (const hook of shHooks) {
+    // Hooks installed as shell scripts. block-coauthor was migrated to the
+    // TS dispatcher in 0t6 — its `.sh` file is no longer shipped.
+    const hooks = [
+      'destructive-command-guard.sh',
+      'block-todowrite.sh',
+      'import-validator.sh',
+      'post-edit-check.sh',
+      'context-injector.sh',
+      'context-bootstrap.sh',
+      'pre-compact-prime.sh',
+      'pre-stop-verification.sh',
+      'ai-antipattern-guard.sh',
+      'tdd-guard.sh',
+      'pr-size-check.sh',
+    ]
+    for (const hook of hooks) {
       const path = join(hookDir, hook)
       expect(existsSync(path)).toBe(true)
+      // Verify executable
       const { statSync } = await import('node:fs')
       const mode = statSync(path).mode
       expect(mode & 0o111).toBeGreaterThan(0)
     }
 
-    // Migrated .sh files are NOT installed as files
-    const migratedSh = [
-      'destructive-command-guard.sh', 'block-todowrite.sh', 'import-validator.sh',
-      'post-edit-check.sh', 'context-injector.sh', 'context-bootstrap.sh',
-      'pre-compact-prime.sh', 'pre-stop-verification.sh', 'ai-antipattern-guard.sh',
-      'block-coauthor.sh',
-    ]
-    for (const hook of migratedSh) {
-      expect(existsSync(join(hookDir, hook))).toBe(false)
-    }
-
     // OpenCode plugin is valid TS-ish content
     const plugin = readFileSync(join(dir, '.opencode/plugins/dev-enforcer.ts'), 'utf8')
     expect(plugin).toContain("import { spawnSync } from 'node:child_process'")
-    expect(plugin).toContain("runHook('destructive-command-guard'")
-    expect(plugin).toContain("runHook('block-todowrite'")
+    expect(plugin).toContain('destructive-command-guard.sh')
+    expect(plugin).toContain('block-todowrite.sh')
 
     // Lefthook YAML is valid structure
     const lefthook = readFileSync(join(dir, 'lefthook.yml'), 'utf8')

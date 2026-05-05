@@ -13,13 +13,3 @@ Interview me relentlessly about every aspect of this plan until we reach a share
 Ask the questions one at a time.
 
 If a question can be answered by exploring the codebase, explore the codebase instead.
-
-## Pre-grill: load prior rejection context
-
-If this grill follows a `/regrill <id>` or `/reject <id>`, prior rejection cause may be recorded in beads memory. Check:
-
-```bash
-bd memories "plan-rejected:" 2>/dev/null
-```
-
-If matches present, read the most recent. Use as seed: don't repeat the question that already got a "no" answer; lead with the rejected angle ("you said X is out — should we revise around X, or restart?").

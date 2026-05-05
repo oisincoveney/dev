@@ -1,30 +1,41 @@
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { worktreeStopGuard } from '../hooks/handlers/worktree-stop-guard.js'
-import type { HookInput } from '../hooks/types.js'
+
+const HOOK = resolve(__dirname, '..', '..', 'templates', 'hooks', 'worktree-stop-guard.sh')
+
+function hasCmd(name: string): boolean {
+  const r = spawnSync('command', ['-v', name], { shell: true, stdio: 'ignore' })
+  return r.status === 0
+}
+
+const canRun = hasCmd('bash') && hasCmd('jq') && hasCmd('git')
 
 function git(cwd: string, ...args: string[]): { status: number; stdout: string; stderr: string } {
-  const r = spawnSync('git', args, {
-    cwd,
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8' })
+  return { status: r.status ?? -1, stdout: r.stdout, stderr: r.stderr }
+}
+
+function runHook(cwd: string): { status: number; stdout: string; stderr: string } {
+  const r = spawnSync('bash', [HOOK], {
+    input: JSON.stringify({ cwd }),
     encoding: 'utf8',
-    env: { ...process.env, GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'" },
+    env: { ...process.env, PATH: process.env.PATH ?? '' },
   })
   return { status: r.status ?? -1, stdout: r.stdout, stderr: r.stderr }
 }
 
-function runHook(cwd: string) {
-  return worktreeStopGuard({ cwd } as HookInput)
-}
-
-describe('worktree-stop-guard', () => {
+describe.skipIf(!canRun)('worktree-stop-guard.sh', () => {
   let baseDir: string
   let mainRepo: string
   let remoteRepo: string
   let worktreeRoot: string
 
+  // `beforeEach` runs ~10 git operations (init bare + init + config + commit +
+  // push + worktree add). Default vitest hookTimeout is 10s; under concurrent
+  // vitest workers + git fork overhead this drifts over the limit. Bump to 30s.
   beforeEach(() => {
     baseDir = mkdtempSync(join(tmpdir(), 'wsg-'))
     mainRepo = join(baseDir, 'main')
@@ -52,15 +63,17 @@ describe('worktree-stop-guard', () => {
     rmSync(baseDir, { recursive: true, force: true })
   })
 
-  it('allows outside any worktree (orchestrator stop)', () => {
-    expect(runHook(mainRepo).kind).toBe('allow')
+  it('exits 0 outside any worktree (orchestrator stop)', () => {
+    const r = runHook(mainRepo)
+    expect(r.status).toBe(0)
+    expect(r.stderr).toBe('')
   })
 
   it('blocks stop with uncommitted changes', () => {
     writeFileSync(join(worktreeRoot, 'foo.txt'), 'wip\n')
     const r = runHook(worktreeRoot)
-    expect(r.kind).toBe('block')
-    expect((r as { reason: string }).reason).toContain('uncommitted changes')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('uncommitted changes')
   })
 
   it('blocks stop when branch has commits but was never pushed (no upstream)', () => {
@@ -68,8 +81,8 @@ describe('worktree-stop-guard', () => {
     git(worktreeRoot, 'add', '.')
     git(worktreeRoot, 'commit', '-m', 'feat: work')
     const r = runHook(worktreeRoot)
-    expect(r.kind).toBe('block')
-    expect((r as { reason: string }).reason).toContain('no upstream')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('no upstream')
   })
 
   it('blocks stop with unpushed commits when upstream exists', () => {
@@ -81,8 +94,8 @@ describe('worktree-stop-guard', () => {
     git(worktreeRoot, 'add', '.')
     git(worktreeRoot, 'commit', '-m', 'feat: more')
     const r = runHook(worktreeRoot)
-    expect(r.kind).toBe('block')
-    expect((r as { reason: string }).reason).toContain('unpushed commits')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('unpushed commits')
   })
 
   it('allows stop on a clean, fully pushed worktree', () => {
@@ -92,16 +105,16 @@ describe('worktree-stop-guard', () => {
     git(worktreeRoot, 'push', '-u', 'origin', 'ticket/abc')
     const r = runHook(worktreeRoot)
     // bd may not be installed in CI; we only assert the git portion is clean.
-    if (r.kind === 'block') {
-      expect((r as { reason: string }).reason).toContain('in_progress')
+    // If exit 2 from bd, it should still mention 'in_progress' (and we accept either).
+    if (r.status === 2) {
+      expect(r.stderr).toContain('in_progress')
     } else {
-      expect(r.kind).toBe('allow')
+      expect(r.status).toBe(0)
     }
   })
 
-  it('allows when input cwd is missing (empty input)', () => {
-    // Handler falls back to process.cwd() which is not a worktree path
-    const r = worktreeStopGuard({} as HookInput)
-    expect(r.kind).toBe('allow')
+  it('exits 0 when input cwd is missing', () => {
+    const r = spawnSync('bash', [HOOK], { input: '{}', encoding: 'utf8' })
+    expect(r.status).toBe(0)
   })
 })

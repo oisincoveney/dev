@@ -3,7 +3,6 @@ import { runAcceptLefthook } from './accept-lefthook.js'
 import { runHookDispatcher } from './hooks/dispatch.js'
 import { runInit } from './init.js'
 import { runSetCommands } from './set-commands.js'
-import { runStatusline } from './statusline.js'
 import { runUpdate } from './update.js'
 
 const COMMANDS: Record<string, string> = {
@@ -12,7 +11,6 @@ const COMMANDS: Record<string, string> = {
   'set-commands':   'Fill in or update dev/build/test/typecheck/lint/format commands',
   'accept-lefthook': "Mark the current lefthook.yml as canonical (clears manifest drift warning)",
   hook:             'Run a TS-native hook handler (internal — invoked by Claude Code)',
-  statusline:       'Emit status line for Claude Code UI (internal — invoked by Claude Code)',
   help:             'Show this help message',
 }
 
@@ -63,9 +61,6 @@ async function main(): Promise<void> {
       await runHookDispatcher(handlerName)
       break
     }
-    case 'statusline':
-      runStatusline()
-      break
     case 'help':
     case '--help':
     case '-h':

@@ -6,7 +6,7 @@ user-invocable: false
 
 # Project Policies
 
-Claude: invoke when turn touches any below. Short-form kernel in CLAUDE.md; full detail here.
+Claude: invoke this skill when a turn touches any of the below. The short-form kernel lives in CLAUDE.md; the full detail is here.
 
 ## Destructive Operations
 
@@ -19,48 +19,45 @@ Blocked by hook. Never attempt without explicit user approval:
 - `DROP TABLE` / `DROP DATABASE`
 - `npm publish` / `yarn publish` / `bun publish` / `pnpm publish`
 
-User explicitly authorized destructive op → ask again each occurrence. Auth doesn't persist across session.
+If the user has explicitly authorized a destructive operation, ask again before each occurrence — authorization does not persist across the session.
 
 ## Commit Hygiene
 
-- **Never add `Co-Authored-By: Claude` trailer.** `block-coauthor.sh` strips automatically.
-- Commits start with conventional-commit prefix (`feat:`, `fix:`, `chore:`, `docs:`, etc.). Breaking changes use `feat!:` / `fix!:` or `BREAKING CHANGE:` footer.
-- One logical change per commit. Unrelated lint files touched → split.
-- Non-trivial commits reference spec: "Implements per specs/YYYY-MM-DD-<slug>.md".
+- **Never add a `Co-Authored-By: Claude` trailer.** Stripped automatically by `block-coauthor.sh`.
+- Commit messages start with a conventional-commit prefix (`feat:`, `fix:`, `chore:`, `docs:`, etc.). Breaking changes use `feat!:` / `fix!:` or a `BREAKING CHANGE:` footer.
+- One logical change per commit. If you touched unrelated files to fix lint, split the commit.
+- Reference the spec in non-trivial commits: "Implements per specs/YYYY-MM-DD-<slug>.md".
 
-## Verification Protocol (external APIs, libs, package features)
+## Verification Protocol (external APIs, libraries, package features)
 
-Before writing code using anything not verified THIS session:
+When you're about to write code that uses something you haven't verified in THIS session, you MUST:
 
-1. Say: "I need to verify <X>"
-2. Read/Grep/Glob actual source or installed package.
-3. Confirmed → proceed. Else ask user or use actually-available API.
-4. Never claim API exists from training alone.
+1. Say explicitly: "I need to verify <X>"
+2. Use Read/Grep/Glob to check the actual source or installed package
+3. If confirmed, proceed; if not, ask the user or use the actually-available API
+4. Never state an API exists based on training data alone
 
-**Forbidden patterns:**
+**Specific forbidden patterns:**
 
-- `import { foo } from 'pkg'` without verifying `foo` exported by `pkg` (`import-validator.sh` blocks).
-- `lib.method()` without confirming method exists in installed version.
-- Filesystem paths, env vars, config keys without reading actual file.
-- Citing docs claims without reading docs this session.
-- Saying "this works"/"should work"/"believe correct"/"tests should pass" as terminal without running test + seeing pass.
+- Writing `import { foo } from 'pkg'` without verifying `foo` is exported by `pkg` (the `import-validator.sh` hook will block fabricated imports)
+- Calling `lib.method()` without confirming the method exists in the installed version
+- Referencing filesystem paths, env vars, or config keys without reading the actual file
+- Citing documentation claims without having read the docs in this session
+- Saying "this works", "this should work", "I believe this is correct", or "the tests should pass" as a terminal statement without having run the test command and seen passing output
 
 ## Completion Claims
 
-Never write "this works"/"should work"/"tests should pass"/"done" as terminal without:
+Never write "this works", "this should work", "tests should pass", or "done" as a terminal statement without:
 
-1. Running configured `test` cmd (see `.claude/rules/commands.md` or `.dev.config.json`).
-2. Observing passing output.
-3. Including output in response.
+1. Running the configured `test` command (see `.claude/rules/commands.md` or `.dev.config.json`)
+2. Observing passing output
+3. Including that output in your response
 
-`pre-stop-verification.sh` hook inspects session transcript — blocks turns claiming completion without evidence.
+The `pre-stop-verification.sh` hook inspects the session transcript — it blocks turns that claim completion without evidence.
 
 ## Git Safety
 
-- **Committing always fine.** Local commits — ticket branch, worktree, directly on `main`/`master` — no user approval. Commits reversible, local until pushed, unit of work agent produces.
-- **Pushing scoped.** Ticket branch or `.claude/worktrees/*` worktree → agent pushes own work without asking — that's the sandbox. Pushing `main`/`master` (or other shared/long-lived branch) → explicit user approval each time.
-- Prefer `git push --force-with-lease` over `--force` if force-push explicitly authorized. Force-push always needs explicit per-branch approval — auth on one branch doesn't carry to another.
-- Never force-push to `main`/`master` without user explicitly naming the branch.
-- Never open or merge PR without explicit user approval. Merging = user's call.
-- Investigate unexpected files, branches, lock files before delete/overwrite — may be user's in-progress work.
+- Prefer `git push --force-with-lease` over `--force` if a force-push is ever explicitly authorized.
+- Never force-push to `main` / `master` without the user explicitly naming the branch.
+- Investigate unexpected files, branches, or lock files before deleting or overwriting them — they may be the user's in-progress work.
 - Merge conflicts: resolve, don't discard.

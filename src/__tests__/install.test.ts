@@ -68,19 +68,16 @@ describe('installAll', () => {
   it('writes all expected files for a Rust project', async () => {
     await installAll(dir, fakeConfig, fakeAnswers, { skipSideEffects: true })
 
-    // Migrated hooks: .sh files are NOT installed (oisin-dev hook <name> is used instead)
-    expect(existsSync(join(dir, '.claude/hooks/destructive-command-guard.sh'))).toBe(false)
-    expect(existsSync(join(dir, '.claude/hooks/import-validator.sh'))).toBe(false)
-    expect(existsSync(join(dir, '.claude/hooks/post-edit-check.sh'))).toBe(false)
-    expect(existsSync(join(dir, '.claude/hooks/block-todowrite.sh'))).toBe(false)
-    // Non-migrated Lefthook hooks still installed
-    expect(existsSync(join(dir, '.claude/hooks/pr-size-check.sh'))).toBe(true)
-    expect(existsSync(join(dir, '.claude/hooks/tdd-guard.sh'))).toBe(true)
+    // Hooks copied
+    expect(existsSync(join(dir, '.claude/hooks/destructive-command-guard.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/import-validator.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/post-edit-check.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/block-todowrite.sh'))).toBe(true)
 
     // Settings
     expect(existsSync(join(dir, '.claude/settings.json'))).toBe(true)
     expect(existsSync(join(dir, '.codex/hooks.json'))).toBe(true)
-    expect(existsSync(join(dir, '.codex/hooks/destructive-command-guard.sh'))).toBe(false)
+    expect(existsSync(join(dir, '.codex/hooks/destructive-command-guard.sh'))).toBe(true)
 
     // Cursor rules — one per selected skill
     for (const id of fakeConfig.skills) {
@@ -215,18 +212,18 @@ describe('installAll', () => {
     expect(approve).toContain('plan-approved:')
     expect(approve).toContain('bd human dismiss')
 
-    // statusline.sh migrated to oisin-dev statusline — no .sh file installed
-    expect(existsSync(join(dir, '.claude/hooks/statusline.sh'))).toBe(false)
+    // Hook file for statusLine copied
+    expect(existsSync(join(dir, '.claude/hooks/statusline.sh'))).toBe(true)
   })
 
   it('ships the planning-gate hooks, skill, rules, and rubric when beads is enabled', async () => {
     await installAll(dir, fakeConfig, fakeAnswers, { skipSideEffects: true })
 
-    // Migrated hooks: .sh files are NOT installed
-    expect(existsSync(join(dir, '.claude/hooks/bd-create-gate.sh'))).toBe(false)
-    expect(existsSync(join(dir, '.claude/hooks/plan-approval-guard.sh'))).toBe(false)
-    expect(existsSync(join(dir, '.claude/hooks/bd-remember-protect.sh'))).toBe(false)
-    expect(existsSync(join(dir, '.claude/hooks/swarm-digest.sh'))).toBe(false)
+    // Hooks
+    expect(existsSync(join(dir, '.claude/hooks/bd-create-gate.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/plan-approval-guard.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/bd-remember-protect.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/swarm-digest.sh'))).toBe(true)
 
     // Plan-brief skill
     expect(existsSync(join(dir, '.claude/skills/plan-brief/SKILL.md'))).toBe(true)
@@ -276,15 +273,15 @@ describe('installAll', () => {
     // Required ordering: destructive → bd-remember-protect → plan-approval-guard → bd-create-gate → block-coauthor.
     // block-coauthor was migrated to the TS dispatcher in 0t6 — it appears as
     // `oisin-dev hook block-coauthor` instead of `block-coauthor.sh`.
-    expect(idx('oisin-dev hook destructive-command-guard')).toBeGreaterThanOrEqual(0)
-    expect(idx('oisin-dev hook bd-remember-protect')).toBeGreaterThan(idx('oisin-dev hook destructive-command-guard'))
-    expect(idx('oisin-dev hook plan-approval-guard')).toBeGreaterThan(idx('oisin-dev hook bd-remember-protect'))
-    expect(idx('oisin-dev hook bd-create-gate')).toBeGreaterThan(idx('oisin-dev hook plan-approval-guard'))
-    expect(idx('oisin-dev hook block-coauthor')).toBeGreaterThan(idx('oisin-dev hook bd-create-gate'))
+    expect(idx('destructive-command-guard.sh')).toBeGreaterThanOrEqual(0)
+    expect(idx('bd-remember-protect.sh')).toBeGreaterThan(idx('destructive-command-guard.sh'))
+    expect(idx('plan-approval-guard.sh')).toBeGreaterThan(idx('bd-remember-protect.sh'))
+    expect(idx('bd-create-gate.sh')).toBeGreaterThan(idx('plan-approval-guard.sh'))
+    expect(idx('oisin-dev hook block-coauthor')).toBeGreaterThan(idx('bd-create-gate.sh'))
 
     // swarm-digest.sh registered on Stop
     const stopCmds = settings.hooks.Stop.flatMap((e) => e.hooks.map((h) => h.command))
-    expect(stopCmds.some((c) => c.includes('oisin-dev hook swarm-digest'))).toBe(true)
+    expect(stopCmds.some((c) => c.includes('swarm-digest.sh'))).toBe(true)
   })
 
   it('omits planning-gate hooks/skill/rules when beads is NOT selected', async () => {
@@ -315,9 +312,9 @@ describe('installAll', () => {
     }
     const bashMatcher = settings.hooks.PreToolUse.find((e) => e.matcher === 'Bash')
     const cmds = (bashMatcher?.hooks ?? []).map((h) => h.command)
-    expect(cmds.some((c) => c.includes('oisin-dev hook plan-approval-guard'))).toBe(false)
-    expect(cmds.some((c) => c.includes('oisin-dev hook bd-create-gate'))).toBe(false)
-    expect(cmds.some((c) => c.includes('oisin-dev hook bd-remember-protect'))).toBe(false)
+    expect(cmds.some((c) => c.includes('plan-approval-guard.sh'))).toBe(false)
+    expect(cmds.some((c) => c.includes('bd-create-gate.sh'))).toBe(false)
+    expect(cmds.some((c) => c.includes('bd-remember-protect.sh'))).toBe(false)
   })
 
   it('rule files with paths frontmatter land in .claude/rules/ when the skill is selected', async () => {
@@ -439,7 +436,7 @@ describe('installAll', () => {
               {
                 type: 'command',
                 command:
-                  'cd "$(git rev-parse --show-toplevel)" && oisin-dev hook context-bootstrap',
+                  'cd "$(git rev-parse --show-toplevel)" && .claude/hooks/context-bootstrap.sh',
               },
             ],
           },
@@ -455,7 +452,7 @@ describe('installAll', () => {
       entry.hooks.map((h) => h.command),
     )
     expect(allCommands.some((c) => c.trim() === 'bd prime')).toBe(false)
-    expect(allCommands.some((c) => c.includes('oisin-dev hook context-bootstrap'))).toBe(true)
+    expect(allCommands.some((c) => c.includes('context-bootstrap.sh'))).toBe(true)
   })
 
   it('prunes orphaned `bd prime` PreCompact hook on settings merge', () => {
@@ -480,7 +477,7 @@ describe('installAll', () => {
               {
                 type: 'command',
                 command:
-                  'cd "$(git rev-parse --show-toplevel)" && oisin-dev hook pre-compact-prime',
+                  'cd "$(git rev-parse --show-toplevel)" && .claude/hooks/pre-compact-prime.sh',
               },
             ],
           },
@@ -496,7 +493,7 @@ describe('installAll', () => {
       entry.hooks.map((h) => h.command),
     )
     expect(allCommands.some((c) => c.trim() === 'bd prime')).toBe(false)
-    expect(allCommands.some((c) => c.includes('oisin-dev hook pre-compact-prime'))).toBe(true)
+    expect(allCommands.some((c) => c.includes('pre-compact-prime.sh'))).toBe(true)
   })
 
   it('backs up existing lint configs to .user-backup before overwriting (manifest .user-backup, not legacy .dev-backup)', async () => {
@@ -554,8 +551,8 @@ describe('installAll', () => {
 
     await installAll(dir, swiftConfig, swiftAnswers, { skipSideEffects: true })
 
-    // Core hooks: migrated .sh are NOT installed; non-migrated Lefthook hooks still are
-    expect(existsSync(join(dir, '.claude/hooks/destructive-command-guard.sh'))).toBe(false)
+    // Core hooks and settings present
+    expect(existsSync(join(dir, '.claude/hooks/destructive-command-guard.sh'))).toBe(true)
     expect(existsSync(join(dir, '.claude/hooks/tdd-guard.sh'))).toBe(true)
     expect(existsSync(join(dir, '.claude/settings.json'))).toBe(true)
 
