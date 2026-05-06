@@ -10,6 +10,7 @@ set -euo pipefail
 
 INPUT=$(cat)
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."' 2>/dev/null || echo ".")
+[[ -z "$CWD" || "$CWD" == "null" ]] && CWD="."
 CONFIG="$CWD/.dev.config.json"
 BASELINE="$CWD/.claude/baseline-failures.json"
 
@@ -18,7 +19,7 @@ mkdir -p "$(dirname "$BASELINE")" 2>/dev/null || true
 write_skipped() {
   local reason=$1
   jq -n --arg r "$reason" '{skipped: true, reason: $r}' >"$BASELINE" 2>/dev/null || \
-    printf '{"skipped":true,"reason":"%s"}\n' "$reason" >"$BASELINE"
+    printf '{"skipped":true,"reason":"%s"}\n' "$reason" >"$BASELINE" 2>/dev/null || true
   exit 0
 }
 

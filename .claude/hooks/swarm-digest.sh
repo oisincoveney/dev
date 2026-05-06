@@ -22,7 +22,12 @@ cd "$CWD"
 # Find epics that have at least one in_progress or recently-closed child — those
 # are the active swarms. `bd swarm list --json` if available, else fall back to
 # enumerating epics with in_progress children.
-SWARMS=$(bd swarm list --json 2>/dev/null || echo "[]")
+RAW_SWARMS=$(bd swarm list --json 2>/dev/null || echo "[]")
+SWARMS=$(
+  echo "$RAW_SWARMS" \
+    | jq -c 'if type == "array" then . elif type == "object" and (.swarms | type) == "array" then .swarms else [] end' 2>/dev/null \
+    || echo "[]"
+)
 if [[ "$SWARMS" == "[]" ]]; then
   # Fallback: enumerate epics with ≥1 in_progress child.
   SWARMS=$(bd list --type=epic --status=open --json 2>/dev/null || echo "[]")

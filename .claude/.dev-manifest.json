@@ -1,5 +1,5 @@
 {
-  "version": "0.8.20",
+  "version": "0.8.25",
   "files": {
     ".claude/hooks/ai-antipattern-guard.sh": {
       "sha256": "31585ed8740f6353a74a2e64eae7748c029feea8fb81c765febfb415d71ea44f"
@@ -14,10 +14,10 @@
       "sha256": "4b82b76072ceb6269a02cd387d52638371a3d6c890441525e8047b25767746a6"
     },
     ".claude/hooks/baseline-pin.sh": {
-      "sha256": "6fdca0bb755c1316e64f75cbb5ced67a7fb9f770cc9d02a5566394825072cad6"
+      "sha256": "0694e176543fd6fc567fc2a5ae579a8ba059fcf199bdb30a4dde93c1c5cc0646"
     },
     ".claude/hooks/bd-context-inject.sh": {
-      "sha256": "d7d0e81219345faf3df17f1226bbd56b2d56122695d5370beffea7055a8003d6"
+      "sha256": "29e96b1c3aaa0796817cab4a51eda5fd3fc20223dd8b3d8f99033638235b8b1a"
     },
     ".claude/hooks/bd-create-gate.sh": {
       "sha256": "14c72b51f841f3de7cdd0bf25f9d51db7f5a4b1be029c9edfe6df07038b4b482"
@@ -32,7 +32,7 @@
       "sha256": "43d7adfe06cc544bca268518b0654b8cd26778b56a9d91576f80ecc4c3e9b051"
     },
     ".claude/hooks/block-todowrite.sh": {
-      "sha256": "343c692fcac4b2e821c9bb2dbad715a952496044c0a9c838a62cb2bd58fc5c7d"
+      "sha256": "c57c192bcc12f195f3755fcb5092afa538b8dcd47f495f46b7f7ecf0dbbf7edd"
     },
     ".claude/hooks/citation-check.sh": {
       "sha256": "63e92bf7c1d1c5da39d9d725405e7df43839e0542b17b7ef207652f951dd0cf7"
@@ -41,7 +41,7 @@
       "sha256": "99d7fb4c3bfce86f62348ce94482fce70c2245abd4626c406c861d2cef0770a8"
     },
     ".claude/hooks/context-injector.sh": {
-      "sha256": "46691294a8a16a6ab277351823eb2d0bfb5336224685a83c5e9fe994c2923e71"
+      "sha256": "730f49b166d572320b69ebf02406904ec72f7559cde60ced0293b79e5070aedf"
     },
     ".claude/hooks/destructive-command-guard.sh": {
       "sha256": "b50940bc083292029959513d3657eb644e6b78dbb1b0055495529e8ca7329817"
@@ -67,17 +67,23 @@
     ".claude/hooks/pre-stop-verification.sh": {
       "sha256": "43ecfa22bb63bf64cce5c1f97d67d3f1c9f3dae807ebb2eb19415095b08aea11"
     },
+    ".claude/hooks/pre-tool-dispatch.sh": {
+      "sha256": "ed43d854249a5e084cccc1ad4723059cc7137986ebbc072ff71b6a54aed2e7df"
+    },
     ".claude/hooks/require-claim.sh": {
       "sha256": "ecb50b914dd2b21f7bbecf70256c2ca30d0a95fd64bc8abc7b1f00f47f144a9b"
     },
     ".claude/hooks/require-swarm.sh": {
       "sha256": "1308200dbbb1410873793b9c74459082fe2f217b64fea216ea4fe0a914728042"
     },
+    ".claude/hooks/run-quiet.sh": {
+      "sha256": "ea8612f1418b387f11d0573e9076732cfe54f939003ec19c29c62cd8c655b047"
+    },
     ".claude/hooks/statusline.sh": {
       "sha256": "617cb8831777ef21c936705ed3977d4a664292d5be33f275f35779eecac858df"
     },
     ".claude/hooks/swarm-digest.sh": {
-      "sha256": "58505eaa5f9bb6e989bcc368643feb80337e14211899d03ae28d434d6db3a0d0"
+      "sha256": "8599364535bd19fc23b0eb44cc170745af91448a6e35d54ea8248a8895c3dcb2"
     },
     ".claude/hooks/tdd-guard.sh": {
       "sha256": "092a611a40ae0cae2805a9d52fff0376011c87e33e6570dae6c8515d219da96d"
@@ -158,10 +164,10 @@
       "sha256": "4b82b76072ceb6269a02cd387d52638371a3d6c890441525e8047b25767746a6"
     },
     ".codex/hooks/baseline-pin.sh": {
-      "sha256": "6fdca0bb755c1316e64f75cbb5ced67a7fb9f770cc9d02a5566394825072cad6"
+      "sha256": "0694e176543fd6fc567fc2a5ae579a8ba059fcf199bdb30a4dde93c1c5cc0646"
     },
     ".codex/hooks/bd-context-inject.sh": {
-      "sha256": "d7d0e81219345faf3df17f1226bbd56b2d56122695d5370beffea7055a8003d6"
+      "sha256": "29e96b1c3aaa0796817cab4a51eda5fd3fc20223dd8b3d8f99033638235b8b1a"
     },
     ".codex/hooks/bd-create-gate.sh": {
       "sha256": "14c72b51f841f3de7cdd0bf25f9d51db7f5a4b1be029c9edfe6df07038b4b482"
@@ -176,7 +182,7 @@
       "sha256": "43d7adfe06cc544bca268518b0654b8cd26778b56a9d91576f80ecc4c3e9b051"
     },
     ".codex/hooks/block-todowrite.sh": {
-      "sha256": "343c692fcac4b2e821c9bb2dbad715a952496044c0a9c838a62cb2bd58fc5c7d"
+      "sha256": "c57c192bcc12f195f3755fcb5092afa538b8dcd47f495f46b7f7ecf0dbbf7edd"
     },
     ".codex/hooks/citation-check.sh": {
       "sha256": "63e92bf7c1d1c5da39d9d725405e7df43839e0542b17b7ef207652f951dd0cf7"
@@ -185,7 +191,7 @@
       "sha256": "99d7fb4c3bfce86f62348ce94482fce70c2245abd4626c406c861d2cef0770a8"
     },
     ".codex/hooks/context-injector.sh": {
-      "sha256": "46691294a8a16a6ab277351823eb2d0bfb5336224685a83c5e9fe994c2923e71"
+      "sha256": "730f49b166d572320b69ebf02406904ec72f7559cde60ced0293b79e5070aedf"
     },
     ".codex/hooks/destructive-command-guard.sh": {
       "sha256": "b50940bc083292029959513d3657eb644e6b78dbb1b0055495529e8ca7329817"
@@ -211,17 +217,23 @@
     ".codex/hooks/pre-stop-verification.sh": {
       "sha256": "43ecfa22bb63bf64cce5c1f97d67d3f1c9f3dae807ebb2eb19415095b08aea11"
     },
+    ".codex/hooks/pre-tool-dispatch.sh": {
+      "sha256": "ed43d854249a5e084cccc1ad4723059cc7137986ebbc072ff71b6a54aed2e7df"
+    },
     ".codex/hooks/require-claim.sh": {
       "sha256": "ecb50b914dd2b21f7bbecf70256c2ca30d0a95fd64bc8abc7b1f00f47f144a9b"
     },
     ".codex/hooks/require-swarm.sh": {
       "sha256": "1308200dbbb1410873793b9c74459082fe2f217b64fea216ea4fe0a914728042"
     },
+    ".codex/hooks/run-quiet.sh": {
+      "sha256": "ea8612f1418b387f11d0573e9076732cfe54f939003ec19c29c62cd8c655b047"
+    },
     ".codex/hooks/statusline.sh": {
       "sha256": "617cb8831777ef21c936705ed3977d4a664292d5be33f275f35779eecac858df"
     },
     ".codex/hooks/swarm-digest.sh": {
-      "sha256": "58505eaa5f9bb6e989bcc368643feb80337e14211899d03ae28d434d6db3a0d0"
+      "sha256": "8599364535bd19fc23b0eb44cc170745af91448a6e35d54ea8248a8895c3dcb2"
     },
     ".codex/hooks/tdd-guard.sh": {
       "sha256": "092a611a40ae0cae2805a9d52fff0376011c87e33e6570dae6c8515d219da96d"
@@ -239,7 +251,7 @@
       "sha256": "e369f4a7f3d3e53655985b4ab6d7b249a29c9be1f8fbe8afa3787d77c6422756"
     },
     ".codex/hooks.json": {
-      "sha256": "101b54f0f661c4da865d1840d4fec91ef4a735e558a84b4ffa67d925fb0aa798"
+      "sha256": "0001c3b12200d32f60af32954804d6500f533d2da58802e28a179355ba61fe7c"
     },
     ".opencode/plugins/dev-enforcer.ts": {
       "sha256": "574185addf7ef72ab93aeb9cfc1d3ee555051990156a259f3002a5ca0beca619"

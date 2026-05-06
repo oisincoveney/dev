@@ -174,16 +174,13 @@ describe('generateClaudeSettings', () => {
   })
 
   describe('all hardening hooks register unconditionally', () => {
-    it('always registers audit-log.sh on PreToolUse with no matcher', () => {
+    it('registers a single PreToolUse dispatcher with no matcher', () => {
       const settings = generateClaudeSettings(tsFrontendConfig)
-      const matcherless = (settings.hooks.PreToolUse ?? []).find((e) => e.matcher === undefined)
-      expect(matcherless?.hooks.some((h) => h.command.includes('audit-log.sh'))).toBe(true)
-    })
-
-    it('always registers docs-first.sh on PreToolUse Read|Glob', () => {
-      const settings = generateClaudeSettings(tsFrontendConfig)
-      const entry = (settings.hooks.PreToolUse ?? []).find((e) => e.matcher === 'Read|Glob')
-      expect(entry?.hooks.some((h) => h.command.includes('docs-first.sh'))).toBe(true)
+      expect(settings.hooks.PreToolUse).toHaveLength(1)
+      const [entry] = settings.hooks.PreToolUse ?? []
+      expect(entry?.matcher).toBeUndefined()
+      expect(entry?.hooks).toHaveLength(1)
+      expect(entry?.hooks[0]?.command).toContain('pre-tool-dispatch.sh')
     })
 
     it('always registers citation-check.sh on Stop', () => {
@@ -199,48 +196,48 @@ describe('generateClaudeSettings', () => {
       const ss = (settings.hooks.SessionStart ?? []).flatMap((e) =>
         e.hooks.map((h) => h.command),
       )
-      const bootstrapIdx = ss.findIndex((c) => c.includes('context-bootstrap.sh'))
-      const pinIdx = ss.findIndex((c) => c.includes('baseline-pin.sh'))
-      expect(bootstrapIdx).toBeGreaterThanOrEqual(0)
-      expect(pinIdx).toBeGreaterThan(bootstrapIdx)
+      const sessionStart = ss.join(' ')
+      expect(sessionStart.indexOf('context-bootstrap.sh')).toBeGreaterThanOrEqual(0)
+      expect(sessionStart.indexOf('baseline-pin.sh')).toBeGreaterThan(
+        sessionStart.indexOf('context-bootstrap.sh'),
+      )
 
       const stop = (settings.hooks.Stop ?? []).flatMap((e) => e.hooks.map((h) => h.command))
-      const preStopIdx = stop.findIndex((c) => c.includes('pre-stop-verification.sh'))
-      const compareIdx = stop.findIndex((c) => c.includes('baseline-compare.sh'))
-      const bannedIdx = stop.findIndex((c) => c.includes('banned-words-guard.sh'))
-      expect(preStopIdx).toBeGreaterThanOrEqual(0)
-      expect(compareIdx).toBeGreaterThan(preStopIdx)
-      expect(bannedIdx).toBeGreaterThan(compareIdx)
+      const stopCommand = stop.join(' ')
+      expect(stopCommand.indexOf('pre-stop-verification.sh')).toBeGreaterThanOrEqual(0)
+      expect(stopCommand.indexOf('baseline-compare.sh')).toBeGreaterThan(
+        stopCommand.indexOf('pre-stop-verification.sh'),
+      )
+      expect(stopCommand.indexOf('banned-words-guard.sh')).toBeGreaterThan(
+        stopCommand.indexOf('baseline-compare.sh'),
+      )
     })
 
     it('always registers ai-antipattern-guard.sh on PreToolUse + PostToolUse + Stop', () => {
       const settings = generateClaudeSettings(tsFrontendConfig)
-      const pre = JSON.stringify(settings.hooks.PreToolUse ?? [])
       const post = JSON.stringify(settings.hooks.PostToolUse ?? [])
       const stop = JSON.stringify(settings.hooks.Stop ?? [])
-      expect(pre).toContain('ai-antipattern-guard.sh')
+      const dispatch = readFileSync(
+        resolve(__dirname, '..', '..', 'templates/hooks/pre-tool-dispatch.sh'),
+        'utf8',
+      )
+      expect(dispatch).toContain('ai-antipattern-guard.sh')
       expect(post).toContain('ai-antipattern-guard.sh')
       expect(stop).toContain('ai-antipattern-guard.sh')
     })
 
-    it('registers require-claim.sh on PreToolUse Write|Edit when tools includes beads', () => {
+    it('enables beads policy in PreToolUse dispatcher when tools includes beads', () => {
       const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
       const settings = generateClaudeSettings(cfg)
-      const writeEntry = (settings.hooks.PreToolUse ?? []).find(
-        (e) => e.matcher === 'Write|Edit',
-      )
-      const commands = writeEntry?.hooks.map((h) => h.command) ?? []
-      expect(commands.some((c) => c.includes('require-claim.sh'))).toBe(true)
+      const command = JSON.stringify(settings.hooks.PreToolUse ?? [])
+      expect(command).toContain('OISIN_DEV_BEADS=1')
     })
 
     it('omits require-claim.sh when tools does NOT include beads', () => {
       const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
       const settings = generateClaudeSettings(cfg)
-      const writeEntry = (settings.hooks.PreToolUse ?? []).find(
-        (e) => e.matcher === 'Write|Edit',
-      )
-      const commands = writeEntry?.hooks.map((h) => h.command) ?? []
-      expect(commands.some((c) => c.includes('require-claim.sh'))).toBe(false)
+      const command = JSON.stringify(settings.hooks.PreToolUse ?? [])
+      expect(command).not.toContain('OISIN_DEV_BEADS=1')
     })
 
     it('registers context7 mcpServer when tools includes beads', () => {
@@ -265,6 +262,23 @@ describe('generateCodexHooks', () => {
     const json = JSON.stringify(codex)
     expect(json).toContain('.codex/hooks/')
     expect(json).not.toContain('.claude/hooks/')
+  })
+
+  it('runs hooks through the quiet runner', () => {
+    const codex = generateCodexHooks(tsFrontendConfig) as {
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>
+    }
+    const commands = Object.values(codex.hooks).flatMap((entries) =>
+      entries.flatMap((entry) => entry.hooks.map((hook) => hook.command)),
+    )
+
+    expect(commands.length).toBeGreaterThan(0)
+    expect(
+      commands.every((command) =>
+        command.includes('.codex/hooks/run-quiet.sh') ||
+        command.includes('.codex/hooks/pre-tool-dispatch.sh'),
+      ),
+    ).toBe(true)
   })
 })
 
@@ -601,17 +615,20 @@ describe('generateRules', () => {
     expect(body).not.toContain('top of ready queue:')
   })
 
-  it('registers require-swarm.sh on PreToolUse Write|Edit when beads is selected', () => {
+  it('enables require-swarm via PreToolUse dispatcher when beads is selected', () => {
     const settings = generateClaudeSettings(tsFrontendConfig)
-    const writeEntry = (settings.hooks.PreToolUse ?? []).find((e) => e.matcher === 'Write|Edit')
-    expect(writeEntry?.hooks.some((h) => h.command.includes('require-swarm.sh'))).toBe(true)
+    expect(JSON.stringify(settings.hooks.PreToolUse ?? [])).toContain('OISIN_DEV_BEADS=1')
+    const dispatch = readFileSync(
+      resolve(__dirname, '..', '..', 'templates/hooks/pre-tool-dispatch.sh'),
+      'utf8',
+    )
+    expect(dispatch).toContain('require-swarm.sh')
   })
 
-  it('omits require-swarm.sh when beads is not selected', () => {
+  it('disables beads policy in PreToolUse dispatcher when beads is not selected', () => {
     const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
     const settings = generateClaudeSettings(cfg)
-    const writeEntry = (settings.hooks.PreToolUse ?? []).find((e) => e.matcher === 'Write|Edit')
-    expect(writeEntry?.hooks.some((h) => h.command.includes('require-swarm.sh'))).toBe(false)
+    expect(JSON.stringify(settings.hooks.PreToolUse ?? [])).not.toContain('OISIN_DEV_BEADS=1')
   })
 
   it('lefthook commit-msg includes bd-ticket-ref step when beads is selected', () => {
@@ -913,7 +930,7 @@ describe('installAll update mode', () => {
     }
   })
 
-  it('preserves project-specific hooks within a matcher on update', async () => {
+  it('dedupes old generated PreToolUse matcher hooks on update', async () => {
     const dir = makeTmpProject({
       'package.json': JSON.stringify({ name: 'test', scripts: {} }),
     })
@@ -937,14 +954,11 @@ describe('installAll update mode', () => {
         isUpdate: true,
       })
       const merged = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'))
-      const writeEditEntry = merged.hooks.PreToolUse.find(
-        (e: { matcher?: string }) => e.matcher === 'Write|Edit',
+      const dispatchEntry = merged.hooks.PreToolUse.find(
+        (e: { matcher?: string }) => e.matcher === undefined,
       )
-      // Custom ts-style-guard preserved
-      expect(JSON.stringify(writeEditEntry)).toContain('ts-style-guard.sh')
-      // Generated hooks also added
-      expect(JSON.stringify(writeEditEntry)).toContain('import-validator.sh')
-      expect(JSON.stringify(writeEditEntry)).toContain('ai-antipattern-guard.sh')
+      expect(merged.hooks.PreToolUse).toHaveLength(1)
+      expect(JSON.stringify(dispatchEntry)).toContain('pre-tool-dispatch.sh')
     } finally {
       rmSync(dir, { recursive: true })
     }

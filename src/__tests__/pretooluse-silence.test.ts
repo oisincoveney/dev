@@ -5,7 +5,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -38,7 +38,7 @@ function runHook(script: string, input: Record<string, unknown>): HookResult {
 }
 
 describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
-  let dir: string
+  let dir = ''
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'pretooluse-silence-'))
@@ -127,5 +127,41 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
     })
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('TodoWrite is blocked')
+  })
+
+  it('quiet runner hides infrastructure failures and logs them', () => {
+    const failing = join(dir, 'fails.sh')
+    writeFileSync(failing, '#!/usr/bin/env bash\necho noisy-out\necho noisy-err >&2\nexit 1\n')
+    chmodSync(failing, 0o755)
+
+    const result = spawnSync('bash', [join(HOOKS_DIR, 'run-quiet.sh'), failing], {
+      cwd: dir,
+      encoding: 'utf8',
+    })
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toBe('')
+
+    const logPath = join(dir, '.claude', 'hook-errors.log')
+    expect(existsSync(logPath)).toBe(true)
+    const log = readFileSync(logPath, 'utf8')
+    expect(log).toContain('status=1')
+    expect(log).toContain('noisy-out')
+    expect(log).toContain('noisy-err')
+  })
+
+  it('quiet runner preserves policy blocks', () => {
+    const blocking = join(dir, 'blocks.sh')
+    writeFileSync(blocking, '#!/usr/bin/env bash\necho block-msg >&2\nexit 2\n')
+    chmodSync(blocking, 0o755)
+
+    const result = spawnSync('bash', [join(HOOKS_DIR, 'run-quiet.sh'), blocking], {
+      cwd: dir,
+      encoding: 'utf8',
+    })
+
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('block-msg')
   })
 })

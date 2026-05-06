@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
 import {
@@ -278,10 +278,16 @@ describe('installAll', () => {
         Stop: Array<{ hooks: Array<{ command: string }> }>
       }
     }
-    const bashMatcher = settings.hooks.PreToolUse.find((e) => e.matcher === 'Bash')
-    expect(bashMatcher).toBeDefined()
-    const cmds = (bashMatcher?.hooks ?? []).map((h) => h.command)
-    const idx = (name: string) => cmds.findIndex((c) => c.includes(name))
+    const dispatchEntry = settings.hooks.PreToolUse.find((e) => e.matcher === undefined)
+    expect(dispatchEntry).toBeDefined()
+    const dispatchCmds = (dispatchEntry?.hooks ?? []).map((h) => h.command)
+    expect(dispatchCmds.some((c) => c.includes('pre-tool-dispatch.sh'))).toBe(true)
+
+    const dispatchScript = readFileSync(
+      resolve(__dirname, '..', '..', 'templates/hooks/pre-tool-dispatch.sh'),
+      'utf8',
+    )
+    const idx = (name: string) => dispatchScript.indexOf(name)
 
     // Required ordering: destructive → bd-remember-protect → plan-approval-guard → bd-create-gate → block-coauthor.
     // The generated settings call the installed shell script directly so the

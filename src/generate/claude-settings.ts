@@ -49,10 +49,28 @@ interface ClaudeSettings {
 // the rest of the harness uses, regardless of how the user installed beads.
 
 function hook(script: string, timeout?: number): HookCommand {
+  return hookGroup([script], timeout)
+}
+
+function hookGroup(scripts: string[], timeout?: number): HookCommand {
+  const args = scripts.map((script) => `.claude/hooks/${script}`).join(' ')
   return {
     type: 'command',
-    command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.claude/hooks/bin:$PATH" .claude/hooks/${script}`,
+    command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.claude/hooks/bin:$PATH" .claude/hooks/run-quiet.sh ${args}`,
     ...(timeout !== undefined ? { timeout } : {}),
+  }
+}
+
+function preToolDispatchHook(beadsEnabled: boolean, hasTypescript: boolean): HookCommand {
+  const env = [
+    beadsEnabled ? 'OISIN_DEV_BEADS=1' : '',
+    hasTypescript ? 'OISIN_DEV_TYPESCRIPT=1' : '',
+  ].filter(Boolean).join(' ')
+  const prefix = env.length > 0 ? `${env} ` : ''
+  return {
+    type: 'command',
+    command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.claude/hooks/bin:$PATH" ${prefix}.claude/hooks/pre-tool-dispatch.sh`,
+    timeout: 30,
   }
 }
 
@@ -79,7 +97,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
     hooks: {
       SessionStart: [
         {
-          hooks: [hook('context-bootstrap.sh', 10), hook('baseline-pin.sh', 120)],
+          hooks: [hookGroup(['context-bootstrap.sh', 'baseline-pin.sh'], 120)],
         },
       ],
       UserPromptSubmit: [
@@ -91,61 +109,31 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
       ],
       PreToolUse: [
         {
-          hooks: [hook('audit-log.sh', 5)],
-        },
-        {
-          matcher: 'Read|Glob',
-          hooks: [hook('docs-first.sh', 5)],
-        },
-        {
-          matcher: 'Write|Edit',
-          hooks: [
-            hook('worktree-write-guard.sh', 5),
-            ...(beadsEnabled
-              ? [hook('require-claim.sh', 5), hook('require-swarm.sh', 5)]
-              : []),
-            ...(hasTypescript
-              ? [hook('ts-style-guard.sh', 30), hook('import-validator.sh', 10)]
-              : []),
-            hook('ai-antipattern-guard.sh', 10),
-          ],
-        },
-        {
-          matcher: 'Bash',
-          hooks: [
-            hook('destructive-command-guard.sh', 5),
-            ...(beadsEnabled
-              ? [
-                  hook('bd-remember-protect.sh', 5),
-                  hook('plan-approval-guard.sh', 10),
-                  hook('bd-create-gate.sh', 10),
-                ]
-              : []),
-            hook('block-coauthor.sh', 5),
-          ],
-        },
-        {
-          matcher: 'TodoWrite',
-          hooks: [hook('block-todowrite.sh', 5)],
+          hooks: [preToolDispatchHook(beadsEnabled, hasTypescript)],
         },
       ],
       PostToolUse: [
         {
           matcher: 'Write|Edit',
-          hooks: [hook('post-edit-check.sh', 60), hook('ai-antipattern-guard.sh', 10)],
+          hooks: [hookGroup(['post-edit-check.sh', 'ai-antipattern-guard.sh'], 60)],
         },
       ],
       Stop: [
         {
           hooks: [
-            hook('worktree-stop-guard.sh', 10),
-            ...(beadsEnabled ? [hook('swarm-digest.sh', 10)] : []),
-            hook('pre-stop-verification.sh', 30),
-            hook('verifier-skill-guard.sh', 30),
-            hook('baseline-compare.sh', 120),
-            hook('citation-check.sh', 10),
-            hook('ai-antipattern-guard.sh', 10),
-            hook('banned-words-guard.sh', 10),
+            hookGroup(
+              [
+                'worktree-stop-guard.sh',
+                ...(beadsEnabled ? ['swarm-digest.sh'] : []),
+                'pre-stop-verification.sh',
+                'verifier-skill-guard.sh',
+                'baseline-compare.sh',
+                'citation-check.sh',
+                'ai-antipattern-guard.sh',
+                'banned-words-guard.sh',
+              ],
+              120,
+            ),
           ],
         },
       ],

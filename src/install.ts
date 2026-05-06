@@ -106,6 +106,7 @@ export async function installAll(
     }
 
     appendToGitignore(cwd, '.claude/audit.jsonl')
+    appendToGitignore(cwd, '.claude/hook-errors.log')
   }
   if (config.tools.includes('beads')) {
     appendToGitignore(cwd, '.beads/issues.jsonl')
@@ -113,6 +114,7 @@ export async function installAll(
   if (config.targets.includes('codex')) {
     chmodHooksDir(join(cwd, '.codex', 'hooks'))
     log('.codex/hooks/ (chmod +x)')
+    appendToGitignore(cwd, '.codex/hook-errors.log')
   }
 
   // CLAUDE.md and AGENTS.md are hybrid (managed block + user content). They
@@ -775,6 +777,10 @@ interface RunOptions {
   env?: NodeJS.ProcessEnv
 }
 
+interface CaptureRunOptions extends RunOptions {
+  input?: string
+}
+
 export function runCommand(
   cmd: string,
   args: ReadonlyArray<string>,
@@ -806,13 +812,14 @@ export function runCommand(
 function runCommandCapture(
   cmd: string,
   args: ReadonlyArray<string>,
-  opts: RunOptions,
+  opts: CaptureRunOptions,
 ): CaptureRunResult {
   const result = spawnSync(cmd, args, {
     cwd: opts.cwd,
     env: opts.env ?? process.env,
     encoding: 'utf8',
     stdio: 'pipe',
+    input: opts.input,
     timeout: opts.timeoutMs,
     killSignal: 'SIGKILL',
   })
@@ -1093,14 +1100,13 @@ export function seedConstitutionDecisions(
   if (!commandExists('bd')) return { ok: false, error: 'bd not in PATH' }
   if (!existsSync(join(cwd, '.beads'))) return { ok: false, error: '.beads/ does not exist' }
 
-  const list = spawnSync('bd', ['list', '--type=decision', '--status', 'all', '--json'], {
+  const list = runCommandCapture('bd', ['list', '--type=decision', '--status', 'all', '--json'], {
     cwd,
-    encoding: 'utf8',
-    timeout: 10_000,
+    timeoutMs: 10_000,
   })
 
   const existingTitles = new Set<string>()
-  if (list.status === 0 && list.stdout) {
+  if (list.ok && list.stdout) {
     try {
       const issues = JSON.parse(list.stdout) as Array<{ title?: string }>
       for (const issue of issues) {
@@ -1137,7 +1143,7 @@ export function seedConstitutionDecisions(
   let created = 0
   for (const decision of decisions) {
     if (existingTitles.has(decision.title)) continue
-    const create = spawnSync(
+    const create = runCommandCapture(
       'bd',
       [
         'create',
@@ -1149,18 +1155,17 @@ export function seedConstitutionDecisions(
       ],
       {
         cwd,
-        encoding: 'utf8',
-        timeout: 10_000,
+        timeoutMs: 10_000,
         input: decision.body,
       },
     )
-    if (create.status !== 0) {
+    if (!create.ok) {
       return {
         ok: false,
-        error: `Failed to create decision: ${create.stderr ?? 'unknown error'}`,
+        error: `Failed to create decision: ${runFailureMessage(create)}`,
       }
     }
-    const id = (create.stdout ?? '').trim()
+    const id = create.stdout.trim()
     if (id) {
       spawnSync('bd', ['update', id, '--status', 'pinned'], {
         cwd,
@@ -1386,6 +1391,23 @@ const RETIRED_HOOK_COMMANDS_BY_EVENT: Record<string, Set<string>> = {
   PreCompact: new Set(['bd prime']),
 }
 
+const PRE_TOOL_DISPATCHED_HOOKS = new Set([
+  'audit-log.sh',
+  'docs-first.sh',
+  'worktree-write-guard.sh',
+  'require-claim.sh',
+  'require-swarm.sh',
+  'ts-style-guard.sh',
+  'import-validator.sh',
+  'ai-antipattern-guard.sh',
+  'destructive-command-guard.sh',
+  'bd-remember-protect.sh',
+  'plan-approval-guard.sh',
+  'bd-create-gate.sh',
+  'block-coauthor.sh',
+  'block-todowrite.sh',
+])
+
 /** Extracts a stable handler key from a hook command — the value used to
  * dedupe across merges. For legacy `.sh` hooks this is the script filename
  * minus the extension. For TS-native dispatched hooks (`oisin-dev hook foo`)
@@ -1397,8 +1419,19 @@ const RETIRED_HOOK_COMMANDS_BY_EVENT: Record<string, Set<string>> = {
 function extractHookScript(command: string): string | null {
   const dispatchMatch = command.match(/oisin-dev hook ([a-z0-9-]+)/)
   if (dispatchMatch) return `${dispatchMatch[1]}.sh`
-  const scriptMatch = command.match(/\.claude\/hooks\/([^\s'"]+\.sh)/)
-  return scriptMatch ? scriptMatch[1] : null
+  const scriptMatches = hookScripts(command)
+  const lastScript = scriptMatches.at(-1)
+  return lastScript ?? null
+}
+
+function hookScripts(command: string): string[] {
+  const scripts = [...command.matchAll(/\.(?:claude|codex)\/hooks\/([^\s'"]+\.sh)/g)]
+    .map((match) => match[1])
+    .filter((script) => script !== 'run-quiet.sh')
+  if (scripts.includes('pre-tool-dispatch.sh')) {
+    return [...new Set([...scripts, ...PRE_TOOL_DISPATCHED_HOOKS])]
+  }
+  return scripts
 }
 
 function pruneRetiredHooks(hooks: Record<string, HookEntry[]>): Record<string, HookEntry[]> {
@@ -1421,6 +1454,23 @@ function pruneRetiredHooks(hooks: Record<string, HookEntry[]>): Record<string, H
     }
   }
   return result
+}
+
+function compactPreToolDispatch(entries: HookEntry[]): HookEntry[] {
+  const hasDispatcher = entries.some((entry) =>
+    entry.hooks.some((hook) => hookScripts(hook.command).includes('pre-tool-dispatch.sh')),
+  )
+  if (!hasDispatcher) return entries
+  return entries
+    .map((entry) => ({
+      ...entry,
+      hooks: entry.hooks.filter((hook) => {
+        const scripts = hookScripts(hook.command)
+        if (scripts.includes('pre-tool-dispatch.sh')) return true
+        return !scripts.some((script) => PRE_TOOL_DISPATCHED_HOOKS.has(script))
+      }),
+    }))
+    .filter((entry) => entry.hooks.length > 0)
 }
 
 export function mergeClaudeSettings(
@@ -1450,6 +1500,13 @@ export function mergeClaudeSettings(
         const updatedHooks = [...result[existingIdx].hooks]
         for (const genHook of genEntry.hooks) {
           const genScript = extractHookScript(genHook.command)
+          const genScripts = new Set(hookScripts(genHook.command))
+          for (let i = updatedHooks.length - 1; i >= 0; i--) {
+            const existingScript = extractHookScript(updatedHooks[i].command)
+            if (existingScript !== null && genScripts.has(existingScript)) {
+              updatedHooks.splice(i, 1)
+            }
+          }
           const existingIdx2 = genScript
             ? updatedHooks.findIndex((h) => extractHookScript(h.command) === genScript)
             : updatedHooks.findIndex((h) => h.command === genHook.command)
@@ -1473,7 +1530,7 @@ export function mergeClaudeSettings(
         }
       }
     }
-    mergedHooks[event] = result
+    mergedHooks[event] = event === 'PreToolUse' ? compactPreToolDispatch(result) : result
   }
   return { ...existing, ...generated, hooks: mergedHooks }
 }
@@ -1524,6 +1581,13 @@ function writeOrMergeSettings(
         const updatedHooks = [...result[existingIdx].hooks]
         for (const genHook of genEntry.hooks) {
           const genScript = extractHookScript(genHook.command)
+          const genScripts = new Set(hookScripts(genHook.command))
+          for (let i = updatedHooks.length - 1; i >= 0; i--) {
+            const existingScript = extractHookScript(updatedHooks[i].command)
+            if (existingScript !== null && genScripts.has(existingScript)) {
+              updatedHooks.splice(i, 1)
+            }
+          }
           const existingIdx2 = genScript
             ? updatedHooks.findIndex((h) => extractHookScript(h.command) === genScript)
             : updatedHooks.findIndex((h) => h.command === genHook.command)
@@ -1546,7 +1610,7 @@ function writeOrMergeSettings(
         }
       }
     }
-    mergedHooks[event] = result
+    mergedHooks[event] = event === 'PreToolUse' ? compactPreToolDispatch(result) : result
   }
 
   const merged = { ...existing, ...generated, hooks: mergedHooks }

@@ -6,3 +6,5 @@ dist
 *.db
 .beads-credential-key
 .claude/audit.jsonl
+.claude/hook-errors.log
+.codex/hook-errors.log
