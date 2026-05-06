@@ -12,5 +12,10 @@ if [[ -z "$branch" ]]; then
   exit 0
 fi
 
-printf '<turn-context>Branch: %s</turn-context>\n' "$branch"
+jq -n --arg ctx "<turn-context>Branch: $branch</turn-context>" '{
+  hookSpecificOutput: {
+    hookEventName: "UserPromptSubmit",
+    additionalContext: $ctx
+  }
+}'
 exit 0

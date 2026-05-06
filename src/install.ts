@@ -139,6 +139,9 @@ export async function installAll(
   if (config.targets.includes('claude')) {
     installGroundedHooks(cwd, log, warn)
   }
+  if (config.targets.includes('codex')) {
+    pruneGroundedCodexHooks(join(homedir(), '.codex', 'hooks.json'), log, warn)
+  }
 
   if (config.tools.includes('beads')) {
     const cliResult = installBeadsCli(cwd)
@@ -578,6 +581,17 @@ interface ClaudeSettings {
   [key: string]: unknown
 }
 
+interface GroundedHookEntry {
+  hooks?: Array<{ command?: string; _tag?: string }>
+  _tag?: string
+  [key: string]: unknown
+}
+
+interface HookConfig {
+  hooks?: Record<string, GroundedHookEntry[]>
+  [key: string]: unknown
+}
+
 export function pruneScopeGuardHook(
   settingsPath: string,
   log: (msg: string) => void,
@@ -600,6 +614,54 @@ export function pruneScopeGuardHook(
   settings.hooks = { ...settings.hooks, PreToolUse: filtered }
   writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
   log('removed scope-guard from ~/.claude/settings.json')
+  return true
+}
+
+/**
+ * Removes @pinperepette/grounded hooks from ~/.codex/hooks.json.
+ *
+ * grounded currently emits Claude-style hook payload fields such as
+ * `decision: "approve"` and `suppressOutput`, which Codex rejects. Keep
+ * grounded available for Claude, but never leave its hooks installed in Codex.
+ */
+export function pruneGroundedCodexHooks(
+  hooksPath: string,
+  log: (msg: string) => void,
+  warn: (msg: string) => void,
+): boolean {
+  if (!existsSync(hooksPath)) return false
+  let config: HookConfig
+  try {
+    config = JSON.parse(readFileSync(hooksPath, 'utf8')) as HookConfig
+  } catch (e) {
+    warn(`codex grounded prune: ${hooksPath} is not valid JSON: ${(e as Error).message}`)
+    return false
+  }
+
+  const hooks = config.hooks
+  if (!hooks) return false
+
+  let removed = 0
+  const filteredHooks: Record<string, GroundedHookEntry[]> = {}
+  for (const [event, entries] of Object.entries(hooks)) {
+    const kept = entries.filter((entry) => {
+      const isGrounded =
+        entry._tag === '@pinperepette/grounded' ||
+        (entry.hooks ?? []).some(
+          (hook) =>
+            hook._tag === '@pinperepette/grounded' ||
+            hook.command?.includes('@pinperepette/grounded') === true,
+        )
+      if (isGrounded) removed += 1
+      return !isGrounded
+    })
+    if (kept.length > 0) filteredHooks[event] = kept
+  }
+
+  if (removed === 0) return false
+  config.hooks = filteredHooks
+  writeFileSync(hooksPath, `${JSON.stringify(config, null, 2)}\n`)
+  log(`removed ${removed} grounded hook(s) from ~/.codex/hooks.json`)
   return true
 }
 
@@ -1473,6 +1535,21 @@ function compactPreToolDispatch(entries: HookEntry[]): HookEntry[] {
     .filter((entry) => entry.hooks.length > 0)
 }
 
+function compactUserPromptContext(entries: HookEntry[]): HookEntry[] {
+  const hasBdContext = entries.some((entry) =>
+    entry.hooks.some((hook) => hookScripts(hook.command).includes('bd-context-inject.sh')),
+  )
+  if (!hasBdContext) return entries
+  return entries
+    .map((entry) => ({
+      ...entry,
+      hooks: entry.hooks.filter(
+        (hook) => !hookScripts(hook.command).includes('context-injector.sh'),
+      ),
+    }))
+    .filter((entry) => entry.hooks.length > 0)
+}
+
 export function mergeClaudeSettings(
   existing: Record<string, unknown>,
   generated: Record<string, unknown>,
@@ -1530,7 +1607,12 @@ export function mergeClaudeSettings(
         }
       }
     }
-    mergedHooks[event] = event === 'PreToolUse' ? compactPreToolDispatch(result) : result
+    mergedHooks[event] =
+      event === 'PreToolUse'
+        ? compactPreToolDispatch(result)
+        : event === 'UserPromptSubmit'
+          ? compactUserPromptContext(result)
+          : result
   }
   return { ...existing, ...generated, hooks: mergedHooks }
 }
@@ -1610,7 +1692,12 @@ function writeOrMergeSettings(
         }
       }
     }
-    mergedHooks[event] = event === 'PreToolUse' ? compactPreToolDispatch(result) : result
+    mergedHooks[event] =
+      event === 'PreToolUse'
+        ? compactPreToolDispatch(result)
+        : event === 'UserPromptSubmit'
+          ? compactUserPromptContext(result)
+          : result
   }
 
   const merged = { ...existing, ...generated, hooks: mergedHooks }

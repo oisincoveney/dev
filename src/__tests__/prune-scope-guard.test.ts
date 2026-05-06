@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { pruneScopeGuardHook } from '../install.js'
+import { pruneGroundedCodexHooks, pruneScopeGuardHook } from '../install.js'
 
 const SCOPE_GUARD_ENTRY = {
   matcher: 'Edit|Write|MultiEdit|Bash',
@@ -109,5 +109,81 @@ describe('pruneScopeGuardHook', () => {
     expect(logs).toEqual([])
     expect(warns).toHaveLength(1)
     expect(warns[0]).toContain('not valid JSON')
+  })
+})
+
+describe('pruneGroundedCodexHooks', () => {
+  let dir: string
+  let path: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'prune-grounded-codex-'))
+    path = join(dir, 'hooks.json')
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('removes grounded hooks from every event while preserving project hooks', () => {
+    const projectHook = {
+      hooks: [{ type: 'command', command: '.codex/hooks/bd-context-inject.sh' }],
+    }
+    writeFileSync(
+      path,
+      JSON.stringify({
+        hooks: {
+          UserPromptSubmit: [
+            {
+              _tag: '@pinperepette/grounded',
+              hooks: [
+                {
+                  command:
+                    'node "/Users/o/.bun/install/global/node_modules/@pinperepette/grounded/dist/hooks/prompt-inject.js"',
+                },
+              ],
+            },
+            projectHook,
+          ],
+          PreToolUse: [EDIT_GUARD_ENTRY],
+          PostToolUse: [
+            {
+              hooks: [
+                {
+                  _tag: '@pinperepette/grounded',
+                  command: 'node "/x/@pinperepette/grounded/dist/hooks/read-tracker.js"',
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    )
+    const logs: string[] = []
+    const warns: string[] = []
+
+    const pruned = pruneGroundedCodexHooks(path, collect(logs), collect(warns))
+
+    expect(pruned).toBe(true)
+    const result = JSON.parse(readFileSync(path, 'utf8'))
+    expect(result.hooks.UserPromptSubmit).toEqual([projectHook])
+    expect(result.hooks.PreToolUse).toBeUndefined()
+    expect(result.hooks.PostToolUse).toBeUndefined()
+    expect(logs).toEqual(['removed 3 grounded hook(s) from ~/.codex/hooks.json'])
+    expect(warns).toEqual([])
+  })
+
+  it('is a no-op when no grounded hooks are present', () => {
+    const original = { hooks: { UserPromptSubmit: [{ hooks: [{ command: 'echo ok' }] }] } }
+    writeFileSync(path, JSON.stringify(original))
+    const logs: string[] = []
+    const warns: string[] = []
+
+    const pruned = pruneGroundedCodexHooks(path, collect(logs), collect(warns))
+
+    expect(pruned).toBe(false)
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(original)
+    expect(logs).toEqual([])
+    expect(warns).toEqual([])
   })
 })

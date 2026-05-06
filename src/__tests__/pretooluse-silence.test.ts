@@ -164,4 +164,20 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('block-msg')
   })
+
+  it('context injector emits valid UserPromptSubmit JSON', () => {
+    spawnSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' })
+    const result = spawnSync('bash', [join(HOOKS_DIR, 'context-injector.sh')], {
+      cwd: dir,
+      input: JSON.stringify({ cwd: dir }),
+      encoding: 'utf8',
+    })
+
+    expect(result.status).toBe(0)
+    const parsed = JSON.parse(result.stdout) as {
+      hookSpecificOutput?: { hookEventName?: string; additionalContext?: string }
+    }
+    expect(parsed.hookSpecificOutput?.hookEventName).toBe('UserPromptSubmit')
+    expect(parsed.hookSpecificOutput?.additionalContext).toContain('<turn-context>Branch:')
+  })
 })
