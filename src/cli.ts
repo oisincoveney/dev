@@ -4,6 +4,7 @@ import { runBeadsMigrate } from './beads-migrate.js'
 import { runHookDispatcher } from './hooks/dispatch.js'
 import { runInit } from './init.js'
 import { runSetCommands } from './set-commands.js'
+import { runTicketsUi } from './tickets-ui.js'
 import { runUpdate } from './update.js'
 
 const COMMANDS: Record<string, string> = {
@@ -12,6 +13,7 @@ const COMMANDS: Record<string, string> = {
   'set-commands':   'Fill in or update dev/build/test/typecheck/lint/format commands',
   'accept-lefthook': "Mark the current lefthook.yml as canonical (clears manifest drift warning)",
   'beads-migrate':   'Adopt repo-backed Dolt sync for Beads without Git-tracking issues.jsonl',
+  tickets:           'Launch the local Beads UI for the current workspace',
   hook:             'Run a TS-native hook handler (internal — invoked by Claude Code)',
   help:             'Show this help message',
 }
@@ -56,6 +58,9 @@ async function main(): Promise<void> {
       break
     case 'beads-migrate':
       runBeadsMigrate()
+      break
+    case 'tickets':
+      runTicketsUi(process.argv.slice(3))
       break
     case 'hook': {
       const handlerName = process.argv[3]

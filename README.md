@@ -97,6 +97,14 @@ bd dolt pull
 
 Shared ticket state lives in `refs/dolt/data` in the same Git repo. Normal code commits should not include `.beads/issues.jsonl`.
 
+### `oisin-dev tickets`
+
+Launches the local Beads web UI for the current workspace by delegating to [`beads-ui`](https://github.com/mantoni/beads-ui). It works from non-JavaScript projects too; no `package.json` or project-local npm install is required.
+
+```sh
+bunx @oisincoveney/dev tickets --open
+```
+
 ## Generated files
 
 ### Claude Code (`.claude/`)
