@@ -569,6 +569,7 @@ describe('generateRules', () => {
     const ups = settings.hooks.UserPromptSubmit ?? []
     const commands = ups.flatMap((e) => e.hooks.map((h) => h.command))
     expect(commands.some((c) => c.includes('bd-context-inject.sh'))).toBe(true)
+    expect(commands.some((c) => c.includes('context-injector.sh'))).toBe(false)
   })
 
   it('omits bd-context-inject.sh when beads is not selected', () => {
@@ -577,6 +578,27 @@ describe('generateRules', () => {
     const ups = settings.hooks.UserPromptSubmit ?? []
     const commands = ups.flatMap((e) => e.hooks.map((h) => h.command))
     expect(commands.some((c) => c.includes('bd-context-inject.sh'))).toBe(false)
+    expect(commands.some((c) => c.includes('context-injector.sh'))).toBe(true)
+  })
+
+  it('codex uses the compact beads context hook without duplicate prompt context', () => {
+    const codex = generateCodexHooks(tsFrontendConfig) as {
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>
+    }
+    const commands = codex.hooks.UserPromptSubmit.flatMap((e) => e.hooks.map((h) => h.command))
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toContain('.codex/hooks/bd-context-inject.sh')
+  })
+
+  it('bd context hook template stays compact', () => {
+    const body = readFileSync(
+      resolve(__dirname, '..', '..', 'templates/hooks/bd-context-inject.sh'),
+      'utf8',
+    )
+    expect(body).toContain('<turn-context>')
+    expect(body).toContain('Claimed:')
+    expect(body).not.toContain('bd state:')
+    expect(body).not.toContain('top of ready queue:')
   })
 
   it('registers require-swarm.sh on PreToolUse Write|Edit when beads is selected', () => {

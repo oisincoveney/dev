@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook — injects current bd state (in_progress claim + top of
-# ready queue) into the agent's context as additionalContext. Never blocks.
+# UserPromptSubmit hook — injects compact bd state into the agent's context.
+# Never blocks.
 #
 # Silent no-op when bd is missing or .beads/ does not exist.
 set -uo pipefail
@@ -13,26 +13,32 @@ command -v bd >/dev/null 2>&1 || exit 0
 
 cd "$CWD"
 
-CLAIMED=$(bd list --status in_progress --json 2>/dev/null | jq -r '.[] | "  - \(.id) [\(.priority // "P?")] \(.title)"' 2>/dev/null || echo "")
+BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+CLAIMED=$(
+  bd list --status in_progress --json 2>/dev/null \
+    | jq -r '[.[] | "\(.id) [\(.priority // "P?")] \(.title)"] | join("; ")' 2>/dev/null \
+    || echo ""
+)
 
-READY=$(bd ready --json 2>/dev/null | jq -r '.[0:3] | .[] | "  - \(.id) [\(.priority // "P?")] \(.title)"' 2>/dev/null || echo "")
-
-CONTEXT="bd state:"
 if [[ -n "$CLAIMED" ]]; then
-  CONTEXT="$CONTEXT
-in_progress claim(s):
-$CLAIMED"
+  STATE="Claimed: $CLAIMED"
 else
-  CONTEXT="$CONTEXT
-in_progress: (none claimed)"
+  READY=$(
+    bd ready --json 2>/dev/null \
+      | jq -r '.[0] | if . == null then "" else "Ready: \(.id) [\(.priority // "P?")] \(.title)" end' 2>/dev/null \
+      || echo ""
+  )
+  if [[ -n "$READY" ]]; then
+    STATE="$READY"
+  else
+    STATE="No claimed bd issue"
+  fi
 fi
-if [[ -n "$READY" ]]; then
-  CONTEXT="$CONTEXT
-top of ready queue:
-$READY"
+
+if [[ -n "$BRANCH" ]]; then
+  CONTEXT="<turn-context>Branch: $BRANCH | $STATE</turn-context>"
 else
-  CONTEXT="$CONTEXT
-ready queue: (empty)"
+  CONTEXT="<turn-context>$STATE</turn-context>"
 fi
 
 jq -n --arg ctx "$CONTEXT" '{
