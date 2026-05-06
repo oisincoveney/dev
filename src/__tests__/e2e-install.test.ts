@@ -393,10 +393,6 @@ just rules, no session completion
     for (const entries of Object.values(codex.hooks)) {
       for (const entry of entries) {
         for (const hook of entry.hooks) {
-          // Migrated hooks invoke the TS dispatcher (`oisin-dev hook <name>`)
-          // and have no .codex/hooks/X.sh on disk — skip the path check for
-          // those.
-          if (/oisin-dev hook /.test(hook.command)) continue
           const match = hook.command.match(/\.codex\/hooks\/([^\s'"]+\.sh)/)
           expect(match).not.toBeNull()
           if (match) {

@@ -56,14 +56,6 @@ function hook(script: string, timeout?: number): HookCommand {
   }
 }
 
-function dispatchedHook(name: string, timeout?: number): HookCommand {
-  return {
-    type: 'command',
-    command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.claude/hooks/bin:$PATH" oisin-dev hook ${name}`,
-    ...(timeout !== undefined ? { timeout } : {}),
-  }
-}
-
 export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
   const verificationCommands = [
     config.commands.typecheck,
@@ -129,7 +121,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
                   hook('bd-create-gate.sh', 10),
                 ]
               : []),
-            dispatchedHook('block-coauthor', 5),
+            hook('block-coauthor.sh', 5),
           ],
         },
         {

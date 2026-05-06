@@ -284,13 +284,13 @@ describe('installAll', () => {
     const idx = (name: string) => cmds.findIndex((c) => c.includes(name))
 
     // Required ordering: destructive → bd-remember-protect → plan-approval-guard → bd-create-gate → block-coauthor.
-    // block-coauthor was migrated to the TS dispatcher in 0t6 — it appears as
-    // `oisin-dev hook block-coauthor` instead of `block-coauthor.sh`.
+    // The generated settings call the installed shell script directly so the
+    // hook does not depend on a global `oisin-dev` binary being on PATH.
     expect(idx('destructive-command-guard.sh')).toBeGreaterThanOrEqual(0)
     expect(idx('bd-remember-protect.sh')).toBeGreaterThan(idx('destructive-command-guard.sh'))
     expect(idx('plan-approval-guard.sh')).toBeGreaterThan(idx('bd-remember-protect.sh'))
     expect(idx('bd-create-gate.sh')).toBeGreaterThan(idx('plan-approval-guard.sh'))
-    expect(idx('oisin-dev hook block-coauthor')).toBeGreaterThan(idx('bd-create-gate.sh'))
+    expect(idx('block-coauthor.sh')).toBeGreaterThan(idx('bd-create-gate.sh'))
 
     // swarm-digest.sh registered on Stop
     const stopCmds = settings.hooks.Stop.flatMap((e) => e.hooks.map((h) => h.command))
