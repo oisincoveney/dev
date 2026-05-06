@@ -76,6 +76,10 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
       { cwd: dir, tool_input: { command: 'git status --short' } },
     ],
     [
+      'block-todowrite.sh',
+      { cwd: dir, tool_name: 'Read', tool_input: { file_path: 'README.md' } },
+    ],
+    [
       'worktree-write-guard.sh',
       { cwd: dir, tool_input: { file_path: 'src/example.ts' } },
     ],
@@ -113,5 +117,15 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
     })
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('BLOCKED')
+  })
+
+  it('still blocks TodoWrite', () => {
+    const result = runHook('block-todowrite.sh', {
+      cwd: dir,
+      tool_name: 'TodoWrite',
+      tool_input: { todos: [] },
+    })
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('TodoWrite is blocked')
   })
 })
