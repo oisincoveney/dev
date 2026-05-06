@@ -390,7 +390,6 @@ just rules, no session completion
       >
     }
 
-    expect(Object.keys(codex.hooks)).toEqual(['PreToolUse'])
     for (const entries of Object.values(codex.hooks)) {
       for (const entry of entries) {
         for (const hook of entry.hooks) {

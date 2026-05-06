@@ -1,49 +1,26 @@
 /**
- * Generates .codex/hooks.json.
- *
- * Codex hook output is surfaced more aggressively than Claude's, and its hook
- * event/matcher behavior is not a 1:1 match for Claude Code. Keep this set
- * intentionally tiny: only hard Bash safety hooks that are silent on allow
- * paths. Project context, Stop verification, and post-edit checks stay in
- * Claude/OpenCode where their runtimes handle those hooks cleanly.
+ * Generates .codex/hooks.json — same hook structure as Claude but paths
+ * point to .codex/hooks/ instead of .claude/hooks/.
  */
 
 import type { DevConfig } from '../config.js'
+import { generateClaudeSettings } from './claude-settings.js'
 
-interface HookCommand {
-  type: 'command'
-  command: string
-  timeout?: number
-}
-
-interface Hook {
-  matcher?: string
-  hooks: HookCommand[]
-}
-
-interface CodexHooks {
-  hooks: {
-    PreToolUse: Hook[]
+export function generateCodexHooks(config: DevConfig): unknown {
+  const claude = generateClaudeSettings(config)
+  // Re-path the commands from .claude/hooks/ to .codex/hooks/. Both the PATH
+  // shim segment and the script path itself need rewriting (replaceAll covers
+  // both occurrences in a single command).
+  const retarget = (cmd: string): string => cmd.replaceAll('.claude/', '.codex/')
+  const hooks = claude.hooks
+  for (const event of Object.keys(hooks) as Array<keyof typeof hooks>) {
+    const entries = hooks[event]
+    if (!entries) continue
+    for (const entry of entries) {
+      for (const hook of entry.hooks) {
+        hook.command = retarget(hook.command)
+      }
+    }
   }
-}
-
-function hook(script: string, timeout?: number): HookCommand {
-  return {
-    type: 'command',
-    command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.codex/hooks/bin:$PATH" .codex/hooks/${script}`,
-    ...(timeout !== undefined ? { timeout } : {}),
-  }
-}
-
-export function generateCodexHooks(_config: DevConfig): CodexHooks {
-  const hooks: CodexHooks['hooks'] = {
-    PreToolUse: [
-      {
-        matcher: 'Bash',
-        hooks: [hook('destructive-command-guard.sh', 5)],
-      },
-    ],
-  }
-
   return { hooks }
 }
