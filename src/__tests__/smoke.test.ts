@@ -581,13 +581,18 @@ describe('generateRules', () => {
     expect(commands.some((c) => c.includes('context-injector.sh'))).toBe(true)
   })
 
-  it('codex uses the compact beads context hook without duplicate prompt context', () => {
+  it('codex generates only minimal hard-safety hooks', () => {
     const codex = generateCodexHooks(tsFrontendConfig) as {
       hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>
     }
-    const commands = codex.hooks.UserPromptSubmit.flatMap((e) => e.hooks.map((h) => h.command))
-    expect(commands).toHaveLength(1)
-    expect(commands[0]).toContain('.codex/hooks/bd-context-inject.sh')
+    expect(Object.keys(codex.hooks)).toEqual(['PreToolUse'])
+    const commands = codex.hooks.PreToolUse.flatMap((e) => e.hooks.map((h) => h.command))
+    expect(commands).toEqual([
+      'cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.codex/hooks/bin:$PATH" .codex/hooks/destructive-command-guard.sh',
+    ])
+    expect(JSON.stringify(codex.hooks)).not.toContain('context')
+    expect(JSON.stringify(codex.hooks)).not.toContain('post-edit-check')
+    expect(JSON.stringify(codex.hooks)).not.toContain('swarm-digest')
   })
 
   it('bd context hook template stays compact', () => {
