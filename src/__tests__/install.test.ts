@@ -255,6 +255,19 @@ describe('installAll', () => {
     expect(rubric.epic_alone.required).toContain('out_of_scope')
     expect(rubric.task_in_graph.required).toContain('files')
     expect(rubric.task_in_graph.required).toContain('verify')
+
+    const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8')
+    expect(gitignore).toContain('.beads/issues.jsonl')
+
+    const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
+    expect(agents).toContain('bd dolt pull')
+    expect(agents).toContain('bd dolt push')
+    expect(agents).toContain('Do not commit `.beads/issues.jsonl`')
+
+    const beadsRule = readFileSync(join(dir, '.claude/rules/beads.md'), 'utf8')
+    expect(beadsRule).toContain('bd bootstrap')
+    expect(beadsRule).toContain('refs/dolt/data')
+    expect(beadsRule).toContain('export.git-add')
   })
 
   it('settings.json has planning-gate hooks in correct order', async () => {

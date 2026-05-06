@@ -69,7 +69,7 @@ Interactive setup for an existing project. Run inside a directory with `package.
 
 10. **MCP servers** — Memory, Serena (codebase indexing), GitHub
 
-11. **Model routing** — Assigns Claude models to task types: planning, simple edits, review, default
+11. **Claude model routing** — Assigns Claude models to task types only when the Claude target is selected. Codex/OpenCode-only configs do not write Anthropic model names into `.dev.config.json`.
 
 ### `oisin-dev update`
 
@@ -78,6 +78,24 @@ Re-syncs all generated files from `.dev.config.json` without re-prompting. Safe 
 ```sh
 oisin-dev update
 ```
+
+### `oisin-dev beads-migrate`
+
+Adopts the repo-backed Dolt workflow for an existing Beads repo. It is idempotent: it points `sync.remote`, `federation.remote`, and `bd dolt remote origin` at the Git `origin` URL, sets `export.git-add` to `false`, ignores `.beads/issues.jsonl`, and removes `.beads/issues.jsonl` from Git tracking with `git rm --cached` when needed.
+
+```sh
+oisin-dev beads-migrate
+```
+
+Fresh clone flow for Beads-enabled repos:
+
+```sh
+git clone <repo>
+bd bootstrap
+bd dolt pull
+```
+
+Shared ticket state lives in `refs/dolt/data` in the same Git repo. Normal code commits should not include `.beads/issues.jsonl`.
 
 ## Generated files
 

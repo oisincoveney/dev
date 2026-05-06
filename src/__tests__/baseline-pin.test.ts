@@ -9,7 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // default 5s testTimeout (the file passes in isolation in ~1s/test, but
 // under full-suite load the same test can drift to 6s+). 15s is the same
 // budget worktree-stop-guard.test.ts uses for the same reason.
-vi.setConfig({ testTimeout: 15_000 })
+if ('setConfig' in vi && typeof vi.setConfig === 'function') {
+  vi.setConfig({ testTimeout: 15_000 })
+}
 
 const PIN_HOOK = resolve(__dirname, '..', '..', 'templates', 'hooks', 'baseline-pin.sh')
 const COMPARE_HOOK = resolve(__dirname, '..', '..', 'templates', 'hooks', 'baseline-compare.sh')

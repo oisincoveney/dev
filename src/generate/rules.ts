@@ -192,11 +192,16 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --claim  # Claim work
 bd close <id>         # Complete work
+bd dolt pull          # Pull shared ticket state before ticket work
+bd dolt push          # Push ticket changes after bd mutations
 \`\`\`
 
 **Rules:**
 - Use \`bd\` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists (blocked by hook)
 - Use \`bd remember\` for persistent knowledge — do NOT use MEMORY.md files
+- Shared ticket state lives in repo-backed Dolt refs (\`refs/dolt/data\`), not normal branch commits
+- Do not commit \`.beads/issues.jsonl\`; it is ignored and \`export.git-add\` must stay false
+- Fresh clone flow: \`git clone\`, \`bd bootstrap\`, \`bd dolt pull\`
 `
 }
 

@@ -42,7 +42,7 @@ export interface Answers {
   contractDriven: boolean
   targets: ReadonlyArray<Target>
   mcpServers: ReadonlyArray<string>
-  models: {
+  models?: {
     default: string
     planning: string
     simple_edits: string
@@ -195,28 +195,7 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
     ;(mcpServers as string[]).push(...selection)
   }
 
-  const modelProfile = cancelGuard(
-    await p.select<'balanced' | 'max-quality' | 'cost-optimized' | 'custom'>({
-      message: 'Model routing profile?',
-      options: [
-        {
-          value: 'balanced',
-          label: 'Balanced — Sonnet default, Opus for planning/review, Haiku for simple edits',
-        },
-        {
-          value: 'max-quality',
-          label: 'Max quality — Opus for everything',
-        },
-        {
-          value: 'cost-optimized',
-          label: 'Cost-optimized — Haiku default, Sonnet for planning, Opus only for review',
-        },
-        { value: 'custom', label: 'Custom — enter each model manually' },
-      ],
-    }),
-  )
-
-  const models = await resolveModelProfile(modelProfile)
+  const models = targets.includes('claude') ? await promptClaudeModelProfile() : undefined
 
   return {
     language,
@@ -385,6 +364,30 @@ async function resolveModelProfile(
       return { default: def, planning, simple_edits: simple, review }
     }
   }
+}
+
+async function promptClaudeModelProfile(): Promise<Answers['models']> {
+  const modelProfile = cancelGuard(
+    await p.select<'balanced' | 'max-quality' | 'cost-optimized' | 'custom'>({
+      message: 'Claude model routing profile?',
+      options: [
+        {
+          value: 'balanced',
+          label: 'Balanced — Sonnet default, Opus for planning/review, Haiku for simple edits',
+        },
+        {
+          value: 'max-quality',
+          label: 'Max quality — Opus for everything',
+        },
+        {
+          value: 'cost-optimized',
+          label: 'Cost-optimized — Haiku default, Sonnet for planning, Opus only for review',
+        },
+        { value: 'custom', label: 'Custom — enter each model manually' },
+      ],
+    }),
+  )
+  return resolveModelProfile(modelProfile)
 }
 
 export async function askCommand(message: string, defaultValue: string): Promise<string> {

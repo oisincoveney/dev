@@ -14,6 +14,7 @@ import {
   configureBeadsAfterInit,
   installAll,
   installBeadsCli,
+  migrateBeadsRepoBackedDolt,
   seedConstitutionDecisions,
   trimBeadsIntegrationBlock,
 } from '../install.js'
@@ -131,6 +132,73 @@ describe('end-to-end install with real side effects', () => {
       const second = configureBeadsAfterInit(dir)
       expect(first.ok).toBe(true)
       expect(second.ok).toBe(true)
+    },
+    BD_INIT_TIMEOUT_MS,
+  )
+
+  it(
+    'configureBeadsAfterInit wires repo-backed Dolt sync to git origin',
+    () => {
+      expect(spawnSync('git', ['init'], { cwd: dir }).status).toBe(0)
+      expect(
+        spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:example/repo.git'], {
+          cwd: dir,
+        }).status,
+      ).toBe(0)
+
+      installBeadsCli(dir)
+      const result = configureBeadsAfterInit(dir)
+      expect(result.ok).toBe(true)
+
+      const yaml = readFileSync(join(dir, '.beads/config.yaml'), 'utf8')
+      expect(yaml).toContain('sync.remote: "git@github.com:example/repo.git"')
+      expect(yaml).toContain('federation.remote: "git@github.com:example/repo.git"')
+      expect(yaml).toContain('export.git-add: false')
+
+      const remotes = spawnSync('bd', ['dolt', 'remote', 'list'], {
+        cwd: dir,
+        encoding: 'utf8',
+      })
+      expect(remotes.status).toBe(0)
+      expect(remotes.stdout).toContain('origin')
+      expect(remotes.stdout).toContain('github.com')
+      expect(remotes.stdout).toContain('example/repo.git')
+    },
+    BD_INIT_TIMEOUT_MS,
+  )
+
+  it(
+    'migrateBeadsRepoBackedDolt is idempotent and always untracks issues.jsonl',
+    () => {
+      expect(spawnSync('git', ['init'], { cwd: dir }).status).toBe(0)
+      expect(
+        spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:example/repo.git'], {
+          cwd: dir,
+        }).status,
+      ).toBe(0)
+      installBeadsCli(dir)
+      writeFileSync(join(dir, '.beads/issues.jsonl'), '')
+      expect(spawnSync('git', ['add', '.beads/issues.jsonl'], { cwd: dir }).status).toBe(0)
+
+      const first = migrateBeadsRepoBackedDolt(dir)
+      const second = migrateBeadsRepoBackedDolt(dir)
+      expect(first.config.ok).toBe(true)
+      expect(second.config.ok).toBe(true)
+      expect(first.gitignoreUpdated).toBe(true)
+      expect(second.gitignoreUpdated).toBe(false)
+      expect(first.issuesJsonlTracked).toBe(true)
+      expect(first.issuesJsonlUntracked).toBe(true)
+      expect(second.issuesJsonlTracked).toBe(false)
+      expect(second.issuesJsonlUntracked).toBe(false)
+
+      const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8')
+      expect(gitignore).toContain('.beads/issues.jsonl')
+      const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '.beads/issues.jsonl'], {
+        cwd: dir,
+        encoding: 'utf8',
+      })
+      expect(tracked.status).not.toBe(0)
+      expect(existsSync(join(dir, '.beads/issues.jsonl'))).toBe(true)
     },
     BD_INIT_TIMEOUT_MS,
   )

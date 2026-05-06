@@ -6,12 +6,12 @@
  * Migrated from templates/hooks/block-coauthor.sh in 0t6.
  */
 
-import type { HookHandler } from '../types.js'
+import type { HookDecision, HookInput } from '../types.js'
 
 const COMMIT_PATTERN = /^git\s+commit/
 const COAUTHOR_PATTERN = /co-authored-by:/i
 
-export const blockCoauthor: HookHandler = (input) => {
+export const blockCoauthor = (input: HookInput): HookDecision => {
   const command = input.tool_input?.command
   if (typeof command !== 'string' || command.length === 0) {
     return { kind: 'allow' }

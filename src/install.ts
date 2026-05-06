@@ -107,6 +107,9 @@ export async function installAll(
 
     appendToGitignore(cwd, '.claude/audit.jsonl')
   }
+  if (config.tools.includes('beads')) {
+    appendToGitignore(cwd, '.beads/issues.jsonl')
+  }
   if (config.targets.includes('codex')) {
     chmodHooksDir(join(cwd, '.codex', 'hooks'))
     log('.codex/hooks/ (chmod +x)')
@@ -157,7 +160,7 @@ export async function installAll(
     if (cliResult.status === 'created' || cliResult.status === 'exists') {
       const configureResult = configureBeadsAfterInit(cwd)
       if (configureResult.ok) {
-        log('beads: validation.on-create=warn, hooks installed')
+        log('beads: validation.on-create=warn, hooks installed, repo-backed Dolt sync configured')
       } else {
         warn(`beads: post-init configuration failed (${configureResult.error})`)
       }
@@ -764,6 +767,7 @@ type RunResult =
   | { ok: false; reason: 'timeout'; afterMs: number }
   | { ok: false; reason: 'signal'; signal: NodeJS.Signals }
   | { ok: false; reason: 'spawn-error'; message: string }
+type CaptureRunResult = (RunResult & { ok: false }) | { ok: true; stdout: string; stderr: string }
 
 interface RunOptions {
   cwd: string
@@ -796,6 +800,35 @@ export function runCommand(
     return { ok: false, reason: 'signal', signal: result.signal }
   }
   if (result.status === 0) return { ok: true }
+  return { ok: false, reason: 'exit', code: result.status ?? -1 }
+}
+
+function runCommandCapture(
+  cmd: string,
+  args: ReadonlyArray<string>,
+  opts: RunOptions,
+): CaptureRunResult {
+  const result = spawnSync(cmd, args, {
+    cwd: opts.cwd,
+    env: opts.env ?? process.env,
+    encoding: 'utf8',
+    stdio: 'pipe',
+    timeout: opts.timeoutMs,
+    killSignal: 'SIGKILL',
+  })
+  if (result.error) {
+    const errno = (result.error as NodeJS.ErrnoException).code
+    if (errno === 'ETIMEDOUT') {
+      return { ok: false, reason: 'timeout', afterMs: opts.timeoutMs }
+    }
+    return { ok: false, reason: 'spawn-error', message: result.error.message }
+  }
+  if (result.signal) {
+    return { ok: false, reason: 'signal', signal: result.signal }
+  }
+  if (result.status === 0) {
+    return { ok: true, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
+  }
   return { ok: false, reason: 'exit', code: result.status ?? -1 }
 }
 
@@ -861,13 +894,28 @@ export function installBeadsCli(cwd: string): BeadsCliResult {
 
 export type BeadsConfigureResult = { ok: true } | { ok: false; error: string }
 
+export interface BeadsMigrationReport {
+  config: BeadsConfigureResult
+  gitignoreUpdated: boolean
+  issuesJsonlTracked: boolean
+  issuesJsonlUntracked: boolean
+  remoteUrl: string | null
+}
+
 export function configureBeadsAfterInit(cwd: string): BeadsConfigureResult {
   if (!commandExists('bd')) return { ok: false, error: 'bd not in PATH' }
   if (!existsSync(join(cwd, '.beads'))) return { ok: false, error: '.beads/ does not exist' }
 
-  const validation = runCommand('bd', ['config', 'set', 'validation.on-create', 'warn'], {
+  const remoteUrl = getGitOriginUrl(cwd)
+  if (remoteUrl !== null) {
+    const remote = configureBeadsDoltRemote(cwd, remoteUrl)
+    if (!remote.ok) return remote
+  }
+
+  const validation = runCommand('bd', ['--sandbox', 'config', 'set', 'validation.on-create', 'warn'], {
     cwd,
     timeoutMs: 10_000,
+    env: noGitHooksEnv(),
   })
   if (!validation.ok) return { ok: false, error: runFailureMessage(validation) }
 
@@ -879,6 +927,29 @@ export function configureBeadsAfterInit(cwd: string): BeadsConfigureResult {
     return { ok: false, error: runFailureMessage(hooks) }
   }
 
+  if (remoteUrl !== null) {
+    const sync = runCommand('bd', ['--sandbox', 'config', 'set', 'sync.remote', remoteUrl], {
+      cwd,
+      timeoutMs: 10_000,
+      env: noGitHooksEnv(),
+    })
+    if (!sync.ok) return { ok: false, error: runFailureMessage(sync) }
+
+    const federation = runCommand('bd', ['--sandbox', 'config', 'set', 'federation.remote', remoteUrl], {
+      cwd,
+      timeoutMs: 10_000,
+      env: noGitHooksEnv(),
+    })
+    if (!federation.ok) return { ok: false, error: runFailureMessage(federation) }
+
+    const exportGitAdd = runCommand('bd', ['--sandbox', 'config', 'set', 'export.git-add', 'false'], {
+      cwd,
+      timeoutMs: 10_000,
+      env: noGitHooksEnv(),
+    })
+    if (!exportGitAdd.ok) return { ok: false, error: runFailureMessage(exportGitAdd) }
+  }
+
   for (const file of ['AGENTS.md', 'CLAUDE.md']) {
     const path = join(cwd, file)
     if (existsSync(path)) {
@@ -887,6 +958,128 @@ export function configureBeadsAfterInit(cwd: string): BeadsConfigureResult {
   }
 
   return { ok: true }
+}
+
+export function migrateBeadsRepoBackedDolt(cwd: string): BeadsMigrationReport {
+  const issuesJsonlPath = join(cwd, '.beads/issues.jsonl')
+  const initialIssuesJsonl = existsSync(issuesJsonlPath)
+    ? readFileSync(issuesJsonlPath, 'utf8')
+    : null
+  const beforeGitignore = existsSync(join(cwd, '.gitignore'))
+    ? readFileSync(join(cwd, '.gitignore'), 'utf8')
+    : ''
+  appendToGitignore(cwd, '.beads/issues.jsonl')
+  const afterGitignore = existsSync(join(cwd, '.gitignore'))
+    ? readFileSync(join(cwd, '.gitignore'), 'utf8')
+    : ''
+
+  const config = configureBeadsAfterInit(cwd)
+  const issuesJsonlTracked = gitPathTracked(cwd, '.beads/issues.jsonl')
+  let issuesJsonlUntracked = false
+  if (issuesJsonlTracked) {
+    const rm = runCommand('git', ['rm', '--cached', '.beads/issues.jsonl'], {
+      cwd,
+      timeoutMs: 10_000,
+      env: noGitHooksEnv(),
+    })
+    if (!rm.ok) {
+      return {
+        config: { ok: false, error: runFailureMessage(rm) },
+        gitignoreUpdated: beforeGitignore !== afterGitignore,
+        issuesJsonlTracked,
+        issuesJsonlUntracked: false,
+        remoteUrl: getGitOriginUrl(cwd),
+      }
+    }
+    issuesJsonlUntracked = true
+  }
+  if (initialIssuesJsonl !== null && !existsSync(issuesJsonlPath)) {
+    writeFileSync(issuesJsonlPath, initialIssuesJsonl, 'utf8')
+  }
+
+  return {
+    config,
+    gitignoreUpdated: beforeGitignore !== afterGitignore,
+    issuesJsonlTracked,
+    issuesJsonlUntracked,
+    remoteUrl: getGitOriginUrl(cwd),
+  }
+}
+
+function getGitOriginUrl(cwd: string): string | null {
+  const r = runCommandCapture('git', ['config', '--get', 'remote.origin.url'], {
+    cwd,
+    timeoutMs: 5_000,
+  })
+  if (!r.ok) return null
+  const value = r.stdout.trim()
+  return value.length > 0 ? value : null
+}
+
+function configureBeadsDoltRemote(cwd: string, remoteUrl: string): BeadsConfigureResult {
+  const list = runCommandCapture('bd', ['--sandbox', 'dolt', 'remote', 'list'], {
+    cwd,
+    timeoutMs: 10_000,
+  })
+  if (!list.ok) return { ok: false, error: runFailureMessage(list) }
+
+  const origin = parseDoltRemoteList(list.stdout).get('origin')
+  if (origin !== undefined && sameGitRemote(origin, remoteUrl)) {
+    return { ok: true }
+  }
+  if (origin !== undefined) {
+    const remove = runCommand('bd', ['--sandbox', 'dolt', 'remote', 'remove', 'origin'], {
+      cwd,
+      timeoutMs: 10_000,
+      env: noGitHooksEnv(),
+    })
+    if (!remove.ok) return { ok: false, error: runFailureMessage(remove) }
+  }
+  const add = runCommand('bd', ['--sandbox', 'dolt', 'remote', 'add', 'origin', remoteUrl], {
+    cwd,
+    timeoutMs: 10_000,
+    env: noGitHooksEnv(),
+  })
+  if (!add.ok) return { ok: false, error: runFailureMessage(add) }
+  return { ok: true }
+}
+
+function noGitHooksEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'",
+  }
+}
+
+function parseDoltRemoteList(stdout: string): Map<string, string> {
+  const remotes = new Map<string, string>()
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (trimmed.length === 0) continue
+    const match = trimmed.match(/^(\S+)\s+(\S+)/)
+    if (match) remotes.set(match[1], match[2])
+  }
+  return remotes
+}
+
+function sameGitRemote(a: string, b: string): boolean {
+  return normalizeGitRemote(a) === normalizeGitRemote(b)
+}
+
+function normalizeGitRemote(url: string): string {
+  return url
+    .replace(/^git\+ssh:\/\//, 'ssh://')
+    .replace(/^ssh:\/\/git@([^/]+)\/\.?\//, 'git@$1:')
+    .replace(/^git@([^:]+):\.?\//, 'git@$1:')
+    .replace(/\/+$/, '')
+}
+
+function gitPathTracked(cwd: string, relPath: string): boolean {
+  const r = runCommandCapture('git', ['ls-files', '--error-unmatch', relPath], {
+    cwd,
+    timeoutMs: 5_000,
+  })
+  return r.ok
 }
 
 export type SeedConstitutionResult =
@@ -1415,4 +1608,3 @@ export function mergeManagedBlock(existing: string, managed: string): string {
   }
   return `${wrapped}\n${existing}`
 }
-

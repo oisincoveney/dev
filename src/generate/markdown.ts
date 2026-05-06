@@ -39,6 +39,8 @@ export function buildClaudeKernel(config: DevConfig): string {
 
   if (config.tools.includes('beads')) {
     criticalBullets.push('Use `bd` for ALL task tracking — TodoWrite blocked by hook.')
+    criticalBullets.push('Before ticket work, run `bd dolt pull`; after ticket changes, run `bd dolt push`.')
+    criticalBullets.push('Do not commit `.beads/issues.jsonl`; shared ticket state lives in repo-backed Dolt refs.')
   }
   criticalBullets.push('Never run destructive commands without explicit user approval — blocked by hook.')
   criticalBullets.push('Read before editing; verify before claiming done.')
