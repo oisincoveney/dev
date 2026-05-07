@@ -26,26 +26,53 @@ LOG_DIR="$ROOT/$CASE_DIR"
 LOG_FILE="$LOG_DIR/hook-errors.log"
 
 INPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/hook-input.XXXXXX")
-STDOUT_FILE=$(mktemp "${TMPDIR:-/tmp}/hook-stdout.XXXXXX")
-STDERR_FILE=$(mktemp "${TMPDIR:-/tmp}/hook-stderr.XXXXXX")
 PASS_STDOUT_FILE=$(mktemp "${TMPDIR:-/tmp}/hook-pass-stdout.XXXXXX")
 BLOCK_STDOUT_FILE=$(mktemp "${TMPDIR:-/tmp}/hook-block-stdout.XXXXXX")
 BLOCK_STDERR_FILE=$(mktemp "${TMPDIR:-/tmp}/hook-block-stderr.XXXXXX")
-trap 'rm -f "$INPUT_FILE" "$STDOUT_FILE" "$STDERR_FILE" "$PASS_STDOUT_FILE" "$BLOCK_STDOUT_FILE" "$BLOCK_STDERR_FILE"' EXIT
+TEMP_FILES=("$INPUT_FILE" "$PASS_STDOUT_FILE" "$BLOCK_STDOUT_FILE" "$BLOCK_STDERR_FILE")
+trap 'rm -f "${TEMP_FILES[@]}"' EXIT
 
 cat >"$INPUT_FILE"
 
 BLOCKED=0
+RUN_SCRIPTS=()
+STDOUT_FILES=()
+STDERR_FILES=()
+STATUS_FILES=()
+PIDS=()
 
 for SCRIPT in "${SCRIPTS[@]}"; do
   if [[ -z "$SCRIPT" || ! -x "$SCRIPT" ]]; then
     continue
   fi
 
-  : >"$STDOUT_FILE"
-  : >"$STDERR_FILE"
-  "$SCRIPT" <"$INPUT_FILE" >"$STDOUT_FILE" 2>"$STDERR_FILE"
-  STATUS=$?
+  STDOUT_FILE=$(mktemp "${TMPDIR:-/tmp}/hook-stdout.XXXXXX")
+  STDERR_FILE=$(mktemp "${TMPDIR:-/tmp}/hook-stderr.XXXXXX")
+  STATUS_FILE=$(mktemp "${TMPDIR:-/tmp}/hook-status.XXXXXX")
+  TEMP_FILES+=("$STDOUT_FILE" "$STDERR_FILE" "$STATUS_FILE")
+
+  RUN_SCRIPTS+=("$SCRIPT")
+  STDOUT_FILES+=("$STDOUT_FILE")
+  STDERR_FILES+=("$STDERR_FILE")
+  STATUS_FILES+=("$STATUS_FILE")
+
+  (
+    "$SCRIPT" <"$INPUT_FILE" >"$STDOUT_FILE" 2>"$STDERR_FILE"
+    printf '%s\n' "$?" >"$STATUS_FILE"
+  ) &
+  PIDS+=("$!")
+done
+
+for PID in "${PIDS[@]}"; do
+  wait "$PID" 2>/dev/null || true
+done
+
+for INDEX in "${!RUN_SCRIPTS[@]}"; do
+  SCRIPT="${RUN_SCRIPTS[$INDEX]}"
+  STDOUT_FILE="${STDOUT_FILES[$INDEX]}"
+  STDERR_FILE="${STDERR_FILES[$INDEX]}"
+  STATUS_FILE="${STATUS_FILES[$INDEX]}"
+  STATUS=$(cat "$STATUS_FILE" 2>/dev/null || echo "1")
 
   case "$STATUS" in
     0)

@@ -165,6 +165,26 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
     expect(result.stderr).toContain('block-msg')
   })
 
+  it('quiet runner runs grouped scripts concurrently', () => {
+    const first = join(dir, 'first.sh')
+    const second = join(dir, 'second.sh')
+    writeFileSync(first, '#!/usr/bin/env bash\nsleep 0.8\necho first\n')
+    writeFileSync(second, '#!/usr/bin/env bash\nsleep 0.8\necho second\n')
+    chmodSync(first, 0o755)
+    chmodSync(second, 0o755)
+
+    const started = performance.now()
+    const result = spawnSync('bash', [join(HOOKS_DIR, 'run-quiet.sh'), first, second], {
+      cwd: dir,
+      encoding: 'utf8',
+    })
+    const elapsed = performance.now() - started
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toBe('first\nsecond\n')
+    expect(elapsed).toBeLessThan(1800)
+  })
+
   it('context injector emits valid UserPromptSubmit JSON', () => {
     spawnSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' })
     const result = spawnSync('bash', [join(HOOKS_DIR, 'context-injector.sh')], {
