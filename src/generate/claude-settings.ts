@@ -112,12 +112,6 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
           hooks: [preToolDispatchHook(beadsEnabled, hasTypescript)],
         },
       ],
-      PostToolUse: [
-        {
-          matcher: 'Write|Edit',
-          hooks: [hookGroup(['post-edit-check.sh', 'ai-antipattern-guard.sh'], 60)],
-        },
-      ],
       Stop: [
         {
           hooks: [

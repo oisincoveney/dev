@@ -33,18 +33,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.codex/hooks/bin:$PATH\" .codex/hooks/run-quiet.sh .codex/hooks/post-edit-check.sh .codex/hooks/ai-antipattern-guard.sh",
-            "timeout": 60
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [

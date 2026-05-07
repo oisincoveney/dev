@@ -1,17 +1,5 @@
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" .claude/hooks/run-quiet.sh .claude/hooks/post-edit-check.sh .claude/hooks/ai-antipattern-guard.sh",
-            "timeout": 60
-          }
-        ],
-        "matcher": "Write|Edit"
-      }
-    ],
     "PreCompact": [
       {
         "hooks": [

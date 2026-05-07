@@ -1470,6 +1470,8 @@ const PRE_TOOL_DISPATCHED_HOOKS = new Set([
   'block-todowrite.sh',
 ])
 
+const RETIRED_POST_TOOL_HOOKS = new Set(['post-edit-check.sh', 'ai-antipattern-guard.sh'])
+
 /** Extracts a stable handler key from a hook command — the value used to
  * dedupe across merges. For legacy `.sh` hooks this is the script filename
  * minus the extension. For TS-native dispatched hooks (`oisin-dev hook foo`)
@@ -1550,6 +1552,17 @@ function compactUserPromptContext(entries: HookEntry[]): HookEntry[] {
     .filter((entry) => entry.hooks.length > 0)
 }
 
+function prunePostToolUse(entries: HookEntry[]): HookEntry[] {
+  return entries
+    .map((entry) => ({
+      ...entry,
+      hooks: entry.hooks.filter(
+        (hook) => !hookScripts(hook.command).some((script) => RETIRED_POST_TOOL_HOOKS.has(script)),
+      ),
+    }))
+    .filter((entry) => entry.hooks.length > 0)
+}
+
 export function mergeClaudeSettings(
   existing: Record<string, unknown>,
   generated: Record<string, unknown>,
@@ -1562,6 +1575,14 @@ export function mergeClaudeSettings(
   )
   const generatedHooks = (generated as { hooks?: Record<string, HookEntry[]> }).hooks ?? {}
   const mergedHooks: Record<string, HookEntry[]> = { ...existingHooks }
+  if (mergedHooks.PostToolUse) {
+    const postToolUse = prunePostToolUse(mergedHooks.PostToolUse)
+    if (postToolUse.length > 0) {
+      mergedHooks.PostToolUse = postToolUse
+    } else {
+      delete mergedHooks.PostToolUse
+    }
+  }
   for (const [event, genEntries] of Object.entries(generatedHooks)) {
     if (!mergedHooks[event]) {
       mergedHooks[event] = genEntries
@@ -1640,6 +1661,14 @@ function writeOrMergeSettings(
   //     * Matchers only in existing are kept (preserves custom hooks like ts-style-guard)
   //     * Commands within a generated matcher that already appear in existing are deduped
   const mergedHooks: Record<string, HookEntry[]> = { ...existingHooks }
+  if (mergedHooks.PostToolUse) {
+    const postToolUse = prunePostToolUse(mergedHooks.PostToolUse)
+    if (postToolUse.length > 0) {
+      mergedHooks.PostToolUse = postToolUse
+    } else {
+      delete mergedHooks.PostToolUse
+    }
+  }
 
   for (const [event, genEntries] of Object.entries(generatedHooks)) {
     if (!mergedHooks[event]) {
