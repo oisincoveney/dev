@@ -115,11 +115,11 @@ describe('skills registry', () => {
 })
 
 describe('generateClaudeSettings', () => {
-  it('produces valid structure without per-edit post-tool checks', () => {
+  it('produces valid structure with async post-tool checks', () => {
     const settings = generateClaudeSettings(tsFrontendConfig)
     expect(settings.hooks.UserPromptSubmit).toBeDefined()
     expect(settings.hooks.PreToolUse).toBeDefined()
-    expect(settings.hooks.PostToolUse).toBeUndefined()
+    expect(settings.hooks.PostToolUse).toBeDefined()
     expect(settings.hooks.SessionStart).toBeDefined()
     expect(settings.hooks.Stop).toBeDefined()
     expect(settings.hooks.PreCompact).toBeDefined()
@@ -213,14 +213,16 @@ describe('generateClaudeSettings', () => {
       )
     })
 
-    it('always registers ai-antipattern-guard.sh on PreToolUse + Stop', () => {
+    it('always registers ai-antipattern-guard.sh on PreToolUse + PostToolUse + Stop', () => {
       const settings = generateClaudeSettings(tsFrontendConfig)
+      const post = JSON.stringify(settings.hooks.PostToolUse ?? [])
       const stop = JSON.stringify(settings.hooks.Stop ?? [])
       const dispatch = readFileSync(
         resolve(__dirname, '..', '..', 'templates/hooks/pre-tool-dispatch.sh'),
         'utf8',
       )
       expect(dispatch).toContain('ai-antipattern-guard.sh')
+      expect(post).toContain('ai-antipattern-guard.sh')
       expect(stop).toContain('ai-antipattern-guard.sh')
     })
 

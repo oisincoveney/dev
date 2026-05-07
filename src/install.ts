@@ -107,6 +107,7 @@ export async function installAll(
 
     appendToGitignore(cwd, '.claude/audit.jsonl')
     appendToGitignore(cwd, '.claude/hook-errors.log')
+    appendToGitignore(cwd, '.claude/hook-state/')
   }
   if (config.tools.includes('beads')) {
     appendToGitignore(cwd, '.beads/issues.jsonl')
@@ -115,6 +116,7 @@ export async function installAll(
     chmodHooksDir(join(cwd, '.codex', 'hooks'))
     log('.codex/hooks/ (chmod +x)')
     appendToGitignore(cwd, '.codex/hook-errors.log')
+    appendToGitignore(cwd, '.codex/hook-state/')
   }
 
   // CLAUDE.md and AGENTS.md are hybrid (managed block + user content). They
@@ -1470,7 +1472,7 @@ const PRE_TOOL_DISPATCHED_HOOKS = new Set([
   'block-todowrite.sh',
 ])
 
-const RETIRED_POST_TOOL_HOOKS = new Set(['post-edit-check.sh', 'ai-antipattern-guard.sh'])
+const RETIRED_POST_TOOL_HOOKS = new Set(['post-edit-check.sh'])
 
 /** Extracts a stable handler key from a hook command — the value used to
  * dedupe across merges. For legacy `.sh` hooks this is the script filename

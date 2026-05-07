@@ -185,6 +185,39 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
     expect(elapsed).toBeLessThan(1800)
   })
 
+  it('post-edit check is queued quickly and enforced at stop', () => {
+    writeFileSync(
+      join(dir, '.dev.config.json'),
+      JSON.stringify({
+        commands: {
+          typecheck: "sleep 0.4; printf 'src/example.ts:1: bad\\n'; exit 1",
+          lint: '',
+        },
+      }),
+    )
+
+    const started = performance.now()
+    const queued = spawnSync('bash', [join(HOOKS_DIR, 'post-edit-async.sh')], {
+      cwd: dir,
+      input: JSON.stringify({ tool_input: { file_path: 'src/example.ts' } }),
+      encoding: 'utf8',
+    })
+    const elapsed = performance.now() - started
+
+    expect(queued.status).toBe(0)
+    expect(queued.stdout).toBe('')
+    expect(queued.stderr).toBe('')
+    expect(elapsed).toBeLessThan(300)
+
+    const awaited = spawnSync('bash', [join(HOOKS_DIR, 'post-edit-await.sh')], {
+      cwd: dir,
+      encoding: 'utf8',
+    })
+
+    expect(awaited.status).toBe(2)
+    expect(awaited.stderr).toContain('Typecheck errors in src/example.ts')
+  })
+
   it('context injector emits valid UserPromptSubmit JSON', () => {
     spawnSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' })
     const result = spawnSync('bash', [join(HOOKS_DIR, 'context-injector.sh')], {

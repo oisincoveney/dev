@@ -112,6 +112,12 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
           hooks: [preToolDispatchHook(beadsEnabled, hasTypescript)],
         },
       ],
+      PostToolUse: [
+        {
+          matcher: 'Write|Edit',
+          hooks: [hookGroup(['post-edit-async.sh', 'ai-antipattern-guard.sh'], 10)],
+        },
+      ],
       Stop: [
         {
           hooks: [
@@ -119,6 +125,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
               [
                 'worktree-stop-guard.sh',
                 ...(beadsEnabled ? ['swarm-digest.sh'] : []),
+                'post-edit-await.sh',
                 'pre-stop-verification.sh',
                 'verifier-skill-guard.sh',
                 'baseline-compare.sh',
