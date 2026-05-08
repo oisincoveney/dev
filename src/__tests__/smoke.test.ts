@@ -964,4 +964,25 @@ describe('installAll update mode', () => {
     }
   })
 
+  it('updates opencode target when prompt answers omit mcpServers', async () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({ name: 'test', scripts: {} }),
+    })
+    const config: DevConfig = {
+      ...tsFrontendConfig,
+      targets: ['opencode'],
+    }
+    try {
+      writeConfig(dir, config)
+      await expect(
+        installAll(dir, config, {} as never, {
+          skipSideEffects: true,
+          isUpdate: true,
+        }),
+      ).resolves.toBeDefined()
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
 })

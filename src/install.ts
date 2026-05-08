@@ -1479,11 +1479,14 @@ function mcpServerSpec(name: string): McpServerSpec | undefined {
 }
 
 function usableMcpServers(
-  servers: ReadonlyArray<string>,
+  servers: unknown,
   warn: (msg: string) => void,
 ): string[] {
+  if (!Array.isArray(servers)) return []
+
   const usable: string[] = []
   for (const name of servers) {
+    if (typeof name !== 'string') continue
     const spec = mcpServerSpec(name)
     if (!spec) {
       usable.push(name)

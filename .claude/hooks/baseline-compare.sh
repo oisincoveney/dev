@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Stop hook — compares current failing-test set against the baseline
-# pinned by baseline-pin.sh. Exits 2 if any test fails now that did not
-# fail in the baseline; the message lists the regression delta.
+# Stop hook — compares current failing-test set against the baseline pinned by
+# baseline-pin.sh when the agent tries to dismiss failing tests as already known.
+# Exits 2 if any test fails now that did not fail in the baseline; the message
+# lists the regression delta.
 #
 # Fail-open on missing baseline, parse errors, or test-runner failures.
 set -euo pipefail
 
 INPUT=$(cat)
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."' 2>/dev/null || echo ".")
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || echo "")
 CONFIG="$CWD/.dev.config.json"
 BASELINE="$CWD/.claude/baseline-failures.json"
 
@@ -18,6 +20,38 @@ SKIPPED=$(jq -r '.skipped // false' "$BASELINE" 2>/dev/null || echo "true")
 
 TEST_CMD=$(jq -r '.commands.test // empty' "$CONFIG" 2>/dev/null || echo "")
 [[ -z "$TEST_CMD" || "$TEST_CMD" == "null" ]] && exit 0
+
+# Running the full configured test command at every Stop made ordinary response
+# finalization pay the full suite cost repeatedly. Keep the regression guard
+# focused on its failure mode: blocking claims that failing tests are merely
+# known/baseline/pre-existing. The proof-of-work Stop hook already enforces that
+# completion claims run the configured test command.
+[[ -z "$TRANSCRIPT" || ! -f "$TRANSCRIPT" ]] && exit 0
+
+LAST_MSG=$(jq -r '
+  if .type == "assistant" or .role == "assistant" then
+    if (.content | type) == "array" then
+      [.content[] | select(.type == "text") | .text] | join(" ")
+    elif (.content | type) == "string" then
+      .content
+    elif (.message | type) == "object" then
+      if ((.message.content) | type) == "array" then
+        [.message.content[] | select(.type == "text") | .text] | join(" ")
+      else
+        .message.content // ""
+      end
+    else ""
+    end
+  else empty
+  end
+' "$TRANSCRIPT" 2>/dev/null | grep -v '^$' | tail -1 || true)
+
+[[ -z "$LAST_MSG" ]] && exit 0
+
+if ! echo "$LAST_MSG" | grep -qiE \
+  '(baseline|known failures?|already failing|existing failures?|pre-existing|unrelated failing test|unrelated test failure|failing before|failed before|not from (this|these) changes?)'; then
+  exit 0
+fi
 
 cd "$CWD"
 
