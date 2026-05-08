@@ -4,9 +4,11 @@ import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
 import {
+  generateOpencodeConfig,
   installAll,
   mergeClaudeSettings,
   mergeManagedBlock,
+  mcpServerInstallCommand,
   removeLegacyRetiredPaths,
   stripLegacyConfigFields,
   trimBeadsIntegrationOnAgentDocs,
@@ -88,6 +90,7 @@ describe('installAll', () => {
 
     // OpenCode plugin
     expect(existsSync(join(dir, '.opencode/plugins/dev-enforcer.ts'))).toBe(true)
+    expect(existsSync(join(dir, 'opencode.json'))).toBe(true)
 
     // Lefthook
     expect(existsSync(join(dir, 'lefthook.yml'))).toBe(true)
@@ -153,6 +156,84 @@ describe('installAll', () => {
     const toBdLicense = readFileSync(join(dir, '.claude/skills/to-bd-issues/LICENSE'), 'utf8')
     expect(toBdLicense).toContain('Matt Pocock')
     expect(toBdLicense).toContain('derivative work')
+  })
+
+  it('uses current MCP server commands for Claude and Codex', () => {
+    expect(mcpServerInstallCommand('claude', 'memory')).toBe(
+      'claude mcp add memory --scope project -- npx -y @modelcontextprotocol/server-memory',
+    )
+    expect(mcpServerInstallCommand('claude', 'serena')).toBe(
+      'claude mcp add serena --scope project -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --project-from-cwd',
+    )
+    expect(mcpServerInstallCommand('claude', 'github')).toBe(
+      'claude mcp add github --scope project --transport http https://api.githubcopilot.com/mcp/ --header "Authorization: Bearer {env:CODEX_GITHUB_PERSONAL_ACCESS_TOKEN}"',
+    )
+    expect(mcpServerInstallCommand('codex', 'memory')).toBe(
+      'codex mcp add memory -- npx -y @modelcontextprotocol/server-memory',
+    )
+    expect(mcpServerInstallCommand('codex', 'serena')).toBe(
+      'codex mcp add serena -- uvx --from git+https://github.com/oraios/serena serena start-mcp-server --project-from-cwd',
+    )
+    expect(mcpServerInstallCommand('codex', 'github')).toBe(
+      'codex mcp add github --url https://api.githubcopilot.com/mcp/ --bearer-token-env-var CODEX_GITHUB_PERSONAL_ACCESS_TOKEN',
+    )
+  })
+
+  it('generates OpenCode MCP config for local and remote servers', () => {
+    expect(generateOpencodeConfig(['memory', 'serena', 'github'])).toEqual({
+      $schema: 'https://opencode.ai/config.json',
+      mcp: {
+        memory: {
+          type: 'local',
+          command: ['npx', '-y', '@modelcontextprotocol/server-memory'],
+          enabled: true,
+        },
+        serena: {
+          type: 'local',
+          command: [
+            'uvx',
+            '--from',
+            'git+https://github.com/oraios/serena',
+            'serena',
+            'start-mcp-server',
+            '--project-from-cwd',
+          ],
+          enabled: true,
+        },
+        github: {
+          type: 'remote',
+          url: 'https://api.githubcopilot.com/mcp/',
+          enabled: true,
+          headers: {
+            Authorization: 'Bearer {env:CODEX_GITHUB_PERSONAL_ACCESS_TOKEN}',
+          },
+        },
+      },
+    })
+  })
+
+  it('does not write GitHub MCP config when the token env is missing', async () => {
+    const oldToken = process.env.CODEX_GITHUB_PERSONAL_ACCESS_TOKEN
+    delete process.env.CODEX_GITHUB_PERSONAL_ACCESS_TOKEN
+    try {
+      await installAll(
+        dir,
+        { ...fakeConfig, targets: ['opencode'] },
+        { ...fakeAnswers, targets: ['opencode'], mcpServers: ['memory', 'github'] },
+        { skipSideEffects: true },
+      )
+      const config = JSON.parse(readFileSync(join(dir, 'opencode.json'), 'utf8')) as {
+        mcp: Record<string, unknown>
+      }
+      expect(config.mcp.memory).toBeDefined()
+      expect(config.mcp.github).toBeUndefined()
+    } finally {
+      if (oldToken === undefined) {
+        delete process.env.CODEX_GITHUB_PERSONAL_ACCESS_TOKEN
+      } else {
+        process.env.CODEX_GITHUB_PERSONAL_ACCESS_TOKEN = oldToken
+      }
+    }
   })
 
   it('settings.json has valid JSON and correct structure', async () => {

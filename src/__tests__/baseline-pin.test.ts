@@ -23,8 +23,12 @@ function hasCmd(name: string): boolean {
 
 const canRun = hasCmd('bash') && hasCmd('jq') && hasCmd('git')
 
-function runHook(hookPath: string, cwd: string): { status: number; stderr: string; stdout: string } {
-  const input = JSON.stringify({ cwd })
+function runHook(
+  hookPath: string,
+  cwd: string,
+  extraInput: Record<string, unknown> = {},
+): { status: number; stderr: string; stdout: string } {
+  const input = JSON.stringify({ cwd, ...extraInput })
   // baseline-pin.sh runs git internally (rev-parse, status, checkout). Inherit
   // GIT_CONFIG_PARAMETERS so those git invocations also bypass the user's
   // global hooks — same reasoning as the `git()` helper above.
@@ -60,6 +64,15 @@ function writeTestRunner(dir: string, failingNames: string[]): void {
     join(dir, '.dev.config.json'),
     JSON.stringify({ commands: { test: 'bash fake-test.sh' } }),
   )
+}
+
+function writeTranscript(dir: string, lastAssistantMessage: string): string {
+  const transcript = join(dir, 'transcript.jsonl')
+  writeFileSync(
+    transcript,
+    `${JSON.stringify({ type: 'assistant', content: lastAssistantMessage })}\n`,
+  )
+  return transcript
 }
 
 function setupRepo(dir: string): void {
@@ -174,7 +187,23 @@ describe.skipIf(!canRun)('baseline-pin.sh + baseline-compare.sh', () => {
     expect(status).toBe(0)
   })
 
-  it('compare exits 2 with regression delta when a new test fails', () => {
+  it('compare exits 0 without running tests when response does not discuss baseline failures', () => {
+    setupRepo(dir)
+    writeTestRunner(dir, ['brand-new-regression'])
+    git(dir, 'add', '.')
+    git(dir, 'commit', '-q', '-m', 'feature with new regression')
+    const claudeDir = join(dir, '.claude')
+    require('node:fs').mkdirSync(claudeDir, { recursive: true })
+    writeFileSync(
+      join(claudeDir, 'baseline-failures.json'),
+      JSON.stringify({ skipped: false, failing: [] }),
+    )
+    const transcriptPath = writeTranscript(dir, 'Implemented the change and ran the tests.')
+    const { status } = runHook(COMPARE_HOOK, dir, { transcript_path: transcriptPath })
+    expect(status).toBe(0)
+  })
+
+  it('compare exits 2 with regression delta when a new test fails and response cites baseline failures', () => {
     setupRepo(dir)
     writeTestRunner(dir, ['baseline-failure', 'brand-new-regression'])
     git(dir, 'add', '.')
@@ -185,7 +214,8 @@ describe.skipIf(!canRun)('baseline-pin.sh + baseline-compare.sh', () => {
       join(claudeDir, 'baseline-failures.json'),
       JSON.stringify({ skipped: false, failing: ['baseline-failure'] }),
     )
-    const { status, stderr } = runHook(COMPARE_HOOK, dir)
+    const transcriptPath = writeTranscript(dir, 'Tests still have one known failure from baseline.')
+    const { status, stderr } = runHook(COMPARE_HOOK, dir, { transcript_path: transcriptPath })
     expect(status).toBe(2)
     expect(stderr).toContain('brand-new-regression')
     expect(stderr).not.toContain('baseline-failure')

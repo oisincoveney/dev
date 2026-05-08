@@ -167,14 +167,16 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
   const mcpServers: ReadonlyArray<string> = []
   if (targets.includes('claude')) {
     const defaultMcp = ['memory', 'serena']
-    if (detected.hasGitRemote) defaultMcp.push('github')
+    if (detected.hasGitRemote && process.env.CODEX_GITHUB_PERSONAL_ACCESS_TOKEN) {
+      defaultMcp.push('github')
+    }
     const selection = cancelGuard(
       await p.multiselect<string>({
         message: 'MCP servers to register for Claude Code',
         options: [
           {
             value: 'memory',
-            label: 'Memory MCP (@anthropic-ai/mcp-server-memory)',
+            label: 'Memory MCP (@modelcontextprotocol/server-memory)',
             hint: 'Cross-session knowledge graph',
           },
           {
@@ -185,7 +187,9 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
           {
             value: 'github',
             label: 'GitHub MCP',
-            hint: detected.hasGitRemote ? 'Detected GitHub remote' : 'No GitHub remote detected',
+            hint: process.env.CODEX_GITHUB_PERSONAL_ACCESS_TOKEN
+              ? 'Detected token env'
+              : 'Set CODEX_GITHUB_PERSONAL_ACCESS_TOKEN first',
           },
         ],
         initialValues: defaultMcp,

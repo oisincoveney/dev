@@ -1,5 +1,5 @@
 {
-  "version": "0.8.25",
+  "version": "0.8.27",
   "files": {
     ".claude/hooks/ai-antipattern-guard.sh": {
       "sha256": "31585ed8740f6353a74a2e64eae7748c029feea8fb81c765febfb415d71ea44f"
@@ -41,7 +41,7 @@
       "sha256": "99d7fb4c3bfce86f62348ce94482fce70c2245abd4626c406c861d2cef0770a8"
     },
     ".claude/hooks/context-injector.sh": {
-      "sha256": "730f49b166d572320b69ebf02406904ec72f7559cde60ced0293b79e5070aedf"
+      "sha256": "34bacd2f2fc9d8baf9c3563e16a4d7488c41a177e04ea9a134620bc2c48cd91b"
     },
     ".claude/hooks/destructive-command-guard.sh": {
       "sha256": "b50940bc083292029959513d3657eb644e6b78dbb1b0055495529e8ca7329817"
@@ -77,7 +77,7 @@
       "sha256": "1308200dbbb1410873793b9c74459082fe2f217b64fea216ea4fe0a914728042"
     },
     ".claude/hooks/run-quiet.sh": {
-      "sha256": "ea8612f1418b387f11d0573e9076732cfe54f939003ec19c29c62cd8c655b047"
+      "sha256": "ca7d454b9965347b4152b46cb7af5aa0159740d5606bdf97c95476d4a6f97ba0"
     },
     ".claude/hooks/statusline.sh": {
       "sha256": "617cb8831777ef21c936705ed3977d4a664292d5be33f275f35779eecac858df"
@@ -191,7 +191,7 @@
       "sha256": "99d7fb4c3bfce86f62348ce94482fce70c2245abd4626c406c861d2cef0770a8"
     },
     ".codex/hooks/context-injector.sh": {
-      "sha256": "730f49b166d572320b69ebf02406904ec72f7559cde60ced0293b79e5070aedf"
+      "sha256": "34bacd2f2fc9d8baf9c3563e16a4d7488c41a177e04ea9a134620bc2c48cd91b"
     },
     ".codex/hooks/destructive-command-guard.sh": {
       "sha256": "b50940bc083292029959513d3657eb644e6b78dbb1b0055495529e8ca7329817"
@@ -227,7 +227,7 @@
       "sha256": "1308200dbbb1410873793b9c74459082fe2f217b64fea216ea4fe0a914728042"
     },
     ".codex/hooks/run-quiet.sh": {
-      "sha256": "ea8612f1418b387f11d0573e9076732cfe54f939003ec19c29c62cd8c655b047"
+      "sha256": "ca7d454b9965347b4152b46cb7af5aa0159740d5606bdf97c95476d4a6f97ba0"
     },
     ".codex/hooks/statusline.sh": {
       "sha256": "617cb8831777ef21c936705ed3977d4a664292d5be33f275f35779eecac858df"

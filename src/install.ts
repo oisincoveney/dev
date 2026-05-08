@@ -203,8 +203,14 @@ export async function installAll(
     }
   }
 
-  if (config.targets.includes('claude') && answers.mcpServers.length > 0) {
-    installMcpServers(cwd, answers.mcpServers, log, warn)
+  const mcpServers = usableMcpServers(answers.mcpServers, warn)
+  if (mcpServers.length > 0) {
+    if (config.targets.includes('claude')) {
+      installMcpServers(cwd, 'claude', mcpServers, log, warn)
+    }
+    if (config.targets.includes('codex')) {
+      installMcpServers(cwd, 'codex', mcpServers, log, warn)
+    }
   }
 
   // GSD and IDD workflows have been removed. The bd-native workflow is the
@@ -388,6 +394,10 @@ export function gatherAllManagedFiles(ctx: GatherContext): Map<string, string> {
 
   if (config.targets.includes('opencode')) {
     out.set('.opencode/plugins/dev-enforcer.ts', generateOpencodePlugin(config))
+    const mcpServers = usableMcpServers(answers.mcpServers, warn)
+    if (mcpServers.length > 0) {
+      out.set('opencode.json', `${JSON.stringify(generateOpencodeConfig(mcpServers), null, 2)}\n`)
+    }
   }
 
   if (config.targets.includes('cursor')) {
@@ -1386,41 +1396,133 @@ export function installBeadsPlugin(cwd: string): BeadsPluginResult {
 
 function installMcpServers(
   cwd: string,
+  target: 'claude' | 'codex',
   servers: ReadonlyArray<string>,
   log: (msg: string) => void,
   warn: (msg: string) => void,
 ): void {
-  if (!commandExists('claude')) {
-    warn('MCP: `claude` CLI not in PATH, skipping MCP server registration')
+  if (!commandExists(target)) {
+    warn(`MCP: \`${target}\` CLI not in PATH, skipping MCP server registration`)
     return
   }
 
-  const mcpCommands: Record<string, string> = {
-    memory:
-      'claude mcp add memory --scope project -- npx -y @anthropic-ai/mcp-server-memory',
-    serena:
-      'claude mcp add serena --scope project -- uvx --from git+https://github.com/oraios/serena serena-mcp-server',
-    github:
-      'claude mcp add github --scope project --transport http https://api.githubcopilot.com/mcp/',
-  }
-
   for (const name of servers) {
-    const cmd = mcpCommands[name]
+    const cmd = mcpServerInstallCommand(target, name)
     if (!cmd) {
       warn(`MCP: no install command defined for "${name}"`)
       continue
     }
     try {
       execSync(cmd, { cwd, stdio: 'pipe' })
-      log(`MCP: ${name} registered`)
+      log(`MCP: ${name} registered for ${target}`)
     } catch (err) {
       const msg = (err as Error).message
       if (msg.includes('already')) {
-        log(`MCP: ${name} already registered`)
+        log(`MCP: ${name} already registered for ${target}`)
       } else {
-        warn(`MCP: ${name} failed (${msg})`)
+        warn(`MCP: ${name} failed for ${target} (${msg})`)
       }
     }
+  }
+}
+
+export function mcpServerInstallCommand(
+  target: 'claude' | 'codex',
+  name: string,
+): string | undefined {
+  const spec = mcpServerSpec(name)
+  if (!spec) return undefined
+  if (target === 'claude') {
+    if ('command' in spec) {
+      return `claude mcp add ${name} --scope project -- ${spec.command.join(' ')}`
+    }
+    return `claude mcp add ${name} --scope project --transport http ${spec.url} --header "Authorization: Bearer {env:${spec.bearerTokenEnvVar}}"`
+  }
+  if ('command' in spec) {
+    return `codex mcp add ${name} -- ${spec.command.join(' ')}`
+  }
+  return `codex mcp add ${name} --url ${spec.url} --bearer-token-env-var ${spec.bearerTokenEnvVar}`
+}
+
+type LocalMcpServerSpec = {
+  command: string[]
+}
+
+type RemoteMcpServerSpec = {
+  url: string
+  bearerTokenEnvVar: string
+}
+
+type McpServerSpec = LocalMcpServerSpec | RemoteMcpServerSpec
+
+function mcpServerSpec(name: string): McpServerSpec | undefined {
+  const specs: Record<string, McpServerSpec> = {
+    memory: {
+      command: ['npx', '-y', '@modelcontextprotocol/server-memory'],
+    },
+    serena: {
+      command: [
+        'uvx',
+        '--from',
+        'git+https://github.com/oraios/serena',
+        'serena',
+        'start-mcp-server',
+        '--project-from-cwd',
+      ],
+    },
+    github: {
+      url: 'https://api.githubcopilot.com/mcp/',
+      bearerTokenEnvVar: 'CODEX_GITHUB_PERSONAL_ACCESS_TOKEN',
+    },
+  }
+  return specs[name]
+}
+
+function usableMcpServers(
+  servers: ReadonlyArray<string>,
+  warn: (msg: string) => void,
+): string[] {
+  const usable: string[] = []
+  for (const name of servers) {
+    const spec = mcpServerSpec(name)
+    if (!spec) {
+      usable.push(name)
+      continue
+    }
+    if ('bearerTokenEnvVar' in spec && !process.env[spec.bearerTokenEnvVar]) {
+      warn(`MCP: ${name} skipped; set ${spec.bearerTokenEnvVar} to enable it`)
+      continue
+    }
+    usable.push(name)
+  }
+  return usable
+}
+
+export function generateOpencodeConfig(servers: ReadonlyArray<string>): unknown {
+  const mcp: Record<string, unknown> = {}
+  for (const name of servers) {
+    const spec = mcpServerSpec(name)
+    if (!spec) continue
+    if ('command' in spec) {
+      mcp[name] = {
+        type: 'local',
+        command: spec.command,
+        enabled: true,
+      }
+      continue
+    }
+    mcp[name] = {
+      type: 'remote',
+      url: spec.url,
+      enabled: true,
+      headers: {
+        Authorization: `Bearer {env:${spec.bearerTokenEnvVar}}`,
+      },
+    }
+  }
+  return {
+    $schema: 'https://opencode.ai/config.json',
+    mcp,
   }
 }
 
