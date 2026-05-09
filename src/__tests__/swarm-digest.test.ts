@@ -74,10 +74,28 @@ describe.skipIf(!canRun)('swarm-digest.sh', () => {
   exit 0
 fi
 if [[ "$1 $2" == "list --type=epic" ]]; then
-  printf '[]'
-  exit 0
+  echo "fallback should not run" >&2
+  exit 9
 fi
 printf '[]'
+`,
+    )
+
+    const result = runHook(dir, binDir)
+    expect(result.status).toBe(0)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toBe('')
+  })
+
+  it('skips bd entirely when exported state has no open epics', () => {
+    writeFileSync(
+      join(dir, '.beads', 'issues.jsonl'),
+      `${JSON.stringify({ id: 'x', issue_type: 'epic', status: 'closed' })}\n`,
+    )
+    const binDir = writeFakeBd(
+      dir,
+      `echo "bd should not run" >&2
+exit 9
 `,
     )
 
@@ -102,5 +120,27 @@ printf '[]'
     expect(result.status).toBe(0)
     expect(result.stdout).toBe('')
     expect(result.stderr).toBe('')
+  })
+
+  it('bounds slow bd swarm lookup and fails open', () => {
+    const binDir = writeFakeBd(
+      dir,
+      `if [[ "$1 $2 $3" == "swarm list --json" ]]; then
+  sleep 2
+  printf '{"swarms":[]}'
+  exit 0
+fi
+printf '[]'
+`,
+    )
+
+    const started = performance.now()
+    const result = runHook(dir, binDir)
+    const elapsed = performance.now() - started
+
+    expect(result.status).toBe(0)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toBe('')
+    expect(elapsed).toBeLessThan(1500)
   })
 })
