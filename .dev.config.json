@@ -33,26 +33,5 @@
     "planning": "claude-opus-4-7",
     "simple_edits": "claude-haiku-4-5-20251001",
     "review": "claude-sonnet-4-6"
-  },
-  "bannedWords": [
-    "you're absolutely right",
-    "you are absolutely right",
-    "great question",
-    "excellent question",
-    "perfect!",
-    "pre-existing issue",
-    "pre-existing failure",
-    "unrelated failing test",
-    "should work",
-    "this works",
-    "want me to",
-    "would you like",
-    "should i",
-    "shall i",
-    "do you want",
-    "let me know if",
-    "if you'd like",
-    "if you want",
-    "happy to"
-  ]
+  }
 }

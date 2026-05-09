@@ -277,6 +277,25 @@ describe('applyManagedFiles', () => {
     expect(readFileSync(join(dir, '.claude/hooks/foo.sh.dev-new'), 'utf8')).toBe('echo fresh')
   })
 
+  it('on update: replaces empty generated files instead of preserving invalid blanks', async () => {
+    require('node:fs').mkdirSync(join(dir, '.claude/skills/debug'), { recursive: true })
+    writeFileSync(join(dir, '.claude/skills/debug/SKILL.md'), '')
+
+    const result = await applyManagedFiles(dir, {
+      version: '0.8.0',
+      files: new Map([
+        ['.claude/skills/debug/SKILL.md', '---\nname: debug\ndescription: Debug workflow\n---\nbody\n'],
+      ]),
+      mode: 'update',
+    })
+
+    expect(result.written).toContain('.claude/skills/debug/SKILL.md')
+    expect(result.devNew).not.toContain('.claude/skills/debug/SKILL.md.dev-new')
+    expect(readFileSync(join(dir, '.claude/skills/debug/SKILL.md'), 'utf8')).toContain(
+      'name: debug',
+    )
+  })
+
   it('removes files in prior manifest but not in new file set (with .user-backup if drifted on init)', async () => {
     require('node:fs').mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
     writeFileSync(join(dir, '.claude/hooks/retired.sh'), 'echo retired user-modified')

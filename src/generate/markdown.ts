@@ -50,6 +50,9 @@ export function buildClaudeKernel(config: DevConfig): string {
   criticalBullets.push('User constraints non-negotiable. Don\'t reinterpret.')
   criticalBullets.push('No follow-up questions like "Want me to...". Done → stop.')
   criticalBullets.push(
+    'When called out, skip chummy acknowledgments like "fair point" or "you\'re right"; research, verify, or fix.',
+  )
+  criticalBullets.push(
     'Don\'t write "this works"/"should work"/"done" without running test cmd + seeing pass. Stop hook enforces.',
   )
   criticalBullets.push(

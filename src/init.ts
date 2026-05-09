@@ -40,36 +40,6 @@ export async function runInit(): Promise<void> {
   p.outro('Done.')
 }
 
-// Default banned sycophancy / deflection phrases. Users can edit or clear
-// .bannedWords in .dev.config.json — these are just an opinionated starting set
-// enforced by templates/hooks/banned-words-guard.sh (a Stop hook).
-const DEFAULT_BANNED_WORDS: ReadonlyArray<string> = [
-  // Sycophancy / padding
-  "you're absolutely right",
-  'you are absolutely right',
-  'great question',
-  'excellent question',
-  'perfect!',
-  // Deflection
-  'pre-existing issue',
-  'pre-existing failure',
-  'unrelated failing test',
-  // Unverified completion claims
-  'should work',
-  'this works',
-  // Follow-up / permission-asking prompts — the response must state the next
-  // step or stop. Asking the user what to do next is unproductive.
-  'want me to',
-  'would you like',
-  'should i',
-  'shall i',
-  'do you want',
-  'let me know if',
-  "if you'd like",
-  'if you want',
-  'happy to',
-]
-
 async function writeConfigAndInstall(dir: string, answers: Answers): Promise<void> {
   const config: DevConfig = {
     language: answers.language,
@@ -85,7 +55,6 @@ async function writeConfigAndInstall(dir: string, answers: Answers): Promise<voi
     contractDriven: answers.contractDriven,
     targets: answers.targets,
     models: answers.models,
-    bannedWords: DEFAULT_BANNED_WORDS,
   }
 
   writeConfig(dir, config)

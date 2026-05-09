@@ -110,7 +110,9 @@ describe('skills registry', () => {
     const { resolve } = require('node:path') as typeof import('node:path')
     const body = readFileSync(resolve(__dirname, '..', '..', 'templates/rules/ai-behavior.md'), 'utf8')
     expect(body).toContain('No completion claim without proof')
-    expect(body).toContain('Stop hook checks transcript')
+    expect(body).toContain('Stop hook checks the final assistant message')
+    expect(body).toContain('No Chummy Acknowledgments When Called Out')
+    expect(body).toContain('Skip the chummy acknowledgment')
   })
 })
 
@@ -125,12 +127,12 @@ describe('generateClaudeSettings', () => {
     expect(settings.hooks.PreCompact).toBeDefined()
   })
 
-  it('registers banned-words-guard.sh on Stop alongside pre-stop-verification.sh', () => {
+  it('does not register banned-words-guard.sh on Stop', () => {
     const settings = generateClaudeSettings(tsFrontendConfig)
     const stopEntries = settings.hooks.Stop ?? []
     const commands = stopEntries.flatMap((e) => e.hooks.map((h) => h.command))
     expect(commands.some((c) => c.includes('pre-stop-verification.sh'))).toBe(true)
-    expect(commands.some((c) => c.includes('banned-words-guard.sh'))).toBe(true)
+    expect(commands.some((c) => c.includes('banned-words-guard.sh'))).toBe(false)
   })
 
   it('does not register verify-grounding.sh on Stop (replaced by @pinperepette/grounded)', () => {
@@ -208,9 +210,7 @@ describe('generateClaudeSettings', () => {
       expect(stopCommand.indexOf('baseline-compare.sh')).toBeGreaterThan(
         stopCommand.indexOf('pre-stop-verification.sh'),
       )
-      expect(stopCommand.indexOf('banned-words-guard.sh')).toBeGreaterThan(
-        stopCommand.indexOf('baseline-compare.sh'),
-      )
+      expect(stopCommand).not.toContain('banned-words-guard.sh')
     })
 
     it('always registers ai-antipattern-guard.sh on PreToolUse + PostToolUse + Stop', () => {

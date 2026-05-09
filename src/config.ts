@@ -49,7 +49,6 @@ export interface DevConfig {
     simple_edits: string
     review: string
   }
-  bannedWords?: ReadonlyArray<string>
 }
 
 const CONFIG_FILENAME = '.dev.config.json'

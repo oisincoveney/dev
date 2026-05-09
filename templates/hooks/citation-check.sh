@@ -12,32 +12,15 @@ set -euo pipefail
 INPUT=$(cat)
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || echo "")
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."' 2>/dev/null || echo ".")
-
-[[ -z "$TRANSCRIPT" || ! -f "$TRANSCRIPT" ]] && exit 0
-
-LAST_MSG=$(jq -r '
-  if .type == "assistant" or .role == "assistant" then
-    if (.content | type) == "array" then
-      [.content[] | select(.type == "text") | .text] | join(" ")
-    elif (.content | type) == "string" then
-      .content
-    elif (.message | type) == "object" then
-      if ((.message.content) | type) == "array" then
-        [.message.content[] | select(.type == "text") | .text] | join(" ")
-      else
-        .message.content // ""
-      end
-    else ""
-    end
-  else empty
-  end
-' "$TRANSCRIPT" 2>/dev/null | grep -v '^$' | tail -1 || true)
+LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty' 2>/dev/null || echo "")
 
 [[ -z "$LAST_MSG" ]] && exit 0
 
 if ! echo "$LAST_MSG" | grep -qiE '(according to|per the docs|the docs (say|state)|the spec (says|states)|the (RFC|standard) (says|states))'; then
   exit 0
 fi
+
+[[ -z "$TRANSCRIPT" || ! -f "$TRANSCRIPT" ]] && WEB_FETCH_USED=""
 
 WEB_FETCH_USED=$(jq -r '
   (

@@ -131,7 +131,6 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
                 'baseline-compare.sh',
                 'citation-check.sh',
                 'ai-antipattern-guard.sh',
-                'banned-words-guard.sh',
               ],
               120,
             ),

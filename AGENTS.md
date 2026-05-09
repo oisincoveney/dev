@@ -10,6 +10,7 @@ Configured with @oisincoveney/dev. Hooks enforce most rules mechanically. Detail
 - Confident wrong > honest uncertain — false. Say "I need to verify", check.
 - User constraints non-negotiable. Don't reinterpret.
 - No follow-up questions like "Want me to...". Done → stop.
+- When called out, skip chummy acknowledgments like "fair point" or "you're right"; research, verify, or fix.
 - Don't write "this works"/"should work"/"done" without running test cmd + seeing pass. Stop hook enforces.
 - One non-trivial question at a time. Stacking judgment-call questions = not OK.
 

@@ -9,6 +9,7 @@ import {
   mergeClaudeSettings,
   mergeManagedBlock,
   mcpServerInstallCommand,
+  repairKnownProjectMcpConfigs,
   removeLegacyRetiredPaths,
   stripLegacyConfigFields,
   trimBeadsIntegrationOnAgentDocs,
@@ -80,6 +81,8 @@ describe('installAll', () => {
     expect(existsSync(join(dir, '.claude/settings.json'))).toBe(true)
     expect(existsSync(join(dir, '.codex/hooks.json'))).toBe(true)
     expect(existsSync(join(dir, '.codex/hooks/destructive-command-guard.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.agents/skills/grill-me/SKILL.md'))).toBe(true)
+    expect(existsSync(join(dir, '.agents/skills/spec-verifier/SKILL.md'))).toBe(true)
 
     // Cursor rules — one per selected skill
     for (const id of fakeConfig.skills) {
@@ -112,6 +115,15 @@ describe('installAll', () => {
     // CLAUDE.md + AGENTS.md
     expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true)
     expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true)
+    const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
+    expect(agents).toContain('skip chummy acknowledgments')
+
+    const aiBehavior = readFileSync(join(dir, '.claude/rules/ai-behavior.md'), 'utf8')
+    expect(aiBehavior).toContain('No Chummy Acknowledgments When Called Out')
+    expect(aiBehavior).toContain('fair point')
+
+    const cursorAiBehavior = readFileSync(join(dir, '.cursor/rules/ai-behavior.mdc'), 'utf8')
+    expect(cursorAiBehavior).toContain('No Chummy Acknowledgments When Called Out')
 
     // Vendored grill-me skill ships with MIT LICENSE preserved
     expect(existsSync(join(dir, '.claude/skills/grill-me/SKILL.md'))).toBe(true)
@@ -210,6 +222,51 @@ describe('installAll', () => {
         },
       },
     })
+  })
+
+  it('repairs stale project MCP config files for known local servers', () => {
+    mkdirSync(join(dir, '.codex'), { recursive: true })
+    writeFileSync(
+      join(dir, '.mcp.json'),
+      `${JSON.stringify(
+        {
+          mcpServers: {
+            memory: {
+              type: 'stdio',
+              command: 'npx',
+              args: ['-y', '@anthropic-ai/mcp-server-memory'],
+              env: {},
+            },
+            serena: {
+              type: 'stdio',
+              command: 'uvx',
+              args: ['--from', 'git+https://github.com/oraios/serena', 'serena-mcp-server'],
+              env: {},
+            },
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    )
+    writeFileSync(
+      join(dir, '.codex/config.toml'),
+      `[mcp_servers.memory]\nargs = [\n    "-y",\n    "@anthropic-ai/mcp-server-memory",\n]\ncommand = "npx"\n\n[mcp_servers.serena]\nargs = [\n    "--from",\n    "git+https://github.com/oraios/serena",\n    "serena-mcp-server",\n]\ncommand = "uvx"\n\n[features]\ncodex_hooks = true\n`,
+    )
+
+    const repaired = repairKnownProjectMcpConfigs(dir, ['claude', 'codex'])
+
+    expect(repaired.repaired).toEqual(['.mcp.json', '.codex/config.toml'])
+    expect(readFileSync(join(dir, '.mcp.json'), 'utf8')).toContain(
+      '@modelcontextprotocol/server-memory',
+    )
+    expect(readFileSync(join(dir, '.mcp.json'), 'utf8')).toContain('start-mcp-server')
+    expect(readFileSync(join(dir, '.codex/config.toml'), 'utf8')).toContain(
+      '@modelcontextprotocol/server-memory',
+    )
+    expect(readFileSync(join(dir, '.codex/config.toml'), 'utf8')).toContain(
+      'start-mcp-server',
+    )
   })
 
   it('does not write GitHub MCP config when the token env is missing', async () => {
@@ -340,10 +397,10 @@ describe('installAll', () => {
     const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8')
     expect(gitignore).toContain('.beads/issues.jsonl')
 
-    const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
-    expect(agents).toContain('bd dolt pull')
-    expect(agents).toContain('bd dolt push')
-    expect(agents).toContain('Do not commit `.beads/issues.jsonl`')
+    const beadsAgents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
+    expect(beadsAgents).toContain('bd dolt pull')
+    expect(beadsAgents).toContain('bd dolt push')
+    expect(beadsAgents).toContain('Do not commit `.beads/issues.jsonl`')
 
     const beadsRule = readFileSync(join(dir, '.claude/rules/beads.md'), 'utf8')
     expect(beadsRule).toContain('bd bootstrap')

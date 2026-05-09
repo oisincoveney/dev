@@ -136,6 +136,12 @@ export async function installAll(
     pruneScopeGuardHook(join(homedir(), '.claude', 'settings.json'), log, warn)
   }
 
+  if (options.isUpdate) {
+    const repaired = repairKnownProjectMcpConfigs(cwd, config.targets)
+    for (const path of repaired.repaired) log(`MCP: repaired ${path}`)
+    for (const warning of repaired.warnings) warn(warning)
+  }
+
   if (options.skipSideEffects) return installResult
 
   if (config.targets.includes('claude')) {
@@ -325,58 +331,13 @@ export function gatherAllManagedFiles(ctx: GatherContext): Map<string, string> {
 
   if (config.targets.includes('claude')) {
     walkDirIntoMap(join(TEMPLATES_DIR, 'hooks'), '.claude/hooks', out)
-    walkDirIntoMap(join(TEMPLATES_DIR, 'skills'), '.claude/skills', out, (relPath, content) => {
-      const parts = relPath.split('/')
-      if (parts.length === 4 && parts[3] === 'SKILL.md') {
-        const skillId = parts[2]
-        if (BD_ONLY_SKILLS.has(skillId) && !config.tools.includes('beads')) {
-          return content
-        }
-      }
-      return content
-    })
+    addOwnedSkillsToMap(ctx, out, '.claude/skills')
 
     if (config.tools.includes('beads')) {
-      out.delete('.claude/skills/to-bd-issues/SKILL.md')
-      out.delete('.claude/skills/to-bd-issues/LICENSE')
-      out.delete('.claude/skills/spec-verifier/SKILL.md')
-      out.delete('.claude/skills/parallel-tickets/SKILL.md')
-      out.delete('.claude/skills/plan-brief/SKILL.md')
-      walkDirIntoMap(
-        join(TEMPLATES_DIR, 'skills', 'to-bd-issues'),
-        '.claude/skills/to-bd-issues',
-        out,
-      )
-      walkDirIntoMap(
-        join(TEMPLATES_DIR, 'skills', 'spec-verifier'),
-        '.claude/skills/spec-verifier',
-        out,
-      )
-      walkDirIntoMap(
-        join(TEMPLATES_DIR, 'skills', 'parallel-tickets'),
-        '.claude/skills/parallel-tickets',
-        out,
-      )
-      walkDirIntoMap(
-        join(TEMPLATES_DIR, 'skills', 'plan-brief'),
-        '.claude/skills/plan-brief',
-        out,
-      )
-
-      walkDirIntoMap(
-        join(TEMPLATES_DIR, 'bd'),
-        '.beads',
-        out,
-      )
-    } else {
-      for (const id of BD_ONLY_SKILLS) {
-        for (const key of Array.from(out.keys())) {
-          if (key.startsWith(`.claude/skills/${id}/`)) out.delete(key)
-        }
-      }
+      walkDirIntoMap(join(TEMPLATES_DIR, 'bd'), '.beads', out)
     }
 
-    addProjectSkillsToMap(ctx, out)
+    addProjectSkillsToMap(ctx, out, '.claude/skills')
 
     for (const rule of generateRules(config, TEMPLATES_DIR)) {
       out.set(`.claude/rules/${rule.filename}`, rule.content)
@@ -390,6 +351,8 @@ export function gatherAllManagedFiles(ctx: GatherContext): Map<string, string> {
   if (config.targets.includes('codex')) {
     walkDirIntoMap(join(TEMPLATES_DIR, 'hooks'), '.codex/hooks', out)
     out.set('.codex/hooks.json', `${JSON.stringify(generateCodexHooks(config), null, 2)}\n`)
+    addOwnedSkillsToMap(ctx, out, '.agents/skills')
+    addProjectSkillsToMap(ctx, out, '.agents/skills')
   }
 
   if (config.targets.includes('opencode')) {
@@ -422,7 +385,26 @@ export function gatherAllManagedFiles(ctx: GatherContext): Map<string, string> {
   return out
 }
 
-function addProjectSkillsToMap(ctx: GatherContext, out: Map<string, string>): void {
+function addOwnedSkillsToMap(
+  ctx: GatherContext,
+  out: Map<string, string>,
+  destPrefix: string,
+): void {
+  walkDirIntoMap(join(TEMPLATES_DIR, 'skills'), destPrefix, out)
+  if (ctx.config.tools.includes('beads')) return
+
+  for (const id of BD_ONLY_SKILLS) {
+    for (const key of Array.from(out.keys())) {
+      if (key.startsWith(`${destPrefix}/${id}/`)) out.delete(key)
+    }
+  }
+}
+
+function addProjectSkillsToMap(
+  ctx: GatherContext,
+  out: Map<string, string>,
+  destPrefix: string,
+): void {
   const selectedSuperpowers = SUPERPOWER_SKILLS.filter((s) => ctx.config.skills.includes(s.id))
   if (selectedSuperpowers.length === 0) return
   const globalSkillsDir = join(homedir(), '.agents', 'skills')
@@ -442,7 +424,7 @@ function addProjectSkillsToMap(ctx: GatherContext, out: Map<string, string>): vo
       ctx.warn(`Skill not found in ${sourceDir}: ${skill.id}`)
       continue
     }
-    walkDirIntoMap(src, `.claude/skills/${skill.id}`, out, (relPath, content) =>
+    walkDirIntoMap(src, `${destPrefix}/${skill.id}`, out, (relPath, content) =>
       relPath.endsWith('/SKILL.md')
         ? stampSkillFrontmatterContent(content, skill, ctx.warn)
         : content,
@@ -1206,7 +1188,7 @@ export function seedConstitutionDecisions(
     },
     {
       title: 'Constitution: no follow-up questions in agent output',
-      body: '## Decision\nAgent responses must not end with follow-up prompts. The banned-words guard enforces this on Stop.\n\n## Rationale\nFollow-up questions force the user to opt out of unsolicited work; net negative on flow.\n\n## Alternatives Considered\nGuide via prompt only — rejected; agents drift.',
+      body: '## Decision\nAgent responses must not end with follow-up prompts. This is a prompt-level style rule, not a runtime hook gate.\n\n## Rationale\nFollow-up questions force the user to opt out of unsolicited work; net negative on flow. Runtime Stop hooks cannot invisibly rewrite final answers, so prose style must not be enforced with blocking hook output.\n\n## Alternatives Considered\nBlocking Stop hook — rejected because the hook feedback is visible and creates output cruft.',
     },
     {
       title: 'Constitution: no completion claims without proof',
@@ -1476,6 +1458,104 @@ function mcpServerSpec(name: string): McpServerSpec | undefined {
     },
   }
   return specs[name]
+}
+
+export interface McpRepairResult {
+  repaired: string[]
+  warnings: string[]
+}
+
+export function repairKnownProjectMcpConfigs(
+  cwd: string,
+  targets: ReadonlyArray<string>,
+): McpRepairResult {
+  const result: McpRepairResult = { repaired: [], warnings: [] }
+  if (targets.includes('claude')) repairClaudeMcpJson(cwd, result)
+  if (targets.includes('codex')) repairCodexMcpToml(cwd, result)
+  return result
+}
+
+function repairClaudeMcpJson(cwd: string, result: McpRepairResult): void {
+  const path = join(cwd, '.mcp.json')
+  if (!existsSync(path)) return
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    result.warnings.push('MCP: .mcp.json is not valid JSON; skipped repair')
+    return
+  }
+
+  if (!isRecord(parsed) || !isRecord(parsed.mcpServers)) return
+  let changed = false
+
+  for (const name of ['memory', 'serena']) {
+    const existing = parsed.mcpServers[name]
+    const spec = mcpServerSpec(name)
+    if (!isRecord(existing) || !spec || !('command' in spec)) continue
+
+    const [command, ...args] = spec.command
+    const next = {
+      ...existing,
+      type: 'stdio',
+      command,
+      args,
+      env: isRecord(existing.env) ? existing.env : {},
+    }
+    if (JSON.stringify(existing) !== JSON.stringify(next)) {
+      parsed.mcpServers[name] = next
+      changed = true
+    }
+  }
+
+  if (!changed) return
+  writeFileSync(path, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8')
+  result.repaired.push('.mcp.json')
+}
+
+function repairCodexMcpToml(cwd: string, result: McpRepairResult): void {
+  const path = join(cwd, '.codex', 'config.toml')
+  if (!existsSync(path)) return
+
+  let content = readFileSync(path, 'utf8')
+  const original = content
+  for (const name of ['memory', 'serena']) {
+    const spec = mcpServerSpec(name)
+    if (!spec || !('command' in spec)) continue
+    content = replaceCodexMcpTomlBlock(content, name, codexMcpTomlBlock(name, spec.command))
+  }
+
+  if (content === original) return
+  writeFileSync(path, content, 'utf8')
+  result.repaired.push('.codex/config.toml')
+}
+
+function replaceCodexMcpTomlBlock(content: string, name: string, block: string): string {
+  const lines = content.split('\n')
+  const start = lines.findIndex((line) => line.trim() === `[mcp_servers.${name}]`)
+  if (start === -1) return content
+
+  let end = start + 1
+  while (end < lines.length) {
+    const trimmed = lines[end].trim()
+    if (trimmed.startsWith('[mcp_servers.') && trimmed.endsWith(']')) break
+    if (trimmed.startsWith('[') && trimmed.endsWith(']') && !trimmed.startsWith('[mcp_servers.')) break
+    end += 1
+  }
+
+  const next = [...lines.slice(0, start), ...block.trimEnd().split('\n'), ...lines.slice(end)]
+  return `${next.join('\n').replace(/\n*$/, '')}\n`
+}
+
+function codexMcpTomlBlock(name: string, command: string[]): string {
+  const [binary, ...args] = command
+  const argsLines = args.map((arg) => `    ${JSON.stringify(arg)},`).join('\n')
+  return `[mcp_servers.${name}]\nargs = [\n${argsLines}\n]\ncommand = ${JSON.stringify(binary)}\n`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function usableMcpServers(

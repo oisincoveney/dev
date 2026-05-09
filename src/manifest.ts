@@ -173,6 +173,9 @@ function decideWriteAction(
   }
 
   const currentContent = readFileSync(absPath, 'utf8')
+  if (mode === 'update' && currentContent === '' && content !== '') {
+    return { kind: 'clean-replace' }
+  }
   const severity = classifyDrift(currentContent, content)
 
   if (relPath === LEFTHOOK_PATH && severity !== 'none') {
