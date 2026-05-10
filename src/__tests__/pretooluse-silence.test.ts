@@ -5,7 +5,16 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -37,12 +46,31 @@ function runHook(script: string, input: Record<string, unknown>): HookResult {
   }
 }
 
+function runDispatch(
+  cwd: string,
+  input: Record<string, unknown>,
+  env: Record<string, string> = {},
+): HookResult {
+  const result = spawnSync('bash', [join(HOOKS_DIR, 'pre-tool-dispatch.sh')], {
+    cwd,
+    input: JSON.stringify(input),
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  })
+  return {
+    status: result.status ?? -1,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  }
+}
+
 describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
   let dir = ''
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'pretooluse-silence-'))
     mkdirSync(join(dir, '.claude'))
+    symlinkSync(HOOKS_DIR, join(dir, '.claude', 'hooks'), 'dir')
   })
 
   afterEach(() => {
@@ -128,6 +156,90 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('TodoWrite is blocked')
   })
+
+  it.each(['Write', 'write', 'functions.write'])(
+    'dispatcher routes %s through TypeScript write guards',
+    (toolName) => {
+      const result = runDispatch(
+        dir,
+        {
+          tool_name: toolName,
+          tool_input: {
+            file_path: 'src/example.ts',
+            content: 'const value: any = 1\n',
+          },
+        },
+        { OISIN_DEV_TYPESCRIPT: '1' },
+      )
+
+      expect(result.status).toBe(2)
+      expect(result.stderr).toContain('Style violation')
+    },
+  )
+
+  it.each(['apply_patch', 'functions.apply_patch'])(
+    'dispatcher extracts patch content for %s TypeScript guards',
+    (toolName) => {
+      const result = runDispatch(
+        dir,
+        {
+          tool_name: toolName,
+          tool_input: {
+            command:
+              '*** Begin Patch\n*** Add File: src/example.ts\n+const value: any = 1\n*** End Patch\n',
+          },
+        },
+        { OISIN_DEV_TYPESCRIPT: '1' },
+      )
+
+      expect(result.status).toBe(2)
+      expect(result.stderr).toContain('Style violation')
+    },
+  )
+
+  it('dispatcher extracts patch content for fabricated import checks', () => {
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: {} }))
+    const result = runDispatch(
+      dir,
+      {
+        tool_name: 'functions.apply_patch',
+        tool_input: {
+          command:
+            '*** Begin Patch\n*** Add File: src/fake.ts\n+import nope from "not-a-real-package"\n+void nope\n*** End Patch\n',
+        },
+      },
+      { OISIN_DEV_TYPESCRIPT: '1' },
+    )
+
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('Fabricated imports')
+  })
+
+  it.each(['Bash', 'bash', 'functions.exec_command'])(
+    'dispatcher routes %s through shell guards',
+    (toolName) => {
+      const result = runDispatch(dir, {
+        tool_name: toolName,
+        tool_input: { command: 'rm -rf dist' },
+      })
+
+      expect(result.status).toBe(2)
+      expect(result.stderr).toContain('BLOCKED')
+    },
+  )
+
+  it.each(['TodoWrite', 'todowrite', 'functions.todo_write'])(
+    'dispatcher routes %s through TodoWrite guard',
+    (toolName) => {
+      const result = runDispatch(dir, {
+        tool_name: toolName,
+        tool_input: { todos: [] },
+      })
+
+      expect(result.status).toBe(2)
+      expect(result.stderr).toContain('TodoWrite is blocked')
+    },
+  )
 
   it('quiet runner hides infrastructure failures and logs them', () => {
     const failing = join(dir, 'fails.sh')

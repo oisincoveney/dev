@@ -6,6 +6,11 @@ set -uo pipefail
 
 INPUT=$(cat)
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // .toolName // empty' 2>/dev/null || true)
+TOOL_KEY=$(
+  printf '%s' "$TOOL_NAME" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^[:alnum:]_]+/_/g; s/^_+//; s/_+$//'
+)
 
 HOOK_DIR=".claude/hooks"
 case "$0" in
@@ -14,11 +19,14 @@ esac
 
 SCRIPTS=("$HOOK_DIR/audit-log.sh")
 
-case "$TOOL_NAME" in
-  Read|Glob)
+case "$TOOL_KEY" in
+  read|glob|grep|*_read|*_glob|*_grep)
     SCRIPTS+=("$HOOK_DIR/docs-first.sh")
     ;;
-  Write|Edit)
+  todowrite|todo_write|todo|*_todowrite|*_todo_write|*_todo)
+    SCRIPTS+=("$HOOK_DIR/block-todowrite.sh")
+    ;;
+  write|edit|multiedit|multi_edit|patch|apply_patch|*_write|*_edit|*_multiedit|*_multi_edit|*_patch|*_apply_patch)
     SCRIPTS+=(
       "$HOOK_DIR/worktree-write-guard.sh"
     )
@@ -30,7 +38,7 @@ case "$TOOL_NAME" in
     fi
     SCRIPTS+=("$HOOK_DIR/ai-antipattern-guard.sh")
     ;;
-  Bash)
+  bash|shell|exec|exec_command|*_bash|*_shell|*_exec|*_exec_command)
     SCRIPTS+=(
       "$HOOK_DIR/destructive-command-guard.sh"
     )
@@ -42,9 +50,6 @@ case "$TOOL_NAME" in
       )
     fi
     SCRIPTS+=("$HOOK_DIR/block-coauthor.sh")
-    ;;
-  TodoWrite|todo_write|todowrite)
-    SCRIPTS+=("$HOOK_DIR/block-todowrite.sh")
     ;;
 esac
 

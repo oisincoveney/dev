@@ -4,10 +4,15 @@ set -euo pipefail
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // .toolName // empty' 2>/dev/null || true)
+TOOL_KEY=$(
+  printf '%s' "$TOOL_NAME" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^[:alnum:]_]+/_/g; s/^_+//; s/_+$//'
+)
 HAS_TOOL_INPUT=$(echo "$INPUT" | jq -r 'has("tool_input") or has("toolInput")' 2>/dev/null || echo "false")
 
-case "$TOOL_NAME" in
-  TodoWrite|todo_write|todowrite) ;;
+case "$TOOL_KEY" in
+  todowrite|todo_write|todo|*_todowrite|*_todo_write|*_todo) ;;
   "")
     [[ "$HAS_TOOL_INPUT" != "true" ]] && exit 0
     ;;

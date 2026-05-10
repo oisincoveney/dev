@@ -16,8 +16,35 @@ fi
 branch=$(git branch --show-current 2>/dev/null || true)
 [[ -n "$branch" ]] && parts+=("⎇ $branch")
 
+bd_ready_count() {
+  local out_file
+  local pid
+  out_file=$(mktemp "${TMPDIR:-/tmp}/bd-ready.XXXXXX") || return 0
+  bd ready >"$out_file" 2>/dev/null &
+  pid=$!
+
+  # Keep statusline cheap and non-blocking. bd can wait on Dolt locks held by
+  # other processes, and statusLine runs frequently in the UI.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" 2>/dev/null || true
+      grep -c '^' "$out_file" 2>/dev/null || true
+      rm -f "$out_file"
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  kill "$pid" 2>/dev/null || true
+  sleep 0.1
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  rm -f "$out_file"
+  return 0
+}
+
 if command -v bd >/dev/null 2>&1; then
-  ready_count=$(bd ready 2>/dev/null | grep -c '^' || true)
+  ready_count=$(bd_ready_count)
   if [[ -n "$ready_count" && "$ready_count" != "0" ]]; then
     parts+=("ready:$ready_count")
   fi

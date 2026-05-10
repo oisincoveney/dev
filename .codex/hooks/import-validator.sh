@@ -7,6 +7,27 @@ set -euo pipefail
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.filePath // empty' 2>/dev/null)
 CONTENT=$(echo "$INPUT" | jq -r '.tool_input.content // .tool_input.new_string // .tool_input.newString // empty' 2>/dev/null)
+PATCH_COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // .tool_input.patch // empty' 2>/dev/null)
+
+if [[ ( -z "$FILE_PATH" || -z "$CONTENT" ) && -n "$PATCH_COMMAND" ]]; then
+  FILE_PATH=$(printf '%s\n' "$PATCH_COMMAND" | awk '
+    /^\*\*\* (Update|Add) File: .*\.(ts|tsx|js|mjs|cjs|rs|go)$/ {
+      sub(/^\*\*\* (Update|Add) File: /, "")
+      print
+      exit
+    }
+  ')
+  CONTENT=$(printf '%s\n' "$PATCH_COMMAND" | awk '
+    /^\*\*\* (Update|Add) File: / {
+      path = $0
+      sub(/^\*\*\* (Update|Add) File: /, "", path)
+      active = (path ~ /\.(ts|tsx|js|mjs|cjs|rs|go)$/)
+      next
+    }
+    /^\*\*\* (Delete|Update|Add|End) File:/ { active = 0 }
+    active && /^\+[^+]/ { print substr($0, 2) }
+  ')
+fi
 
 if [[ -z "$FILE_PATH" || -z "$CONTENT" ]]; then
   exit 0

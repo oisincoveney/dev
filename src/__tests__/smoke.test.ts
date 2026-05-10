@@ -7,6 +7,7 @@ import { generateCursorRules } from '../generate/cursor-rules.js'
 import { generateLefthook } from '../generate/lefthook.js'
 import { generateLintConfig } from '../generate/lint-config.js'
 import { buildClaudeMdBundle, generateClaudeMd } from '../generate/markdown.js'
+import { generateOpencodePlugin } from '../generate/opencode-plugin.js'
 import { generateRules } from '../generate/rules.js'
 import { RULE_SKILLS, SUPERPOWER_SKILLS, skillsForVariant } from '../skills.js'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -279,6 +280,29 @@ describe('generateCodexHooks', () => {
         command.includes('.codex/hooks/pre-tool-dispatch.sh'),
       ),
     ).toBe(true)
+  })
+})
+
+describe('generateOpencodePlugin', () => {
+  it('normalizes Claude, Codex, and OpenCode tool names into shared guard paths', () => {
+    const plugin = generateOpencodePlugin(tsFrontendConfig)
+
+    expect(plugin).toContain('function toolKey')
+    expect(plugin).toContain('isWriteTool(key)')
+    expect(plugin).toContain('apply_patch')
+    expect(plugin).toContain('exec_command')
+    expect(plugin).toContain("runHook('ts-style-guard.sh'")
+    expect(plugin).toContain("runHook('destructive-command-guard.sh'")
+    expect(plugin).toContain("runHook('block-todowrite.sh'")
+    expect(plugin).toContain('const HAS_TYPESCRIPT = true')
+    expect(plugin).toContain('const BEADS_ENABLED = true')
+  })
+
+  it('disables TypeScript and Beads-only guards when config does not enable them', () => {
+    const plugin = generateOpencodePlugin(rustConfig)
+
+    expect(plugin).toContain('const HAS_TYPESCRIPT = false')
+    expect(plugin).toContain('const BEADS_ENABLED = true')
   })
 })
 
