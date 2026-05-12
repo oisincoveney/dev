@@ -14,7 +14,7 @@ function hasCmd(name: string): boolean {
 const canRun = hasCmd('bash') && hasCmd('jq') && hasCmd('git')
 
 function git(cwd: string, ...args: string[]): { status: number; stdout: string; stderr: string } {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8' })
+  const r = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd, encoding: 'utf8' })
   return { status: r.status ?? -1, stdout: r.stdout, stderr: r.stderr }
 }
 

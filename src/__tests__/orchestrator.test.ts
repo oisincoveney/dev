@@ -1,10 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   applyInternalTemplate,
   copierMiseArgs,
+  mergeMiseToolLines,
   runInitOrchestration,
   STATE_FILE,
   templateDataFromAnswers,
@@ -100,6 +101,29 @@ describe('thin orchestrator', () => {
     expect(opencode).toContain('ts-style-guard.sh')
     expect(opencode).toContain('import-validator.sh')
     expect(opencode).toContain('ai-antipattern-guard.sh')
+  })
+
+  it('preserves existing mise tasks while adding harness tools', () => {
+    writeFileSync(
+      join(dir, 'mise.toml'),
+      '[tools]\nnode = "22"\n\n[tasks.test]\nrun = "npm test"\n',
+    )
+
+    applyInternalTemplate(dir, templateDataFromAnswers(answers))
+
+    const mise = readFileSync(join(dir, 'mise.toml'), 'utf8')
+    expect(mise).toContain('node = "22"')
+    expect(mise).toContain('[tasks.test]\nrun = "npm test"')
+    expect(mise).toContain('"pipx:copier" = "9.14.0"')
+    expect(mise).toContain('"npm:@sentry/dotagents" = "latest"')
+    expect(mise).toContain('"aqua:evilmartians/lefthook" = "latest"')
+    expect(mise).toContain('"aqua:steveyegge/beads" = "1.0.2"')
+  })
+
+  it('can add harness tools to a mise file without a tools section', () => {
+    expect(mergeMiseToolLines('[tasks.test]\nrun = "npm test"\n', ['"pipx:copier" = "9.14.0"'])).toBe(
+      '[tools]\n"pipx:copier" = "9.14.0"\n\n[tasks.test]\nrun = "npm test"\n',
+    )
   })
 
   it('writes and reads internal state on init orchestration', () => {

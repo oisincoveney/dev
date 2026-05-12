@@ -165,8 +165,8 @@ export function runUpdateOrchestration(
   cwd: string,
   options: OrchestratorOptions = {},
 ): OrchestratorResult {
+  const data = readInternalState(cwd)
   if (options.skipExternalTools) {
-    const data = readInternalState(cwd)
     if (data === null) {
       return { ok: false, message: `No ${STATE_FILE} found. Run \`oisin-dev init\` first.` }
     }
@@ -177,6 +177,7 @@ export function runUpdateOrchestration(
     return { ok: false, message: `No ${STATE_FILE} found. Run \`oisin-dev init\` first.` }
   }
   refreshCopierSourcePath(cwd)
+  ensureMiseToml(cwd, data ?? undefined)
   const trust = runMise(cwd, ['trust', '-y'])
   if (!trust.ok) return trust
   const install = runMise(cwd, ['install'])
@@ -200,6 +201,7 @@ export function runResetOrchestration(
     }
   }
   refreshCopierSourcePath(cwd)
+  ensureMiseToml(cwd, readInternalState(cwd) ?? undefined)
   const trust = runMise(cwd, ['trust', '-y'])
   if (!trust.ok) return trust
   const install = runMise(cwd, ['install'])
@@ -278,6 +280,7 @@ function stringArray(value: unknown, fallback: string[]): string[] {
 }
 
 function runPostTemplateTools(cwd: string, data?: TemplateData): OrchestratorResult {
+  ensureMiseToml(cwd, data ?? readInternalState(cwd) ?? undefined)
   const trust = runMise(cwd, ['trust', '-y'])
   if (!trust.ok) return trust
   const install = runMise(cwd, ['install'])
@@ -289,7 +292,7 @@ function runPostTemplateTools(cwd: string, data?: TemplateData): OrchestratorRes
   if (!dotagentsDoctor.ok) return dotagentsDoctor
 
   if (data === undefined || data.targets.includes('lefthook')) {
-    const lefthook = runMise(cwd, ['exec', '--', 'lefthook', 'install'])
+    const lefthook = runMise(cwd, ['exec', '--', 'lefthook', 'install', '--force'])
     if (!lefthook.ok) return lefthook
   }
   return { ok: true }
@@ -335,7 +338,7 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   writeGeneratedFile(cwd, 'AGENTS.md', agentsMd(data))
   writeGeneratedFile(cwd, 'CLAUDE.md', claudeMd())
   writeGeneratedFile(cwd, 'agents.toml', agentsToml(data))
-  writeGeneratedFile(cwd, 'mise.toml', miseToml(data))
+  ensureMiseToml(cwd, data)
   writeGeneratedFile(cwd, 'lefthook.yml', lefthookYml(data))
 
   if (data.targets.includes('claude')) {
@@ -366,6 +369,86 @@ function writeGeneratedFile(cwd: string, relPath: string, content: string): void
   const absPath = join(cwd, relPath)
   mkdirSync(dirname(absPath), { recursive: true })
   writeFileSync(absPath, content)
+}
+
+export function ensureMiseToml(cwd: string, data?: TemplateData): void {
+  const path = join(cwd, 'mise.toml')
+  if (!existsSync(path)) {
+    writeGeneratedFile(cwd, 'mise.toml', miseToml(data ?? defaultMiseTemplateData()))
+    return
+  }
+
+  const existing = readFileSync(path, 'utf8')
+  writeFileSync(path, mergeMiseToolLines(existing, requiredMiseToolLines(data)))
+}
+
+export function mergeMiseToolLines(existing: string, requiredLines: string[]): string {
+  const lines = existing.split(/\r?\n/)
+  const toolsStart = lines.findIndex((line) => line.trim() === '[tools]')
+  if (toolsStart === -1) {
+    const prefix = ['[tools]', ...requiredLines, ''].join('\n')
+    return `${prefix}\n${existing.replace(/^\s+/, '')}`
+  }
+
+  let toolsEnd = lines.length
+  for (let index = toolsStart + 1; index < lines.length; index += 1) {
+    if (/^\s*\[/.test(lines[index])) {
+      toolsEnd = index
+      break
+    }
+  }
+
+  const existingKeys = new Set<string>()
+  for (const line of lines.slice(toolsStart + 1, toolsEnd)) {
+    const key = miseToolKey(line)
+    if (key !== null) existingKeys.add(key)
+  }
+
+  const missing = requiredLines.filter((line) => {
+    const key = miseToolKey(line)
+    return key !== null && !existingKeys.has(key)
+  })
+  if (missing.length === 0) return existing
+
+  lines.splice(toolsStart + 1, 0, ...missing)
+  return `${lines.join('\n').replace(/\s+$/, '')}\n`
+}
+
+function requiredMiseToolLines(data?: TemplateData): string[] {
+  const lines = [
+    '"pipx:copier" = "9.14.0"',
+    '"npm:@sentry/dotagents" = "latest"',
+    '"aqua:evilmartians/lefthook" = "latest"',
+  ]
+  if (data?.beads_enabled === true) lines.push('"aqua:steveyegge/beads" = "1.0.2"')
+  return lines
+}
+
+function miseToolKey(line: string): string | null {
+  const match = line.match(/^\s*("[^"]+"|[A-Za-z0-9_.-]+)\s*=/)
+  return match?.[1] ?? null
+}
+
+function defaultMiseTemplateData(): TemplateData {
+  return {
+    language: 'other',
+    variant: 'other-app',
+    languages: ['other'],
+    variants: ['other-app'],
+    framework: '',
+    package_manager: 'other',
+    commands: {},
+    skills: [],
+    tools: [],
+    workflow: 'none',
+    contract_driven: false,
+    targets: [],
+    mcp_servers: [],
+    models: {},
+    beads_enabled: false,
+    has_typescript: false,
+    has_frontend: false,
+  }
 }
 
 function copyTree(source: string, dest: string): void {
