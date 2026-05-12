@@ -652,7 +652,7 @@ function agentsToml(data: TemplateData): string {
   return `version = 1
 agents = [${agentTargets.map((target) => JSON.stringify(target)).join(', ')}]
 
-# Project-owned skills live directly in .agents/skills/ and are linked into
+# Generated skills live directly in .agents/skills/ and are linked into
 # tool-specific locations by dotagents.
 `
 }

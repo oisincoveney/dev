@@ -5,12 +5,14 @@ import * as p from '@clack/prompts'
 import { runResetOrchestration } from './orchestrator.js'
 
 export const RESET_PATHS = [
+  '.agents',
   '.claude',
   '.codex',
   '.cursor',
   '.opencode',
   'AGENTS.md',
   'CLAUDE.md',
+  'agents.toml',
 ] as const
 
 export interface ResetOptions {

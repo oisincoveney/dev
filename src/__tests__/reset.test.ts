@@ -40,8 +40,10 @@ describe('reset command helpers', () => {
     for (const relPath of RESET_PATHS) {
       const abs = join(dir, relPath)
       if (relPath.endsWith('.md')) writeFileSync(abs, relPath)
+      else if (relPath.endsWith('.toml')) writeFileSync(abs, relPath)
       else mkdirSync(abs, { recursive: true })
     }
+    mkdirSync(join(dir, '.agents/skills/stale-generated-skill'), { recursive: true })
     mkdirSync(join(dir, '.beads'), { recursive: true })
 
     expect(existingResetPaths(dir)).toEqual([...RESET_PATHS])
@@ -50,6 +52,7 @@ describe('reset command helpers', () => {
     for (const relPath of RESET_PATHS) {
       expect(existsSync(join(dir, relPath))).toBe(false)
     }
+    expect(existsSync(join(dir, '.agents/skills/stale-generated-skill'))).toBe(false)
     expect(existsSync(join(dir, '.beads'))).toBe(true)
   })
 
