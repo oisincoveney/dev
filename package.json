@@ -28,7 +28,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@clack/prompts": "^0.9.1"
+    "@clack/prompts": "^0.9.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "vitest": "^3.1.1",

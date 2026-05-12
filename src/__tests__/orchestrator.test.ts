@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
 import {
   applyInternalTemplate,
   copierMiseArgs,
@@ -162,12 +163,21 @@ describe('thin orchestrator', () => {
 
   it('can add lefthook commands when a hook has no commands section', () => {
     const merged = mergeLefthookCommands('pre-commit:\n  parallel: true\n', {
-      'pre-commit': ['    tdd-guard:\n      run: .claude/hooks/tdd-guard.sh'],
+      'pre-commit': {
+        'tdd-guard': { run: '.claude/hooks/tdd-guard.sh' },
+      },
     })
 
-    expect(merged).toBe(
-      'pre-commit:\n  commands:\n    tdd-guard:\n      run: .claude/hooks/tdd-guard.sh\n  parallel: true\n',
-    )
+    expect(parse(merged)).toEqual({
+      'pre-commit': {
+        parallel: true,
+        commands: {
+          'tdd-guard': {
+            run: '.claude/hooks/tdd-guard.sh',
+          },
+        },
+      },
+    })
   })
 
   it('writes and reads internal state on init orchestration', () => {

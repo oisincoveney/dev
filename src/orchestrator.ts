@@ -13,6 +13,7 @@ import {
 import { spawnSync } from 'node:child_process'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parse, stringify } from 'yaml'
 import type { DevConfig, Language, PackageManager, Target, WorkflowFramework } from './config.js'
 import type { Answers } from './prompts.js'
 import type { ProjectVariant } from './skills.js'
@@ -429,93 +430,64 @@ export function ensureLefthookYml(cwd: string, data?: TemplateData): void {
   writeFileSync(path, mergeLefthookCommands(existing, requiredLefthookCommandBlocks(templateData)))
 }
 
-export function mergeLefthookCommands(existing: string, requiredBlocks: Record<string, string[]>): string {
-  let text = `${existing.replace(/\s+$/, '')}\n`
-  for (const [hook, blocks] of Object.entries(requiredBlocks)) {
-    text = mergeLefthookHook(text, hook, blocks)
+export function mergeLefthookCommands(existing: string, requiredBlocks: Record<string, LefthookCommands>): string {
+  const config = parseYamlMap(existing, 'lefthook.yml')
+  for (const [hook, commands] of Object.entries(requiredBlocks)) {
+    const hookConfig = yamlMap(config[hook])
+    const hookCommands = yamlMap(hookConfig.commands)
+    for (const [name, command] of Object.entries(commands)) {
+      if (hookCommands[name] === undefined) hookCommands[name] = command
+    }
+    hookConfig.commands = hookCommands
+    config[hook] = hookConfig
   }
-  return text
+  return stringify(config)
 }
 
-function mergeLefthookHook(existing: string, hook: string, requiredBlocks: string[]): string {
-  const blocks = requiredBlocks.filter((block) => lefthookCommandName(block) !== null)
-  if (blocks.length === 0) return existing
+type LefthookCommand = Record<string, unknown>
+type LefthookCommands = Record<string, LefthookCommand>
 
-  const lines = existing.split(/\r?\n/)
-  const hookStart = lines.findIndex((line) => line.trim() === `${hook}:`)
-  if (hookStart === -1) {
-    const section = ['', `${hook}:`, '  commands:', ...blocks, ''].join('\n')
-    return `${existing.replace(/\s+$/, '')}${section}`
+function requiredLefthookCommandBlocks(data: TemplateData): Record<string, LefthookCommands> {
+  const commitMsg: LefthookCommands = {
+    'conventional-commits': {
+      run: [
+        "if ! head -1 {1} | grep -qE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)(\\([a-z0-9-]+\\))?!?: .+'; then",
+        '  echo "Commit message must follow Conventional Commits format."',
+        '  exit 1',
+        'fi',
+      ].join('\n'),
+    },
   }
-
-  const hookEnd = findNextTopLevelYamlKey(lines, hookStart + 1)
-  const commandsStart = lines.findIndex((line, index) => {
-    return index > hookStart && index < hookEnd && line.trim() === 'commands:' && indentWidth(line) === 2
-  })
-
-  if (commandsStart === -1) {
-    lines.splice(hookStart + 1, 0, '  commands:', ...blocks)
-    return `${lines.join('\n').replace(/\s+$/, '')}\n`
-  }
-
-  const commandsEnd = findNextSiblingYamlKey(lines, commandsStart + 1, hookEnd, 2)
-  const existingCommands = new Set<string>()
-  for (const line of lines.slice(commandsStart + 1, commandsEnd)) {
-    const match = line.match(/^\s{4}([A-Za-z0-9_.-]+):\s*$/)
-    if (match) existingCommands.add(match[1])
-  }
-
-  const missing = blocks.filter((block) => {
-    const command = lefthookCommandName(block)
-    return command !== null && !existingCommands.has(command)
-  })
-  if (missing.length === 0) return existing
-
-  lines.splice(commandsEnd, 0, ...missing)
-  return `${lines.join('\n').replace(/\s+$/, '')}\n`
-}
-
-function requiredLefthookCommandBlocks(data: TemplateData): Record<string, string[]> {
-  const commitMsg = [
-    [
-      '    conventional-commits:',
-      '      run: |',
-      "        if ! head -1 {1} | grep -qE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)(\\([a-z0-9-]+\\))?!?: .+'; then",
-      '          echo "Commit message must follow Conventional Commits format."',
-      '          exit 1',
-      '        fi',
-    ].join('\n'),
-  ]
   if (data.beads_enabled) {
-    commitMsg.push([
-      '    bd-ticket-ref:',
-      '      run: |',
-      '        subject=$(head -1 {1})',
-      "        type=$(echo \"$subject\" | grep -oE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)' | head -1)",
-      '        case "$type" in docs|chore|style) exit 0 ;; esac',
-      "        if echo \"$subject\" | grep -qE '\\([a-z0-9._-]*[a-z0-9-]+-[a-z0-9._-]+\\)'; then exit 0; fi",
-      "        if grep -qE '^\\s*Refs:\\s+[a-z0-9_-]+-[a-z0-9._-]+' {1}; then exit 0; fi",
-      '        echo "Commit references no bd ticket."',
-      '        exit 1',
-    ].join('\n'))
+    commitMsg['bd-ticket-ref'] = {
+      run: [
+        'subject=$(head -1 {1})',
+        "type=$(echo \"$subject\" | grep -oE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)' | head -1)",
+        'case "$type" in docs|chore|style) exit 0 ;; esac',
+        "if echo \"$subject\" | grep -qE '\\([a-z0-9._-]*[a-z0-9-]+-[a-z0-9._-]+\\)'; then exit 0; fi",
+        "if grep -qE '^\\s*Refs:\\s+[a-z0-9_-]+-[a-z0-9._-]+' {1}; then exit 0; fi",
+        'echo "Commit references no bd ticket."',
+        'exit 1',
+      ].join('\n'),
+    }
   }
 
-  const preCommit: string[] = []
-  if (data.commands.typecheck) preCommit.push(['    typecheck:', '      run: mise run typecheck'].join('\n'))
-  if (data.commands.lint) preCommit.push(['    lint:', '      run: mise run lint'].join('\n'))
-  preCommit.push(['    tdd-guard:', '      run: .claude/hooks/tdd-guard.sh'].join('\n'))
+  const preCommit: LefthookCommands = {}
+  if (data.commands.typecheck) preCommit.typecheck = { run: 'mise run typecheck' }
+  if (data.commands.lint) preCommit.lint = { run: 'mise run lint' }
+  preCommit['tdd-guard'] = { run: '.claude/hooks/tdd-guard.sh' }
 
-  const prePush: string[] = []
-  if (data.commands.test) prePush.push(['    test:', '      run: mise run test'].join('\n'))
-  if (data.commands.e2e) prePush.push(['    e2e:', '      run: mise run e2e'].join('\n'))
-  prePush.push(['    pr-size-check:', '      run: .claude/hooks/pr-size-check.sh'].join('\n'))
-  prePush.push([
-    '    semgrep:',
-    '      run: |',
-    '        if command -v semgrep >/dev/null 2>&1; then',
-    '          semgrep --config p/security-audit --config p/owasp-top-ten --error',
-    '        fi',
-  ].join('\n'))
+  const prePush: LefthookCommands = {}
+  if (data.commands.test) prePush.test = { run: 'mise run test' }
+  if (data.commands.e2e) prePush.e2e = { run: 'mise run e2e' }
+  prePush['pr-size-check'] = { run: '.claude/hooks/pr-size-check.sh' }
+  prePush.semgrep = {
+    run: [
+      'if command -v semgrep >/dev/null 2>&1; then',
+      '  semgrep --config p/security-audit --config p/owasp-top-ten --error',
+      'fi',
+    ].join('\n'),
+  }
 
   return {
     'commit-msg': commitMsg,
@@ -524,29 +496,19 @@ function requiredLefthookCommandBlocks(data: TemplateData): Record<string, strin
   }
 }
 
-function lefthookCommandName(block: string): string | null {
-  const match = block.match(/^\s{4}([A-Za-z0-9_.-]+):\s*$/m)
-  return match?.[1] ?? null
+function parseYamlMap(source: string, path: string): Record<string, unknown> {
+  const parsed = parse(source)
+  if (parsed === null) return {}
+  if (!isPlainObject(parsed)) throw new Error(`${path} must be a YAML mapping`)
+  return parsed
 }
 
-function findNextTopLevelYamlKey(lines: string[], start: number): number {
-  for (let index = start; index < lines.length; index += 1) {
-    if (/^[A-Za-z0-9_-]+:\s*$/.test(lines[index])) return index
-  }
-  return lines.length
+function yamlMap(value: unknown): Record<string, unknown> {
+  return isPlainObject(value) ? value : {}
 }
 
-function findNextSiblingYamlKey(lines: string[], start: number, end: number, indent: number): number {
-  for (let index = start; index < end; index += 1) {
-    const line = lines[index]
-    if (line.trim().length === 0 || line.trimStart().startsWith('#')) continue
-    if (indentWidth(line) <= indent && /^\s*[A-Za-z0-9_-]+:/.test(line)) return index
-  }
-  return end
-}
-
-function indentWidth(line: string): number {
-  return line.match(/^ */)?.[0].length ?? 0
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function requiredMiseToolLines(data?: TemplateData): string[] {
@@ -717,18 +679,11 @@ function miseToml(data: TemplateData): string {
 
 function lefthookYml(data: TemplateData): string {
   const blocks = requiredLefthookCommandBlocks(data)
-  const lines = [
-    '# lefthook.yml — generated by @oisincoveney/dev',
-    '',
-    'commit-msg:',
-    '  commands:',
-    ...blocks['commit-msg'],
-  ]
-  lines.push('', 'pre-commit:', '  parallel: true', '  commands:')
-  lines.push(...blocks['pre-commit'])
-  lines.push('', 'pre-push:', '  commands:')
-  lines.push(...blocks['pre-push'], '')
-  return lines.join('\n')
+  return `# lefthook.yml — generated by @oisincoveney/dev\n${stringify({
+    'commit-msg': { commands: blocks['commit-msg'] },
+    'pre-commit': { parallel: true, commands: blocks['pre-commit'] },
+    'pre-push': { commands: blocks['pre-push'] },
+  })}`
 }
 
 function hookCommand(scripts: string[], timeout?: number): { type: 'command'; command: string; timeout?: number } {
