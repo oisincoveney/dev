@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   applyInternalTemplate,
   copierMiseArgs,
+  mergeLefthookCommands,
   mergeMiseToolLines,
   runInitOrchestration,
   STATE_FILE,
@@ -123,6 +124,49 @@ describe('thin orchestrator', () => {
   it('can add harness tools to a mise file without a tools section', () => {
     expect(mergeMiseToolLines('[tasks.test]\nrun = "npm test"\n', ['"pipx:copier" = "9.14.0"'])).toBe(
       '[tools]\n"pipx:copier" = "9.14.0"\n\n[tasks.test]\nrun = "npm test"\n',
+    )
+  })
+
+  it('preserves existing lefthook commands while adding harness commands', () => {
+    writeFileSync(
+      join(dir, 'lefthook.yml'),
+      [
+        'pre-commit:',
+        '  parallel: true',
+        '  commands:',
+        '    repo-lint:',
+        '      run: npm run lint',
+        '',
+        'pre-push:',
+        '  commands:',
+        '    repo-test:',
+        '      run: npm test',
+        '',
+      ].join('\n'),
+    )
+
+    applyInternalTemplate(dir, templateDataFromAnswers(answers))
+
+    const lefthook = readFileSync(join(dir, 'lefthook.yml'), 'utf8')
+    expect(lefthook).toContain('repo-lint:')
+    expect(lefthook).toContain('run: npm run lint')
+    expect(lefthook).toContain('repo-test:')
+    expect(lefthook).toContain('run: npm test')
+    expect(lefthook).toContain('conventional-commits:')
+    expect(lefthook).toContain('bd-ticket-ref:')
+    expect(lefthook).toContain('typecheck:')
+    expect(lefthook).toContain('run: mise run typecheck')
+    expect(lefthook).toContain('tdd-guard:')
+    expect(lefthook).toContain('pr-size-check:')
+  })
+
+  it('can add lefthook commands when a hook has no commands section', () => {
+    const merged = mergeLefthookCommands('pre-commit:\n  parallel: true\n', {
+      'pre-commit': ['    tdd-guard:\n      run: .claude/hooks/tdd-guard.sh'],
+    })
+
+    expect(merged).toBe(
+      'pre-commit:\n  commands:\n    tdd-guard:\n      run: .claude/hooks/tdd-guard.sh\n  parallel: true\n',
     )
   })
 

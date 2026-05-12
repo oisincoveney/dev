@@ -184,7 +184,7 @@ export function runUpdateOrchestration(
   if (!install.ok) return install
   const update = runMise(cwd, copierMiseArgs('update', '--trust', '--defaults'))
   if (!update.ok) return update
-  return runPostTemplateTools(cwd)
+  return runPostTemplateTools(cwd, data ?? undefined)
 }
 
 export function runResetOrchestration(
@@ -201,14 +201,15 @@ export function runResetOrchestration(
     }
   }
   refreshCopierSourcePath(cwd)
-  ensureMiseToml(cwd, readInternalState(cwd) ?? undefined)
+  const data = readInternalState(cwd)
+  ensureMiseToml(cwd, data ?? undefined)
   const trust = runMise(cwd, ['trust', '-y'])
   if (!trust.ok) return trust
   const install = runMise(cwd, ['install'])
   if (!install.ok) return install
   const recopy = runMise(cwd, copierMiseArgs('recopy', '--trust', '--force'))
   if (!recopy.ok) return recopy
-  return runPostTemplateTools(cwd)
+  return runPostTemplateTools(cwd, data ?? undefined)
 }
 
 export function bootstrapInternalStateFromLegacyConfig(cwd: string): OrchestratorResult {
@@ -280,7 +281,9 @@ function stringArray(value: unknown, fallback: string[]): string[] {
 }
 
 function runPostTemplateTools(cwd: string, data?: TemplateData): OrchestratorResult {
-  ensureMiseToml(cwd, data ?? readInternalState(cwd) ?? undefined)
+  const templateData = data ?? readInternalState(cwd) ?? undefined
+  ensureMiseToml(cwd, templateData)
+  ensureLefthookYml(cwd, templateData)
   const trust = runMise(cwd, ['trust', '-y'])
   if (!trust.ok) return trust
   const install = runMise(cwd, ['install'])
@@ -339,7 +342,7 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   writeGeneratedFile(cwd, 'CLAUDE.md', claudeMd())
   writeGeneratedFile(cwd, 'agents.toml', agentsToml(data))
   ensureMiseToml(cwd, data)
-  writeGeneratedFile(cwd, 'lefthook.yml', lefthookYml(data))
+  ensureLefthookYml(cwd, data)
 
   if (data.targets.includes('claude')) {
     copyTree(join(COPIER_TEMPLATE_DIR, '.claude', 'hooks'), join(cwd, '.claude', 'hooks'))
@@ -412,6 +415,138 @@ export function mergeMiseToolLines(existing: string, requiredLines: string[]): s
 
   lines.splice(toolsStart + 1, 0, ...missing)
   return `${lines.join('\n').replace(/\s+$/, '')}\n`
+}
+
+export function ensureLefthookYml(cwd: string, data?: TemplateData): void {
+  const path = join(cwd, 'lefthook.yml')
+  const templateData = data ?? defaultMiseTemplateData()
+  if (!existsSync(path)) {
+    writeGeneratedFile(cwd, 'lefthook.yml', lefthookYml(templateData))
+    return
+  }
+
+  const existing = readFileSync(path, 'utf8')
+  writeFileSync(path, mergeLefthookCommands(existing, requiredLefthookCommandBlocks(templateData)))
+}
+
+export function mergeLefthookCommands(existing: string, requiredBlocks: Record<string, string[]>): string {
+  let text = `${existing.replace(/\s+$/, '')}\n`
+  for (const [hook, blocks] of Object.entries(requiredBlocks)) {
+    text = mergeLefthookHook(text, hook, blocks)
+  }
+  return text
+}
+
+function mergeLefthookHook(existing: string, hook: string, requiredBlocks: string[]): string {
+  const blocks = requiredBlocks.filter((block) => lefthookCommandName(block) !== null)
+  if (blocks.length === 0) return existing
+
+  const lines = existing.split(/\r?\n/)
+  const hookStart = lines.findIndex((line) => line.trim() === `${hook}:`)
+  if (hookStart === -1) {
+    const section = ['', `${hook}:`, '  commands:', ...blocks, ''].join('\n')
+    return `${existing.replace(/\s+$/, '')}${section}`
+  }
+
+  const hookEnd = findNextTopLevelYamlKey(lines, hookStart + 1)
+  const commandsStart = lines.findIndex((line, index) => {
+    return index > hookStart && index < hookEnd && line.trim() === 'commands:' && indentWidth(line) === 2
+  })
+
+  if (commandsStart === -1) {
+    lines.splice(hookStart + 1, 0, '  commands:', ...blocks)
+    return `${lines.join('\n').replace(/\s+$/, '')}\n`
+  }
+
+  const commandsEnd = findNextSiblingYamlKey(lines, commandsStart + 1, hookEnd, 2)
+  const existingCommands = new Set<string>()
+  for (const line of lines.slice(commandsStart + 1, commandsEnd)) {
+    const match = line.match(/^\s{4}([A-Za-z0-9_.-]+):\s*$/)
+    if (match) existingCommands.add(match[1])
+  }
+
+  const missing = blocks.filter((block) => {
+    const command = lefthookCommandName(block)
+    return command !== null && !existingCommands.has(command)
+  })
+  if (missing.length === 0) return existing
+
+  lines.splice(commandsEnd, 0, ...missing)
+  return `${lines.join('\n').replace(/\s+$/, '')}\n`
+}
+
+function requiredLefthookCommandBlocks(data: TemplateData): Record<string, string[]> {
+  const commitMsg = [
+    [
+      '    conventional-commits:',
+      '      run: |',
+      "        if ! head -1 {1} | grep -qE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)(\\([a-z0-9-]+\\))?!?: .+'; then",
+      '          echo "Commit message must follow Conventional Commits format."',
+      '          exit 1',
+      '        fi',
+    ].join('\n'),
+  ]
+  if (data.beads_enabled) {
+    commitMsg.push([
+      '    bd-ticket-ref:',
+      '      run: |',
+      '        subject=$(head -1 {1})',
+      "        type=$(echo \"$subject\" | grep -oE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)' | head -1)",
+      '        case "$type" in docs|chore|style) exit 0 ;; esac',
+      "        if echo \"$subject\" | grep -qE '\\([a-z0-9._-]*[a-z0-9-]+-[a-z0-9._-]+\\)'; then exit 0; fi",
+      "        if grep -qE '^\\s*Refs:\\s+[a-z0-9_-]+-[a-z0-9._-]+' {1}; then exit 0; fi",
+      '        echo "Commit references no bd ticket."',
+      '        exit 1',
+    ].join('\n'))
+  }
+
+  const preCommit: string[] = []
+  if (data.commands.typecheck) preCommit.push(['    typecheck:', '      run: mise run typecheck'].join('\n'))
+  if (data.commands.lint) preCommit.push(['    lint:', '      run: mise run lint'].join('\n'))
+  preCommit.push(['    tdd-guard:', '      run: .claude/hooks/tdd-guard.sh'].join('\n'))
+
+  const prePush: string[] = []
+  if (data.commands.test) prePush.push(['    test:', '      run: mise run test'].join('\n'))
+  if (data.commands.e2e) prePush.push(['    e2e:', '      run: mise run e2e'].join('\n'))
+  prePush.push(['    pr-size-check:', '      run: .claude/hooks/pr-size-check.sh'].join('\n'))
+  prePush.push([
+    '    semgrep:',
+    '      run: |',
+    '        if command -v semgrep >/dev/null 2>&1; then',
+    '          semgrep --config p/security-audit --config p/owasp-top-ten --error',
+    '        fi',
+  ].join('\n'))
+
+  return {
+    'commit-msg': commitMsg,
+    'pre-commit': preCommit,
+    'pre-push': prePush,
+  }
+}
+
+function lefthookCommandName(block: string): string | null {
+  const match = block.match(/^\s{4}([A-Za-z0-9_.-]+):\s*$/m)
+  return match?.[1] ?? null
+}
+
+function findNextTopLevelYamlKey(lines: string[], start: number): number {
+  for (let index = start; index < lines.length; index += 1) {
+    if (/^[A-Za-z0-9_-]+:\s*$/.test(lines[index])) return index
+  }
+  return lines.length
+}
+
+function findNextSiblingYamlKey(lines: string[], start: number, end: number, indent: number): number {
+  for (let index = start; index < end; index += 1) {
+    const line = lines[index]
+    if (line.trim().length === 0 || line.trimStart().startsWith('#')) continue
+    if (indentWidth(line) <= indent && /^\s*[A-Za-z0-9_-]+:/.test(line)) return index
+  }
+  return end
+}
+
+function indentWidth(line: string): number {
+  return line.match(/^ */)?.[0].length ?? 0
 }
 
 function requiredMiseToolLines(data?: TemplateData): string[] {
@@ -581,38 +716,18 @@ function miseToml(data: TemplateData): string {
 }
 
 function lefthookYml(data: TemplateData): string {
+  const blocks = requiredLefthookCommandBlocks(data)
   const lines = [
     '# lefthook.yml — generated by @oisincoveney/dev',
     '',
     'commit-msg:',
     '  commands:',
-    '    conventional-commits:',
-    '      run: |',
-    "        if ! head -1 {1} | grep -qE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)(\\([a-z0-9-]+\\))?!?: .+'; then",
-    '          echo "Commit message must follow Conventional Commits format."',
-    '          exit 1',
-    '        fi',
+    ...blocks['commit-msg'],
   ]
-  if (data.beads_enabled) {
-    lines.push('    bd-ticket-ref:')
-    lines.push('      run: |')
-    lines.push('        subject=$(head -1 {1})')
-    lines.push("        type=$(echo \"$subject\" | grep -oE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)' | head -1)")
-    lines.push('        case "$type" in docs|chore|style) exit 0 ;; esac')
-    lines.push("        if echo \"$subject\" | grep -qE '\\([a-z0-9._-]*[a-z0-9-]+-[a-z0-9._-]+\\)'; then exit 0; fi")
-    lines.push("        if grep -qE '^\\s*Refs:\\s+[a-z0-9_-]+-[a-z0-9._-]+' {1}; then exit 0; fi")
-    lines.push('        echo "Commit references no bd ticket."')
-    lines.push('        exit 1')
-  }
   lines.push('', 'pre-commit:', '  parallel: true', '  commands:')
-  if (data.commands.typecheck) lines.push('    typecheck:', '      run: mise run typecheck')
-  if (data.commands.lint) lines.push('    lint:', '      run: mise run lint')
-  lines.push('    tdd-guard:', '      run: .claude/hooks/tdd-guard.sh')
+  lines.push(...blocks['pre-commit'])
   lines.push('', 'pre-push:', '  commands:')
-  if (data.commands.test) lines.push('    test:', '      run: mise run test')
-  if (data.commands.e2e) lines.push('    e2e:', '      run: mise run e2e')
-  lines.push('    pr-size-check:', '      run: .claude/hooks/pr-size-check.sh')
-  lines.push('    semgrep:', '      run: |', '        if command -v semgrep >/dev/null 2>&1; then', '          semgrep --config p/security-audit --config p/owasp-top-ten --error', '        fi', '')
+  lines.push(...blocks['pre-push'], '')
   return lines.join('\n')
 }
 
