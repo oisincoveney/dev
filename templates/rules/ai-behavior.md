@@ -54,7 +54,7 @@ Never edit files marked generated ("DO NOT EDIT", `@generated`, output dirs: `di
 
 ## No Destructive Ops Without Permission
 
-Never run `git reset --hard`, `rm -rf`, `git push --force`, `DROP TABLE`, publish commands without explicit user approval.
+ Never run `git reset --hard`, `rm -rf`, pushes to protected branches/tags, `DROP TABLE`, publish commands without explicit user approval.
 
 ## No Co-Authored-By
 

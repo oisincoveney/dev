@@ -1,21 +1,20 @@
 # @oisincoveney/dev
 
-Opinionated AI development environment generator for multi-language projects. Installs hooks, lint configs, AI agent instructions, git workflow enforcement, and project-local skills — all from a single command.
+Opinionated AI development environment harness for multi-language projects. Copier owns template lifecycle, dotagents owns shared skill sync, mise owns tool installation and canonical commands, lefthook owns Git hooks, and Beads owns task/memory workflow state.
 
 ## What it does
 
-Running `oisin-dev init` inside an existing project walks you through a series of prompts, then writes a consistent set of files:
+Running `oisin-dev init` inside an existing project walks you through prompts, then renders the bundled Copier template and syncs tool-native overlays:
 
-- **`.dev.config.json`** — single source of truth for all generated content
-- **`.claude/`** — hooks, settings, docs, and skills for Claude Code
-- **`CLAUDE.md` / `AGENTS.md`** — instruction files for AI agents
-- **`lefthook.yml`** — git hooks (pre-commit, commit-msg, pre-push)
-- **Lint/format configs** — ESLint, Prettier, rustfmt, golangci-lint, SwiftLint
-- **Tool configs** — Semgrep, commitlint, dependency-cruiser, mutation testing
-- **`.cursor/rules/`** — Cursor IDE rules split by skill category
-- **`.codex/hooks.json`** and **`.opencode/plugins/`** — hooks for other AI tools
+- **`.copier-answers.yml`** — Copier answer file used by `update` and `reset`
+- **`AGENTS.md`** — canonical shared project instructions
+- **`CLAUDE.md`** — Claude entrypoint pointing back to `AGENTS.md`
+- **`.agents/skills/` + `agents.toml`** — canonical skills and dotagents metadata
+- **`mise.toml`** — canonical project commands (`mise run test`, `mise run lint`, etc.)
+- **`lefthook.yml`** — Git hooks (pre-commit, commit-msg, pre-push)
+- **`.claude/`, `.codex/`, `.cursor/`, `.opencode/`** — native runtime overlays for each agent
 
-The core philosophy: mechanical enforcement (hooks, linters) handles ~80% of rules. The remaining 20% — things that require judgment — lives in markdown docs that AI agents and humans both read.
+The core philosophy: use proven tools for lifecycle and sync, while keeping the project-specific harness behavior explicit. Mechanical enforcement remains in hooks and linters; judgment-heavy guidance lives in `AGENTS.md` and skills.
 
 ## Install
 
@@ -33,7 +32,7 @@ npx @oisincoveney/dev init
 
 ### `oisin-dev init`
 
-Interactive setup for an existing project. Run inside a directory with `package.json`, `Cargo.toml`, `go.mod`, or `Package.swift` — scaffolding a new project is out of scope.
+Interactive setup for an existing project. Run inside a directory with `package.json`, `Cargo.toml`, `go.mod`, or `Package.swift` — scaffolding a new application is out of scope.
 
 **Steps:**
 
@@ -47,7 +46,7 @@ Interactive setup for an existing project. Run inside a directory with `package.
 
 3. **Framework** — Context-sensitive list (React, Vue, Svelte, SvelteKit, Nuxt, Next.js, Remix, Hono, Express, Fastify, NestJS, SwiftUI, UIKit, etc.)
 
-4. **Build commands** — Dev, build, test, typecheck, lint, format — auto-detected from `package.json` scripts, editable
+4. **Build commands** — Dev, build, test, typecheck, lint, format — auto-detected and emitted as `mise` tasks
 
 5. **Rule skills** — Categories of coding standards to embed in AI instructions:
    - Code quality & strictness
@@ -59,7 +58,7 @@ Interactive setup for an existing project. Run inside a directory with `package.
    - Styling & UI (frontend)
    - Performance
 
-6. **Superpower skills** — Project-local copies of slash commands from `~/.agents/skills/`: debug, code-review, architecture, system-design, testing-strategy, tech-debt, deploy-checklist, documentation, write-spec, sprint-planning, incident-response, and more
+6. **Skills** — Canonical project skills under `.agents/skills/`, linked into tool-specific locations by dotagents
 
 7. **Tools** — Beads (issue tracker), contract-driven modules
 
@@ -69,14 +68,26 @@ Interactive setup for an existing project. Run inside a directory with `package.
 
 10. **MCP servers** — Memory, Serena (codebase indexing), GitHub
 
-11. **Claude model routing** — Assigns Claude models to task types only when the Claude target is selected. Codex/OpenCode-only configs do not write Anthropic model names into `.dev.config.json`.
+11. **Claude model routing** — Assigns Claude models to task types only when the Claude target is selected.
 
 ### `oisin-dev update`
 
-Re-syncs all generated files from `.dev.config.json` without re-prompting. Safe to run after pulling changes to the generator — it preserves your manual edits in `CLAUDE.md` (within managed blocks) and merges rather than overwrites `settings.json`.
+Runs `copier update --defaults`, then `dotagents install`, then `lefthook install`. It requires a clean Git worktree and does not delete generated agent directories.
 
 ```sh
 oisin-dev update
+```
+
+### `oisin-dev reset`
+
+Dangerous reset path for generated agent configuration. It prints the paths it will remove, requires confirmation unless `--yes` is passed, requires a clean Git worktree unless `--force` is passed, deletes generated agent overlays and root agent docs, then runs `copier recopy --force`, `dotagents install`, and `lefthook install`.
+
+It never deletes `.beads`.
+
+```sh
+oisin-dev reset
+oisin-dev reset --yes
+oisin-dev reset --force --yes
 ```
 
 ### `oisin-dev beads-migrate`
@@ -107,6 +118,17 @@ bunx @oisincoveney/dev tickets --open
 
 ## Generated files
 
+### Shared layer
+
+- `AGENTS.md` — canonical always-on project policy.
+- `.agents/skills/` — canonical project skills.
+- `agents.toml` — lightweight agent metadata.
+- `mise.toml` — canonical task definitions.
+
+### Tool overlays
+
+Claude, Codex, Cursor, and OpenCode keep native config under `.claude/`, `.codex/`, `.cursor/`, and `.opencode/`. These overlays wire the same harness behavior into each tool without forcing a single universal runtime format.
+
 ### Claude Code (`.claude/`)
 
 **Hooks** (`post-tool-use`, `pre-tool-use`, `stop`, `notification`):
@@ -114,7 +136,7 @@ bunx @oisincoveney/dev tickets --open
 | Hook | Purpose |
 |---|---|
 | `context-bootstrap.sh` | Injects project context at session start |
-| `context-injector.sh` | Injects `.dev.config.json` on each prompt |
+| `context-injector.sh` | Injects project context on each prompt |
 | `ts-style-guard.sh` | Blocks writes with `any`, magic numbers, bad names |
 | `import-validator.sh` | Enforces layer boundary rules |
 | `ai-antipattern-guard.sh` | Blocks missing `await`, wrong syntax |
@@ -131,25 +153,12 @@ bunx @oisincoveney/dev tickets --open
 - Tool permissions
 - MCP server references
 
-**Docs** (`.claude/docs/`):
-- `commands.md` — build/test commands for this project
-- `workflow.md` — selected workflow methodology
-- `principles.md` — selected rule skills
-- `uncertainty.md` — hallucination prevention rules
-- `destructive.md` — destructive command policy
-- `beads.md` — issue tracker instructions (if enabled)
-- `contract-driven.md` — module contract pattern (if enabled)
-
-**Skills** (`.claude/skills/`):
-Local copies of selected superpower skills, available as slash commands within the project.
-
-### CLAUDE.md / AGENTS.md
-
-AI agent instruction file, kept under 200 lines at the root. Imports fragments via `@path/to/fragment` references. On `update`, only the managed block (between `<!-- BEGIN @oisincoveney/dev -->` and `<!-- END @oisincoveney/dev -->`) is rewritten — content you add outside the block is preserved.
+**Skills**:
+Claude-specific skill locations are symlinked from `.agents/skills/` by `oisin-dev`.
 
 ### Lint and format configs
 
-Generated with sensible defaults for each language. Existing configs are backed up to `.dev-backup` before overwriting.
+Generated from the Copier template with sensible defaults for each language. Use Git to review or recover changes after `update` or `reset`.
 
 | Language | Files |
 |---|---|
@@ -169,37 +178,26 @@ Generated with sensible defaults for each language. Existing configs are backed 
 
 ## Configuration
 
-All settings are stored in `.dev.config.json` at the project root:
+Template answers are stored in `.copier-answers.yml`; shared skill/agent metadata lives in `agents.toml`; commands and required CLI tooling live in `mise.toml`:
 
-```json
-{
-  "language": "typescript",
-  "variant": "ts-fullstack",
-  "framework": "Next.js",
-  "packageManager": "bun",
-  "commands": {
-    "dev": "bun dev",
-    "build": "bun build",
-    "test": "bun test",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "format": "prettier --write ."
-  },
-  "skills": ["code-quality", "architecture", "testing", "ai-behavior", "debug", "code-review"],
-  "tools": ["beads"],
-  "workflow": "bd",
-  "contractDriven": false,
-  "targets": ["claude", "lefthook"],
-  "models": {
-    "default": "claude-sonnet-4-6",
-    "planning": "claude-opus-4-6",
-    "simple_edits": "claude-haiku-4-5-20251001",
-    "review": "claude-sonnet-4-6"
-  }
-}
+```toml
+# mise.toml
+[tools]
+"pipx:copier" = "9.14.0"
+"npm:@sentry/dotagents" = "latest"
+"aqua:evilmartians/lefthook" = "latest"
+
+[tasks.test]
+run = "bun test"
+
+[tasks.typecheck]
+run = "tsc --noEmit"
+
+[tasks.lint]
+run = "biome check ."
 ```
 
-Edit this file manually or re-run `oisin-dev update` after changes.
+Use `oisin-dev update` for normal non-destructive template updates and `oisin-dev reset` for explicit destructive regeneration.
 
 ## Auto-detection
 
@@ -226,10 +224,12 @@ Supported language/variant combinations:
 
 ### Required tools
 
-This repo's tests run against real binaries — they don't mock `bd` or skip when it's missing. Install via [mise](https://mise.jdx.dev/) (preferred):
+Runtime setup expects `mise`. Project-local `mise.toml` installs Copier, dotagents, lefthook, and `bd` when Beads is enabled, so users do not need to install those globally.
+
+This repo's tests run against real `bd` for e2e coverage — they don't skip when it's missing. Install via [mise](https://mise.jdx.dev/) (preferred):
 
 ```sh
-mise install   # reads .mise.toml — installs bun + beads (`bd`)
+mise install   # reads mise.toml
 ```
 
 Or install manually so `bd` is on PATH:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook — when running inside a parallel-tickets worker (cwd under
+# Stop hook — when running inside an implementation-agent worker (cwd under
 # .claude/worktrees/<name>/), block stop if the worker hasn't completed
 # its lifecycle: uncommitted changes, unpushed commits, or a bd ticket
 # still in_progress on its branch.

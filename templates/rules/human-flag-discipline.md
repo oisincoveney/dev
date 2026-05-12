@@ -64,7 +64,7 @@ User sees flags at next Stop, not mid-flight. Resolves at own pace via `bd human
 
 ## See also
 
-- `parallel-tickets/SKILL.md` — worker contract
-- `spec-verifier/SKILL.md` — verifier output shape (PASS / PASS-WITH-FOLLOWUPS / PARTIAL / FAIL)
+- `tracker-workflow.md` — orchestrator, worktree agent, graph, and verifier policy
+- `spec-verifier/SKILL.md` — tracker-backed verifier output shape
 - `swarm-digest.sh` — Stop hook
 - `scope-discipline.md` — discovered-from ticket flow

@@ -5,11 +5,8 @@
  * Adding a new TS-native handler:
  *   1. Implement under src/hooks/handlers/<name>.ts (export named const).
  *   2. Register here.
- *   3. Add the script base name to MIGRATED_HOOKS in
- *      src/generate/claude-settings.ts so the install step emits the new
- *      `oisin-dev hook <name>` invocation instead of the legacy `.sh`
- *      shell-out.
- *   4. Delete the corresponding templates/hooks/<name>.sh.
+ *   3. Wire it from src/orchestrator.ts for the relevant tool overlay.
+ *   4. Delete the corresponding shell hook when no overlay still calls it.
  */
 
 import type { HookHandler } from './types.js'

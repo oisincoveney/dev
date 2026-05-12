@@ -30,9 +30,6 @@ case "$TOOL_KEY" in
     SCRIPTS+=(
       "$HOOK_DIR/worktree-write-guard.sh"
     )
-    if [[ "${OISIN_DEV_BEADS:-}" == "1" ]]; then
-      SCRIPTS+=("$HOOK_DIR/require-claim.sh" "$HOOK_DIR/require-swarm.sh")
-    fi
     if [[ "${OISIN_DEV_TYPESCRIPT:-}" == "1" ]]; then
       SCRIPTS+=("$HOOK_DIR/ts-style-guard.sh" "$HOOK_DIR/import-validator.sh")
     fi
@@ -45,8 +42,6 @@ case "$TOOL_KEY" in
     if [[ "${OISIN_DEV_BEADS:-}" == "1" ]]; then
       SCRIPTS+=(
         "$HOOK_DIR/bd-remember-protect.sh"
-        "$HOOK_DIR/plan-approval-guard.sh"
-        "$HOOK_DIR/bd-create-gate.sh"
       )
     fi
     SCRIPTS+=("$HOOK_DIR/block-coauthor.sh")

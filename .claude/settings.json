@@ -74,7 +74,7 @@
       {
         "tool": "Bash",
         "decision": "deny",
-        "if": "Bash(rm -rf|git reset --hard|git push --force|git push -f )",
+        "if": "Bash(rm -rf|git reset --hard)",
         "reason": "Destructive commands require explicit user approval"
       },
       {
@@ -100,9 +100,9 @@
       },
       {
         "tool": "Bash",
-        "decision": "ask",
+        "decision": "allow",
         "if": "Bash(git commit*|git push*)",
-        "reason": "Git operations require review"
+        "reason": "Git operations are allowed; protected branch/tag pushes are blocked by hook"
       },
       {
         "tool": "Edit",

@@ -1,9 +1,8 @@
 /**
- * Public exports. Used by hook scripts (via bunx/npx) and by consumers
- * who want to read a project's .dev.config.json programmatically.
+ * Public exports for hook dispatchers and consumers that need project
+ * detection or configuration types.
  */
 
-export { readConfig, writeConfig, configPath } from './config.js'
 export type { DevConfig, Language, PackageManager, Target, WorkflowFramework } from './config.js'
 export { detectProject } from './detect.js'
 export type { Detected } from './detect.js'

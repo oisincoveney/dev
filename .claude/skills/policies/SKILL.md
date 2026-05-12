@@ -13,7 +13,7 @@ Claude: invoke when turn touches any below. Short-form kernel in CLAUDE.md; full
 Blocked by hook. Never attempt without explicit user approval:
 
 - `git reset --hard`
-- `git push --force` / `git push -f`
+- pushing to `main`, `master`, release branches, or tags
 - `git clean -f`
 - `rm -rf`
 - `DROP TABLE` / `DROP DATABASE`
@@ -58,9 +58,8 @@ Never write "this works"/"should work"/"tests should pass"/"done" as terminal wi
 ## Git Safety
 
 - **Committing always fine.** Local commits — ticket branch, worktree, directly on `main`/`master` — no user approval. Commits reversible, local until pushed, unit of work agent produces.
-- **Pushing scoped.** Ticket branch or `.claude/worktrees/*` worktree → agent pushes own work without asking — that's the sandbox. Pushing `main`/`master` (or other shared/long-lived branch) → explicit user approval each time.
-- Prefer `git push --force-with-lease` over `--force` if force-push explicitly authorized. Force-push always needs explicit per-branch approval — auth on one branch doesn't carry to another.
-- Never force-push to `main`/`master` without user explicitly naming the branch.
-- Never open or merge PR without explicit user approval. Merging = user's call.
+- **Pushing scoped.** Agents may normal-push or force-push non-protected task/quick branches. Pushing `main`, `master`, release branches, or tags requires explicit approval each time.
+- Prefer `git push --force-with-lease` over `--force` when rewriting a non-protected branch.
+- PR creation is allowed any time. Merging = user's call.
 - Investigate unexpected files, branches, lock files before delete/overwrite — may be user's in-progress work.
 - Merge conflicts: resolve, don't discard.

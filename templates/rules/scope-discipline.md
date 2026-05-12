@@ -17,20 +17,19 @@ Mid-work on claim, discover fix touch file outside ticket's `## Files Likely Tou
    bd create --type=task --priority=2 --deps "discovered-from:<current-id>" \
      --title="<one-line description>" \
      --silent --body-file=- <<'EOF'
-   ## User story
-   As dev on <current-id>, found <issue> in <file>.
-
-   ## Acceptance Criteria
-   1. WHEN ... THE SYSTEM SHALL ...
-
-   ## Files Likely Touched
-   - <out-of-scope file> — <reason>
-
-   ## Verification Commands
-   - <cmd>
-
-   ## Discovered-from
-   Surfaced during <current-id>: <context>.
+   ---
+   type: task
+   priority: 2
+   files:
+     - <out-of-scope file>
+   verify:
+     - <cmd>
+   deps:
+     discovered_from: <current-id>
+   ac:
+     - "WHEN ... THE SYSTEM SHALL ..."
+   ---
+   Found during <current-id>. Fix <issue> in <file>. Verify <cmd>.
    EOF
    ```
 3. Stay scoped. Edit only originally-claimed files.
@@ -72,6 +71,5 @@ If project ships `/discover <description>`, agent invoke that — wraps `bd crea
 
 ## See also
 
-- `tracer-bullet.md` — what counts as the epic's tracer; sibling-scope discipline
-- `dsl.md` — `out_of_scope[]` field on epics names what's deliberately excluded
-- `plan-brief-flow.md` — two-stage approval gate
+- `tracker-workflow.md` — tracker JSON plan, approval, graph, and PR grouping policy
+- `tracer-bullet.md` — what counts as the graph's proof ticket

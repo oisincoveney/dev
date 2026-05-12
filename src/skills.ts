@@ -117,6 +117,14 @@ export const RULE_SKILLS: ReadonlyArray<RuleSkill> = [
     sourceFile: 'templates/rules/ai-behavior.md',
   },
   {
+    id: 'tracker-workflow',
+    kind: 'rule',
+    name: 'Tracker Workflow',
+    description: 'Tracker-first quick/plan/approve/work-next/finish workflow',
+    appliesTo: ALL_VARIANTS,
+    sourceFile: 'templates/rules/tracker-workflow.md',
+  },
+  {
     id: 'component-patterns',
     kind: 'rule',
     name: 'Component Patterns',

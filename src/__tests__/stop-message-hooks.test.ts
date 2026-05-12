@@ -30,8 +30,8 @@ describe.skipIf(!canRun)('Stop hooks using last_assistant_message', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'stop-message-hooks-'))
     writeFileSync(
-      join(dir, '.dev.config.json'),
-      JSON.stringify({ commands: { test: 'bun test' } }),
+      join(dir, 'mise.toml'),
+      '[tasks.test]\nrun = "bun test"\n',
     )
   })
 
@@ -47,7 +47,7 @@ describe.skipIf(!canRun)('Stop hooks using last_assistant_message', () => {
 
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('Proof of work required')
-    expect(result.stderr).toContain('bun test')
+    expect(result.stderr).toContain('mise run test')
   })
 
   it('pre-stop-verification allows non-completion responses', () => {

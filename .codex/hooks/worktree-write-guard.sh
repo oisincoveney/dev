@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# PreToolUse hook for Write|Edit — when running inside a parallel-tickets
+# PreToolUse hook for Write|Edit — when running inside an implementation-agent
 # worker (cwd under .claude/worktrees/<name>/), block any write whose
 # absolute path escapes that worktree root.
 #
-# Background: parallel-tickets spawns sub-agents with isolation: "worktree",
+# Background: implementation agents run with isolation: "worktree",
 # placing them under .claude/worktrees/agent-XXX/. Workers that issue
 # absolute-path writes to /Users/.../<project>/... resolve to the main
 # checkout, not the worktree, silently corrupting state. This hook makes
@@ -60,7 +60,7 @@ echo "" >&2
 echo "   Worker is running in: $WORKTREE_ROOT" >&2
 echo "   Tried to write to:    $ABS_PATH" >&2
 echo "" >&2
-echo "   Absolute paths from a parallel-tickets worker MUST stay under" >&2
+echo "   Absolute paths from an implementation-agent worker MUST stay under" >&2
 echo "   the worktree root. Use a relative path, or rebuild the absolute" >&2
 echo "   path against \$WORKTREE_ROOT." >&2
 echo "" >&2

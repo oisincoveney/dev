@@ -74,20 +74,19 @@ Any issue NOT in original AC:
 ```bash
 bd create --type=task --priority=N --deps "discovered-from:<current-id>" \
   --title="<concise summary>" --silent --body-file=- <<'EOF'
-## User story
-As <role> I want <fix> so that <benefit>.
-
-## Acceptance Criteria
-1. WHEN ... THE SYSTEM SHALL ...
-
-## Files Likely Touched
-- <path> — <reason>
-
-## Verification Commands
-- <cmd>
-
-## Discovered-from
-Found during verification of <current-id> by verifier subagent.
+---
+type: task
+priority: N
+files:
+  - <path>
+verify:
+  - <cmd>
+deps:
+  discovered_from: <current-id>
+ac:
+  - "WHEN ... THE SYSTEM SHALL ..."
+---
+Found by verifier. Fix <problem>. Touch <path>. Verify <cmd>.
 EOF
 ```
 

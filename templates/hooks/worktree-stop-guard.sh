@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Stop hook — when running inside a parallel-tickets worker (cwd under
+# Stop hook — when running inside an implementation-agent worktree (cwd under
 # .claude/worktrees/<name>/), block stop if the worker hasn't completed
 # its lifecycle: uncommitted changes, unpushed commits, or a bd ticket
 # still in_progress on its branch.
 #
-# Background: workers were terminating after spec-verifier returned, treating
+# Background: workers can terminate after spec-verifier returns, treating
 # the verifier's "## Result: PASS" markdown as a return value and skipping
 # steps 6-10 (close + commit + push + status). This hook forces the worker
 # back into the loop until the worktree is clean.
@@ -78,7 +78,7 @@ fi
 [[ ${#REASONS[@]} -eq 0 ]] && exit 0
 
 echo "" >&2
-echo "⛔ Parallel-tickets worker stop blocked." >&2
+echo "⛔ Implementation-agent worktree stop blocked." >&2
 echo "" >&2
 echo "   Worktree: $WORKTREE_ROOT" >&2
 echo "" >&2

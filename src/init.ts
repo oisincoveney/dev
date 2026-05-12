@@ -1,24 +1,22 @@
 /**
  * `oisin-dev init`
  *
- * Configures AI agents, coding standards, and dev tools in the current directory.
- * Works whether or not a project manifest exists — prompts fill in what detection
- * can't determine.
+ * Configures AI agents, coding standards, Beads, and dev tooling in the
+ * current directory. Copier renders files, dotagents syncs skills, and mise
+ * installs/runs those tools so users do not need global binaries.
  */
 
-import { writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename } from 'node:path'
 import * as p from '@clack/prompts'
-import { type DevConfig, configPath, writeConfig } from './config.js'
+import type { DevConfig } from './config.js'
 import { detectProject } from './detect.js'
 import {
-  installAll,
-  removeLegacyRetiredPaths,
+  configureBeadsAfterInit,
+  installBeadsCli,
+  installBeadsPlugin,
   seedConstitutionDecisions,
-  stripLegacyConfigFields,
-  trimBeadsIntegrationOnAgentDocs,
 } from './install.js'
-import type { SuperDriftEntry } from './manifest.js'
+import { runInitOrchestration } from './orchestrator.js'
 import { type Answers, runPrompts } from './prompts.js'
 
 export async function runInit(): Promise<void> {
@@ -32,16 +30,60 @@ export async function runInit(): Promise<void> {
   } else if (detected.isEmpty) {
     p.log.info(`Empty directory ${basename(cwd)}. Configuring in place.`)
   } else {
-    p.log.info(`No project manifest detected in ${basename(cwd)}. Configuring in place.`)
+    p.log.info(`No project type detected in ${basename(cwd)}. Configuring in place.`)
   }
 
   const answers = await runPrompts(detected)
-  await writeConfigAndInstall(cwd, answers)
+  const spinner = p.spinner()
+  spinner.start('Rendering Copier template and syncing agent tooling')
+  const result = runInitOrchestration(cwd, answers)
+  if (!result.ok) {
+    spinner.stop('Failed')
+    p.log.error(result.message)
+    process.exit(1)
+  }
+  spinner.stop('Template rendered')
+
+  await configureBeadsIfEnabled(cwd, configFromAnswers(answers))
   p.outro('Done.')
 }
 
-async function writeConfigAndInstall(dir: string, answers: Answers): Promise<void> {
-  const config: DevConfig = {
+async function configureBeadsIfEnabled(dir: string, config: DevConfig): Promise<void> {
+  if (!config.tools.includes('beads')) return
+
+  const cliResult = installBeadsCli(dir)
+  switch (cliResult.status) {
+    case 'created':
+      p.log.success('beads: bd init')
+      break
+    case 'exists':
+      p.log.info('beads: .beads/ already exists, skipping bd init')
+      break
+    case 'no-bd':
+      p.log.warn('beads: `bd` not found in PATH. Install bd and rerun Beads setup.')
+      break
+    case 'failed':
+      p.log.warn(`beads: bd init failed (${cliResult.error})`)
+      break
+  }
+
+  if (cliResult.status === 'created' || cliResult.status === 'exists') {
+    const configure = configureBeadsAfterInit(dir)
+    if (configure.ok) p.log.success('beads: configured repo-backed workflow')
+    else p.log.warn(`beads: post-init configuration failed (${configure.error})`)
+
+    if (config.workflow === 'bd') {
+      const seed = seedConstitutionDecisions(dir, config)
+      if (seed.ok && seed.created > 0) p.log.info(`seeded ${seed.created} constitution decision(s)`)
+    }
+  }
+
+  const plugin = installBeadsPlugin(dir)
+  if (plugin.status === 'failed') p.log.warn(`beads plugin install failed (${plugin.error})`)
+}
+
+function configFromAnswers(answers: Answers): DevConfig {
+  return {
     language: answers.language,
     variant: answers.variant,
     languages: answers.languages,
@@ -55,78 +97,5 @@ async function writeConfigAndInstall(dir: string, answers: Answers): Promise<voi
     contractDriven: answers.contractDriven,
     targets: answers.targets,
     models: answers.models,
-  }
-
-  writeConfig(dir, config)
-  p.log.success(`Wrote ${configPath(dir)}`)
-
-  const legacy = removeLegacyRetiredPaths(dir)
-  for (const path of legacy.removed) p.log.info(`removed orphan: ${path}`)
-  for (const warning of legacy.warnings) p.log.warn(warning)
-
-  const trimmed = trimBeadsIntegrationOnAgentDocs(dir)
-  for (const file of trimmed) p.log.info(`trimmed BEADS INTEGRATION block: ${file}`)
-
-  const stripped = stripLegacyConfigFields(dir)
-  for (const field of stripped) p.log.info(`stripped removed config field: ${field}`)
-
-  if (config.tools.includes('beads') && config.workflow === 'bd') {
-    const seed = seedConstitutionDecisions(dir, config)
-    if (seed.ok && seed.created > 0) {
-      p.log.info(`seeded ${seed.created} constitution decision(s)`)
-    }
-  }
-
-  const spinner = p.spinner()
-  spinner.start('Installing hooks, configs, skills, and instruction files')
-  const result = await installAll(dir, config, answers)
-  spinner.stop('Installed')
-
-  if (result.manifest) {
-    if (result.manifest.lefthookDrift) {
-      p.log.error(
-        'lefthook.yml has drifted from what we shipped. Halting init — diff your version against the new one, reconcile, then re-run.',
-      )
-      process.exit(1)
-    }
-
-    for (const entry of result.manifest.superDriftedDetails) {
-      await resolveSuperDrift(dir, entry)
-    }
-
-    if (result.manifest.backups.length > 0) {
-      p.log.info(
-        `Backed up customized files to .user-backup: ${result.manifest.backups.join(', ')}.`,
-      )
-    }
-
-    if (result.manifest.removed.length > 0) {
-      p.log.info(`Removed retired files: ${result.manifest.removed.join(', ')}.`)
-    }
-  }
-}
-
-async function resolveSuperDrift(dir: string, entry: SuperDriftEntry): Promise<void> {
-  const choice = await p.select<'keep' | 'take' | 'abort'>({
-    message: `${entry.relPath} is super-drifted (heavily modified). What do you want to do?`,
-    options: [
-      { value: 'keep', label: 'Keep my version (skip overwrite)' },
-      { value: 'take', label: 'Take the new version (back mine up to .user-backup)' },
-      { value: 'abort', label: 'Abort init — I want to review first' },
-    ],
-  })
-
-  if (choice === 'abort' || p.isCancel(choice)) {
-    p.log.warn(`Aborting at ${entry.relPath}. Re-run init when ready.`)
-    process.exit(1)
-  }
-
-  if (choice === 'take') {
-    const absPath = join(dir, entry.relPath)
-    writeFileSync(`${absPath}.user-backup`, entry.currentContent)
-    writeFileSync(absPath, entry.newContent)
-    p.log.info(`Took new version of ${entry.relPath}; your old version is at ${entry.relPath}.user-backup.`)
-  } else {
-    p.log.info(`Kept your version of ${entry.relPath}. New shipped version is NOT applied.`)
   }
 }

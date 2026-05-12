@@ -61,8 +61,8 @@ function writeTestRunner(dir: string, failingNames: string[]): void {
   const script = `#!/usr/bin/env bash\n${lines}\nexit ${exitCode}\n`
   writeFileSync(join(dir, 'fake-test.sh'), script, { mode: 0o755 })
   writeFileSync(
-    join(dir, '.dev.config.json'),
-    JSON.stringify({ commands: { test: 'bash fake-test.sh' } }),
+    join(dir, 'mise.toml'),
+    '[tasks.test]\nrun = "bash fake-test.sh"\n',
   )
 }
 
@@ -96,9 +96,9 @@ describe.skipIf(!canRun)('baseline-pin.sh + baseline-compare.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('writes skipped baseline when .dev.config.json is missing', () => {
+  it('writes skipped baseline when mise.toml is missing', () => {
     setupRepo(dir)
-    rmSync(join(dir, '.dev.config.json'))
+    rmSync(join(dir, 'mise.toml'))
     git(dir, 'add', '.')
     git(dir, 'commit', '-q', '-m', 'remove config', '--allow-empty')
     runHook(PIN_HOOK, dir)

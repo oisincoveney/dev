@@ -28,16 +28,20 @@ This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full 
 ### Quick Reference
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
+oisin-dev tracker show <id>     # View normalized tracker item
+oisin-dev tracker approve <id>  # Approve reviewed tracker plan
+bd ready                        # Find available beads work
+bd show <id>                    # View raw beads issue details
 ```
 
 ### Rules
 
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Use the tracker workflow for planned work. Beads is the first adapter, and `metadata.workflow` JSON is canonical.
+- Main thread is always orchestrator. All implementation, including quick work, runs in agent worktrees.
+- `/quick [P2|P3] <task>` is the only low-ceremony lane. It still uses an agent worktree, verification, commit, and merge-back.
+- `/plan` creates tracker-backed review items; `/approve` moves approved plans to ready; `/work-next` dispatches ready work.
+- Use `bd` for tracker storage — do NOT use TodoWrite, TaskCreate, or markdown TODO lists as source of truth.
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-- Pushing to remote is the user's call, not the agent's. Project policy stands: never push without explicit user approval.
+- Agents may normal-push or force-push non-protected task/quick branches and may open PRs. Never push `main`, `master`, release branches, or tags without explicit authorization.
 <!-- END BEADS INTEGRATION -->

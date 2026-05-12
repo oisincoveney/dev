@@ -24,6 +24,8 @@ Pattern: [thing] [action] [reason]. [next step].
 Drop caveman temporarily for: security warnings, irreversible action confirmations, multi-step sequences where order is ambiguous, user clarification requests. Resume after clear part done.
 
 Code/commits/PRs: write normal. Caveman applies to user-facing text only.
+Tracker workflow: tracker metadata is canonical. For beads, machine-readable workflow state lives in metadata.workflow JSON; description is human-readable only.
+Spawned agents: include this communication mode in their prompt. Fresh agent may not inherit session context.
 CAVEMAN
 
 context="$caveman_mode"

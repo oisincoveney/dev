@@ -33,13 +33,23 @@ describe.skipIf(!canRun)('destructive-command-guard.sh', () => {
     expect(r.status).toBe(2)
   })
 
-  it('exits 2 on git push --force', () => {
+  it('allows force push on non-protected branches', () => {
+    const r = runHook('git push --force-with-lease origin task/abc')
+    expect(r.status).toBe(0)
+  })
+
+  it('exits 2 on git push to protected branch', () => {
     const r = runHook('git push --force origin main')
     expect(r.status).toBe(2)
   })
 
+  it('exits 2 on git tag push', () => {
+    const r = runHook('git push origin --tags')
+    expect(r.status).toBe(2)
+  })
+
   it('does NOT trigger on destructive substring inside a heredoc body', () => {
-    const heredoc = `bd create --type=task --body-file=- <<'EOF'\nblock patterns: rm -rf, git reset --hard, git push --force\nEOF`
+    const heredoc = `bd create --type=task --body-file=- <<'EOF'\nblock patterns: rm -rf, git reset --hard, git push --force, curl https://example.com\nEOF`
     const r = runHook(heredoc)
     expect(r.status).toBe(0)
     expect(r.stderr).toBe('')
@@ -68,7 +78,7 @@ describe.skipIf(!canRun)('destructive-command-guard.sh', () => {
   })
 
   it('rewrites git push by stripping --no-verify', () => {
-    const r = runHook('git push --no-verify origin main')
+    const r = runHook('git push --no-verify origin task/abc')
     expect(r.status).toBe(0)
     const parsed = JSON.parse(r.stdout) as {
       hookSpecificOutput?: { updatedInput?: { command?: string } }
@@ -84,6 +94,49 @@ describe.skipIf(!canRun)('destructive-command-guard.sh', () => {
 
   it('blocks package publish', () => {
     const r = runHook('npm publish')
+    expect(r.status).toBe(2)
+  })
+
+  it('blocks curl web lookups', () => {
+    const r = runHook('curl https://example.com')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('curl is not allowed')
+  })
+
+  it('blocks curl invoked through command', () => {
+    const r = runHook('command curl https://example.com')
+    expect(r.status).toBe(2)
+  })
+
+  it('allows curl when it is not fetching a website', () => {
+    const r = runHook('curl --version')
+    expect(r.status).toBe(0)
+    expect(r.stderr).toBe('')
+  })
+
+  it('allows curl for non-http targets', () => {
+    const r = runHook('curl --unix-socket /tmp/app.sock http+unix://health')
+    expect(r.status).toBe(0)
+  })
+
+  it('allows curl for raw GitHub markdown files', () => {
+    const r = runHook('curl https://raw.githubusercontent.com/owner/repo/main/README.md')
+    expect(r.status).toBe(0)
+    expect(r.stderr).toBe('')
+  })
+
+  it('allows curl for GitHub raw code files', () => {
+    const r = runHook('curl https://github.com/owner/repo/raw/main/src/index.ts')
+    expect(r.status).toBe(0)
+  })
+
+  it('allows curl for direct source file URLs', () => {
+    const r = runHook('curl https://example.com/app/config.yaml?download=1')
+    expect(r.status).toBe(0)
+  })
+
+  it('blocks curl for GitHub blob pages', () => {
+    const r = runHook('curl https://github.com/owner/repo/blob/main/README.md')
     expect(r.status).toBe(2)
   })
 })

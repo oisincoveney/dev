@@ -59,6 +59,5 @@ If no slice answers yes, the epic is bundled — split before fan-out.
 
 ## See also
 
-- `dsl.md` — `tracer: true` field
-- `plan-brief-flow.md` — when tracer gets selected (stage 2, after approval)
-- `to-bd-issues/SKILL.md` — drafts children including tracer mark
+- `tracker-workflow.md` — graph/tracer approval and execution rules
+- `metadata.workflow.plan.graph` — canonical tracker JSON location for tracer metadata

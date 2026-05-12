@@ -12,12 +12,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
 import {
   configureBeadsAfterInit,
-  installAll,
   installBeadsCli,
   migrateBeadsRepoBackedDolt,
   seedConstitutionDecisions,
   trimBeadsIntegrationBlock,
 } from '../install.js'
+import { applyInternalTemplate, templateDataFromConfig } from '../orchestrator.js'
 import type { Answers } from '../prompts.js'
 
 const answers: Answers = {
@@ -305,7 +305,7 @@ just rules, no session completion
   })
 
   it('generates all target files with valid content', async () => {
-    await installAll(dir, config, answers, { skipSideEffects: true })
+    applyInternalTemplate(dir, templateDataFromConfig(config))
 
     // Every hook script is executable
     const hookDir = join(dir, '.claude', 'hooks')
@@ -344,11 +344,13 @@ just rules, no session completion
     expect(lefthook).toContain('commit-msg:')
     expect(lefthook).toContain('pre-commit:')
     expect(lefthook).toContain('pre-push:')
-    expect(lefthook).toContain('cargo check')
+    expect(lefthook).toContain('mise run typecheck')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks.typecheck]')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('run = "cargo check"')
   })
 
   it('settings.json hooks reference real script paths', async () => {
-    await installAll(dir, config, answers, { skipSideEffects: true })
+    applyInternalTemplate(dir, templateDataFromConfig(config))
     const settings = JSON.parse(
       readFileSync(join(dir, '.claude/settings.json'), 'utf8'),
     ) as {
@@ -382,7 +384,7 @@ just rules, no session completion
   })
 
   it('codex hooks reference real script paths in .codex', async () => {
-    await installAll(dir, config, answers, { skipSideEffects: true })
+    applyInternalTemplate(dir, templateDataFromConfig(config))
     const codex = JSON.parse(readFileSync(join(dir, '.codex/hooks.json'), 'utf8')) as {
       hooks: Record<
         string,

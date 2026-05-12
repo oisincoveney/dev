@@ -92,14 +92,6 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
       { cwd: dir, tool_input: { command: 'git status --short' } },
     ],
     [
-      'plan-approval-guard.sh',
-      { cwd: dir, tool_input: { command: 'git status --short' } },
-    ],
-    [
-      'bd-create-gate.sh',
-      { cwd: dir, tool_input: { command: 'git status --short' } },
-    ],
-    [
       'block-coauthor.sh',
       { cwd: dir, tool_input: { command: 'git status --short' } },
     ],
@@ -110,14 +102,6 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
     [
       'worktree-write-guard.sh',
       { cwd: dir, tool_input: { file_path: 'src/example.ts' } },
-    ],
-    [
-      'require-claim.sh',
-      { cwd: dir, tool_input: { file_path: 'README.md' } },
-    ],
-    [
-      'require-swarm.sh',
-      { cwd: dir, tool_input: { file_path: 'README.md' } },
     ],
     [
       'ts-style-guard.sh',
@@ -299,13 +283,8 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
 
   it('post-edit check is queued quickly and enforced at stop', () => {
     writeFileSync(
-      join(dir, '.dev.config.json'),
-      JSON.stringify({
-        commands: {
-          typecheck: "sleep 0.4; printf 'src/example.ts:1: bad\\n'; exit 1",
-          lint: '',
-        },
-      }),
+      join(dir, 'mise.toml'),
+      '[tasks.typecheck]\nrun = "sleep 0.4; printf \'src/example.ts:1: bad\\\\n\'; exit 1"\n',
     )
 
     const started = performance.now()

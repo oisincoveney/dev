@@ -1,19 +1,19 @@
 #!/usr/bin/env node
-import { runAcceptLefthook } from './accept-lefthook.js'
 import { runBeadsMigrate } from './beads-migrate.js'
 import { runHookDispatcher } from './hooks/dispatch.js'
 import { runInit } from './init.js'
-import { runSetCommands } from './set-commands.js'
+import { runReset } from './reset.js'
 import { runTicketsUi } from './tickets-ui.js'
+import { runTracker } from './tracker.js'
 import { runUpdate } from './update.js'
 
 const COMMANDS: Record<string, string> = {
   init:             'Initialize an opinionated dev environment in the current (or new) project',
-  update:           'Re-sync generated files (hooks, docs, settings) from .dev.config.json',
-  'set-commands':   'Fill in or update dev/build/test/typecheck/lint/format commands',
-  'accept-lefthook': "Mark the current lefthook.yml as canonical (clears manifest drift warning)",
+  update:           'Non-destructively refresh generated files through Copier',
+  reset:            'Dangerously delete and recreate generated agent configuration',
   'beads-migrate':   'Adopt repo-backed Dolt sync for Beads without Git-tracking issues.jsonl',
   tickets:           'Launch the local Beads UI for the current workspace',
+  tracker:           'Normalized tracker shim (beads adapter first)',
   hook:             'Run a TS-native hook handler (internal — invoked by Claude Code)',
   help:             'Show this help message',
 }
@@ -31,11 +31,9 @@ ${Object.entries(COMMANDS)
   .map(([cmd, desc]) => `  ${cmd.padEnd(10)} ${desc}`)
   .join('\n')}
 
-Update flags (polyglot projects):
-  --reconfigure-languages       Re-prompt the variants multiselect.
-  --languages=<v1>,<v2>...      Set variants explicitly (e.g. ts-library,go-bin).
-  --add-language=<variant>      Append a variant. Repeatable.
-  --remove-language=<variant>   Drop a variant. Repeatable.
+Reset flags:
+  --yes                         Skip the interactive reset confirmation.
+  --force                       Bypass the clean-worktree guard.
 
 `)
 }
@@ -50,17 +48,22 @@ async function main(): Promise<void> {
     case 'update':
       await runUpdate()
       break
-    case 'set-commands':
-      await runSetCommands()
-      break
-    case 'accept-lefthook':
-      await runAcceptLefthook()
+    case 'reset':
+      await runReset()
       break
     case 'beads-migrate':
       runBeadsMigrate()
       break
     case 'tickets':
       runTicketsUi(process.argv.slice(3))
+      break
+    case 'tracker':
+      try {
+        runTracker(process.argv.slice(3))
+      } catch (err) {
+        process.stderr.write(`tracker: ${err instanceof Error ? err.message : String(err)}\n`)
+        process.exit(1)
+      }
       break
     case 'hook': {
       const handlerName = process.argv[3]

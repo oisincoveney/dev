@@ -1,824 +1,14 @@
-/**
- * Installs hooks, configs, skills, and instruction files into the target directory.
- * Reads from templates/ and writes to the project, and runs side-effect installs
- * (bd init, beads plugin, MCP servers, GSD/IDD toolkits).
- */
-
-import { execSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import {
-  chmodSync,
-  copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import * as p from '@clack/prompts'
+import { dirname, join } from 'node:path'
 import type { DevConfig } from './config.js'
-import {
-  applyManagedFiles,
-  type ApplyManagedFilesResult,
-  seedManifestFromKnownFiles,
-} from './manifest.js'
-import type { Answers } from './prompts.js'
-import { buildClaudeMdBundle } from './generate/markdown.js'
-import { generateClaudeSettings } from './generate/claude-settings.js'
-import { generateCodexHooks } from './generate/codex-hooks.js'
-import { generateCursorRules } from './generate/cursor-rules.js'
-import { generateLefthook } from './generate/lefthook.js'
-import { generateLintConfig } from './generate/lint-config.js'
-import { generateCommands } from './generate/commands.js'
-import { generateOpencodePlugin } from './generate/opencode-plugin.js'
-import { generateRules } from './generate/rules.js'
-import { generateToolConfigs } from './generate/tool-configs.js'
-import { SUPERPOWER_SKILLS, type SuperpowerSkill } from './skills.js'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const TEMPLATES_DIR = resolve(__dirname, '..', 'templates')
-
-export interface InstallOptions {
-  /** Skip side effects like bd init, MCP registration, plugin installs. Used by tests. */
-  skipSideEffects?: boolean
-  /** Update mode: merge settings instead of overwriting, skip lefthook and lint/tool configs. */
-  isUpdate?: boolean
-  /** Override lefthook.yml drift on update (caller has explicitly opted in). */
-  acceptLefthookOverwrite?: boolean
-  /** Interactive drift handler — invoked per drifted file on update. When omitted, update writes .dev-new sidecars. */
-  onDrift?: import('./manifest.js').DriftHandler
-}
-
-export interface InstallResult {
-  manifest?: ApplyManagedFilesResult
-}
-
-export async function installAll(
-  cwd: string,
-  config: DevConfig,
-  answers: Answers,
-  options: InstallOptions = {},
-): Promise<InstallResult> {
-  const installResult: InstallResult = {}
-  const log = (msg: string): void => {
-    // biome-ignore lint: CLI output
-    console.log(`  ✓ ${msg}`)
-  }
-  const warn = (msg: string): void => {
-    // biome-ignore lint: CLI output
-    console.log(`  ⚠ ${msg}`)
-  }
-
-  // ─── File generation: gather everything, apply via manifest ────────
-
-  if (config.targets.includes('claude')) {
-    const seed = seedManifestFromKnownFiles(cwd, getPackageVersion())
-    if (seed.seeded) {
-      log(`seeded manifest from ${seed.fileCount} prior-version files`)
-    }
-  }
-
-  const allFiles = gatherAllManagedFiles({ cwd, config, answers, options, warn })
-  installResult.manifest = await applyManagedFiles(cwd, {
-    version: getPackageVersion(),
-    files: allFiles,
-    mode: options.isUpdate ? 'update' : 'init',
-    acceptLefthookOverwrite: options.acceptLefthookOverwrite,
-    onDrift: options.onDrift,
-  })
-
-  if (config.targets.includes('claude')) {
-    chmodHooksDir(join(cwd, '.claude', 'hooks'))
-    log('.claude/hooks/ (chmod +x)')
-
-    const settingsPath = join(cwd, '.claude', 'settings.json')
-    const generatedSettings = generateClaudeSettings(config)
-    if (options.isUpdate) {
-      writeOrMergeSettings(settingsPath, generatedSettings, log)
-    } else {
-      writeJson(settingsPath, generatedSettings)
-      log('.claude/settings.json')
-    }
-
-    appendToGitignore(cwd, '.claude/audit.jsonl')
-    appendToGitignore(cwd, '.claude/hook-errors.log')
-    appendToGitignore(cwd, '.claude/hook-state/')
-  }
-  if (config.tools.includes('beads')) {
-    appendToGitignore(cwd, '.beads/issues.jsonl')
-  }
-  if (config.targets.includes('codex')) {
-    chmodHooksDir(join(cwd, '.codex', 'hooks'))
-    log('.codex/hooks/ (chmod +x)')
-    appendToGitignore(cwd, '.codex/hook-errors.log')
-    appendToGitignore(cwd, '.codex/hook-state/')
-  }
-
-  // CLAUDE.md and AGENTS.md are hybrid (managed block + user content). They
-  // keep writeOrMerge semantics rather than going through the manifest, which
-  // would treat user-added content outside the managed block as drift.
-  const bundle = buildClaudeMdBundle(config, answers)
-  writeOrMerge(join(cwd, 'CLAUDE.md'), bundle.root, log)
-  writeOrMerge(join(cwd, 'AGENTS.md'), bundle.root, log)
-
-  // ─── Side-effect installs ───────────────────────────────────────────
-
-  // Strip scope-guard unconditionally — it false-positives on read commands
-  // whose paths contain "install" and caches a stale projectRoot per pid.
-  // Runs on update too (skipSideEffects=true) so users get the fix without
-  // a full reinstall of grounded.
-  if (config.targets.includes('claude')) {
-    pruneScopeGuardHook(join(homedir(), '.claude', 'settings.json'), log, warn)
-  }
-
-  if (options.isUpdate) {
-    const repaired = repairKnownProjectMcpConfigs(cwd, config.targets)
-    for (const path of repaired.repaired) log(`MCP: repaired ${path}`)
-    for (const warning of repaired.warnings) warn(warning)
-  }
-
-  if (options.skipSideEffects) return installResult
-
-  if (config.targets.includes('claude')) {
-    installGroundedHooks(cwd, log, warn)
-  }
-  if (config.targets.includes('codex')) {
-    pruneGroundedCodexHooks(join(homedir(), '.codex', 'hooks.json'), log, warn)
-  }
-
-  if (config.tools.includes('beads')) {
-    const cliResult = installBeadsCli(cwd)
-    switch (cliResult.status) {
-      case 'created':
-        log('beads: bd init')
-        break
-      case 'exists':
-        log('beads: .beads/ already exists, skipping bd init')
-        break
-      case 'no-bd':
-        warn(
-          'beads: `bd` not found in PATH. Install: curl -sSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash',
-        )
-        break
-      case 'failed':
-        warn(`beads: bd init failed (${cliResult.error})`)
-        break
-    }
-
-    if (cliResult.status === 'created' || cliResult.status === 'exists') {
-      const configureResult = configureBeadsAfterInit(cwd)
-      if (configureResult.ok) {
-        log('beads: validation.on-create=warn, hooks installed, repo-backed Dolt sync configured')
-      } else {
-        warn(`beads: post-init configuration failed (${configureResult.error})`)
-      }
-
-      if (config.workflow === 'bd') {
-        const seedResult = seedConstitutionDecisions(cwd, config)
-        if (seedResult.ok) {
-          if (seedResult.created > 0) {
-            log(`beads: seeded ${seedResult.created} constitution decision(s)`)
-          } else {
-            log('beads: constitution already seeded')
-          }
-        } else {
-          warn(`beads: constitution seeding failed (${seedResult.error})`)
-        }
-      }
-    }
-
-    const pluginResult = installBeadsPlugin(cwd)
-    switch (pluginResult.status) {
-      case 'installed':
-        log('beads: Claude Code plugin installed')
-        break
-      case 'already-installed':
-        log('beads: Claude Code plugin already installed')
-        break
-      case 'no-claude':
-        warn('beads plugin: `claude` CLI not in PATH, skipping plugin install')
-        break
-      case 'failed':
-        warn(`beads plugin install failed (${pluginResult.error})`)
-        break
-    }
-  }
-
-  const mcpServers = usableMcpServers(answers.mcpServers, warn)
-  if (mcpServers.length > 0) {
-    if (config.targets.includes('claude')) {
-      installMcpServers(cwd, 'claude', mcpServers, log, warn)
-    }
-    if (config.targets.includes('codex')) {
-      installMcpServers(cwd, 'codex', mcpServers, log, warn)
-    }
-  }
-
-  // GSD and IDD workflows have been removed. The bd-native workflow is the
-  // only supported flavor; readConfig coerces legacy "gsd" / "idd" values to
-  // "none" with a deprecation warning.
-
-  return installResult
-}
-
-function getPackageVersion(): string {
-  const pkgPath = resolve(__dirname, '..', 'package.json')
-  const raw = readFileSync(pkgPath, 'utf8')
-  const pkg = JSON.parse(raw) as { version: string }
-  return pkg.version
-}
-
-/** Hook script base names migrated to the TS dispatcher. Mirrors
- * MIGRATED_HOOKS in src/generate/claude-settings.ts. The `.sh` files are
- * skipped during install so the legacy shell version stops shipping. */
-const MIGRATED_HOOK_SCRIPTS = new Set<string>(['block-coauthor.sh'])
-
-function gatherClaudeHooks(): Map<string, string> {
-  const srcDir = join(TEMPLATES_DIR, 'hooks')
-  const files = new Map<string, string>()
-  walkDirIntoMap(srcDir, '.claude/hooks', files)
-  for (const key of [...files.keys()]) {
-    const base = key.split('/').pop() ?? key
-    if (MIGRATED_HOOK_SCRIPTS.has(base)) {
-      files.delete(key)
-    }
-  }
-  return files
-}
-
-function chmodHooksDir(dir: string): void {
-  if (!existsSync(dir)) return
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const child = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      chmodHooksDir(child)
-    } else if (entry.isFile()) {
-      chmodSync(child, 0o755)
-    }
-  }
-}
-
-function walkDirIntoMap(
-  srcAbs: string,
-  destPrefix: string,
-  out: Map<string, string>,
-  transform?: (relPath: string, content: string) => string,
-): void {
-  if (!existsSync(srcAbs)) return
-  for (const entry of readdirSync(srcAbs, { withFileTypes: true })) {
-    const childSrc = join(srcAbs, entry.name)
-    const childDest = `${destPrefix}/${entry.name}`
-    if (entry.isDirectory()) {
-      walkDirIntoMap(childSrc, childDest, out, transform)
-    } else if (entry.isFile()) {
-      const content = readFileSync(childSrc, 'utf8')
-      out.set(childDest, transform ? transform(childDest, content) : content)
-    }
-  }
-}
-
-function stampSkillFrontmatterContent(
-  content: string,
-  skill: SuperpowerSkill,
-  warn: (msg: string) => void,
-): string {
-  let front: Record<string, string> = {}
-  let body = content
-  if (content.startsWith('---\n')) {
-    const end = content.indexOf('\n---\n', 4)
-    if (end !== -1) {
-      const yaml = content.slice(4, end)
-      body = content.slice(end + 5)
-      for (const line of yaml.split('\n')) {
-        const match = line.match(/^([a-zA-Z_-]+):\s*(.*)$/)
-        if (match) front[match[1]] = match[2]
-      }
-    }
-  }
-  if (skill.classification === 'reference') {
-    front['disable-model-invocation'] = 'true'
-    front['user-invocable'] = 'false'
-  } else if (skill.classification === 'action') {
-    front['disable-model-invocation'] = 'true'
-  }
-  if (skill.allowedTools && skill.allowedTools.length > 0 && !front['allowed-tools']) {
-    front['allowed-tools'] = skill.allowedTools.join(' ')
-  }
-  if (!front['description'] || front['description'].length < 40) {
-    warn(`Skill ${skill.id} has a short or missing description — Claude may not load it.`)
-    if (!front['description']) front['description'] = skill.description
-  }
-  const yamlLines = Object.entries(front).map(([k, v]) => `${k}: ${v}`)
-  return `---\n${yamlLines.join('\n')}\n---\n${body}`
-}
-
-interface GatherContext {
-  cwd: string
-  config: DevConfig
-  answers: Answers
-  options: InstallOptions
-  warn: (msg: string) => void
-}
-
-export function gatherAllManagedFiles(ctx: GatherContext): Map<string, string> {
-  const { config, answers, options, warn } = ctx
-  const out = new Map<string, string>()
-
-  if (config.targets.includes('claude')) {
-    walkDirIntoMap(join(TEMPLATES_DIR, 'hooks'), '.claude/hooks', out)
-    addOwnedSkillsToMap(ctx, out, '.claude/skills')
-
-    if (config.tools.includes('beads')) {
-      walkDirIntoMap(join(TEMPLATES_DIR, 'bd'), '.beads', out)
-    }
-
-    addProjectSkillsToMap(ctx, out, '.claude/skills')
-
-    for (const rule of generateRules(config, TEMPLATES_DIR)) {
-      out.set(`.claude/rules/${rule.filename}`, rule.content)
-    }
-    for (const cmd of generateCommands(config)) {
-      out.set(`.claude/commands/${cmd.filename}`, cmd.content)
-    }
-
-  }
-
-  if (config.targets.includes('codex')) {
-    walkDirIntoMap(join(TEMPLATES_DIR, 'hooks'), '.codex/hooks', out)
-    out.set('.codex/hooks.json', `${JSON.stringify(generateCodexHooks(config), null, 2)}\n`)
-    addOwnedSkillsToMap(ctx, out, '.agents/skills')
-    addProjectSkillsToMap(ctx, out, '.agents/skills')
-  }
-
-  if (config.targets.includes('opencode')) {
-    out.set('.opencode/plugins/dev-enforcer.ts', generateOpencodePlugin(config))
-    const mcpServers = usableMcpServers(answers.mcpServers, warn)
-    if (mcpServers.length > 0) {
-      out.set('opencode.json', `${JSON.stringify(generateOpencodeConfig(mcpServers), null, 2)}\n`)
-    }
-  }
-
-  if (config.targets.includes('cursor')) {
-    for (const rule of generateCursorRules(config, TEMPLATES_DIR)) {
-      out.set(`.cursor/rules/${rule.filename}`, rule.content)
-    }
-  }
-
-  if (config.targets.includes('lefthook') && !options.isUpdate) {
-    out.set('lefthook.yml', generateLefthook(config))
-  }
-
-  if (!options.isUpdate) {
-    for (const [filename, contents] of Object.entries(generateLintConfig(config))) {
-      out.set(filename, contents)
-    }
-    for (const [filename, contents] of Object.entries(generateToolConfigs(config))) {
-      out.set(filename, contents)
-    }
-  }
-
-  return out
-}
-
-function addOwnedSkillsToMap(
-  ctx: GatherContext,
-  out: Map<string, string>,
-  destPrefix: string,
-): void {
-  walkDirIntoMap(join(TEMPLATES_DIR, 'skills'), destPrefix, out)
-  if (ctx.config.tools.includes('beads')) return
-
-  for (const id of BD_ONLY_SKILLS) {
-    for (const key of Array.from(out.keys())) {
-      if (key.startsWith(`${destPrefix}/${id}/`)) out.delete(key)
-    }
-  }
-}
-
-function addProjectSkillsToMap(
-  ctx: GatherContext,
-  out: Map<string, string>,
-  destPrefix: string,
-): void {
-  const selectedSuperpowers = SUPERPOWER_SKILLS.filter((s) => ctx.config.skills.includes(s.id))
-  if (selectedSuperpowers.length === 0) return
-  const globalSkillsDir = join(homedir(), '.agents', 'skills')
-  const fallbackDir = join(homedir(), '.claude', 'skills')
-  const sourceDir = existsSync(globalSkillsDir)
-    ? globalSkillsDir
-    : existsSync(fallbackDir)
-      ? fallbackDir
-      : null
-  if (sourceDir === null) {
-    ctx.warn(`No global skills directory found. Skipping superpower skill copy.`)
-    return
-  }
-  for (const skill of selectedSuperpowers) {
-    const src = join(sourceDir, skill.id)
-    if (!existsSync(src)) {
-      ctx.warn(`Skill not found in ${sourceDir}: ${skill.id}`)
-      continue
-    }
-    walkDirIntoMap(src, `${destPrefix}/${skill.id}`, out, (relPath, content) =>
-      relPath.endsWith('/SKILL.md')
-        ? stampSkillFrontmatterContent(content, skill, ctx.warn)
-        : content,
-    )
-  }
-}
-
-function computeSettingsJsonContent(ctx: GatherContext): string {
-  const generated = generateClaudeSettings(ctx.config)
-  if (!ctx.options.isUpdate) {
-    return `${JSON.stringify(generated, null, 2)}\n`
-  }
-  const existingPath = join(ctx.cwd, '.claude', 'settings.json')
-  if (!existsSync(existingPath)) {
-    return `${JSON.stringify(generated, null, 2)}\n`
-  }
-  try {
-    const existingRaw = readFileSync(existingPath, 'utf8')
-    const existing = JSON.parse(existingRaw) as Record<string, unknown>
-    const merged = mergeClaudeSettings(existing, generated as unknown as Record<string, unknown>)
-    return `${JSON.stringify(merged, null, 2)}\n`
-  } catch {
-    return `${JSON.stringify(generated, null, 2)}\n`
-  }
-}
-
-function mergeManagedRoot(cwd: string, file: string, managed: string): string {
-  const path = join(cwd, file)
-  if (!existsSync(path)) return managed
-  const existing = readFileSync(path, 'utf8')
-  return mergeManagedBlock(existing, managed)
-}
-
-function installClaudeHooks(cwd: string, log: (msg: string) => void): void {
-  const root = join(cwd, '.claude', 'hooks')
-  const stack: string[] = [root]
-  while (stack.length > 0) {
-    const dir = stack.pop()
-    if (dir === undefined) break
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name)
-      if (entry.isDirectory()) {
-        stack.push(path)
-      } else if (entry.isFile()) {
-        chmodSync(path, 0o755)
-        log(`.claude/hooks/${path.slice(root.length + 1)}`)
-      }
-    }
-  }
-}
-
-/**
- * Ensures @pinperepette/grounded is installed and its 11 Claude Code hooks
- * are registered in the user's ~/.claude/settings.json via grounded's own
- * documented install path (`grounded install`). Independent of the target
- * project's language or package manager — works for TS, Rust, Python, Go.
- *
- * Install strategy, in priority order:
- *   1. mise — `mise use npm:@pinperepette/grounded@0.1.0` (writes to the
- *      target's mise.toml, then `mise install`). Polyglot-friendly: matches
- *      how this repo declares `bun` and `bd` (mise.toml).
- *   2. bun  — `bun add -g @pinperepette/grounded`
- *   3. npm  — `npm install -g @pinperepette/grounded`
- *
- * Idempotent: grounded's installer removes prior grounded entries before
- * writing, so re-running this on every `oisin-dev install` is safe.
- */
-function installGroundedHooks(
-  cwd: string,
-  log: (msg: string) => void,
-  warn: (msg: string) => void,
-): void {
-  if (!commandExists('grounded')) {
-    if (commandExists('mise')) {
-      const use = spawnSync(
-        'mise',
-        ['use', '--quiet', 'npm:@pinperepette/grounded@0.1.0'],
-        { cwd, stdio: 'pipe', encoding: 'utf8' },
-      )
-      if (use.status !== 0) {
-        warn(`grounded: mise use failed: ${use.stderr || use.stdout}`)
-        return
-      }
-    } else if (commandExists('bun')) {
-      const inst = spawnSync('bun', ['add', '-g', '@pinperepette/grounded'], {
-        stdio: 'pipe',
-        encoding: 'utf8',
-      })
-      if (inst.status !== 0) {
-        warn(`grounded: bun add -g failed: ${inst.stderr || inst.stdout}`)
-        return
-      }
-    } else if (commandExists('npm')) {
-      const inst = spawnSync('npm', ['install', '-g', '@pinperepette/grounded'], {
-        stdio: 'pipe',
-        encoding: 'utf8',
-      })
-      if (inst.status !== 0) {
-        warn(`grounded: npm install -g failed: ${inst.stderr || inst.stdout}`)
-        return
-      }
-    } else {
-      warn('grounded: none of mise, bun, or npm in PATH — skipping grounded hooks')
-      return
-    }
-  }
-  // `mise use` only configures the tool; the binary may still need to be
-  // resolved through `mise exec` if it's not yet on the active PATH. Try a
-  // direct `grounded install` first; on failure, retry via mise exec.
-  const direct = spawnSync('grounded', ['install'], { cwd, stdio: 'pipe', encoding: 'utf8' })
-  if (direct.status === 0) {
-    log('@pinperepette/grounded hooks → ~/.claude/settings.json')
-    pruneScopeGuardHook(join(homedir(), '.claude', 'settings.json'), log, warn)
-    return
-  }
-  if (commandExists('mise')) {
-    const viaMise = spawnSync('mise', ['exec', '--', 'grounded', 'install'], {
-      cwd,
-      stdio: 'pipe',
-      encoding: 'utf8',
-    })
-    if (viaMise.status === 0) {
-      log('@pinperepette/grounded hooks → ~/.claude/settings.json (via mise exec)')
-      pruneScopeGuardHook(join(homedir(), '.claude', 'settings.json'), log, warn)
-      return
-    }
-    warn(`grounded install failed (direct + mise exec): ${viaMise.stderr || viaMise.stdout}`)
-    return
-  }
-  warn(`grounded install failed: ${direct.stderr || direct.stdout}`)
-}
-
-/**
- * Removes grounded's scope-guard PreToolUse entry from ~/.claude/settings.json.
- *
- * scope-guard's Bash matcher uses a write-verb regex that includes `\binstall\b`,
- * which false-positives on read commands whose paths contain "install" (e.g.
- * anything under ~/.bun/install/...). It also caches projectRoot per-pid in
- * /tmp and never refreshes, so worktree-relocated sessions get blocked on
- * legitimate writes. Until grounded fixes both, we strip it after every
- * `grounded install`. The remaining 10 hooks stay registered.
- */
-interface ClaudeSettings {
-  hooks?: {
-    PreToolUse?: Array<{ hooks?: Array<{ command?: string }> }>
-    [key: string]: unknown
-  }
-  [key: string]: unknown
-}
-
-interface GroundedHookEntry {
-  hooks?: Array<{ command?: string; _tag?: string }>
-  _tag?: string
-  [key: string]: unknown
-}
-
-interface HookConfig {
-  hooks?: Record<string, GroundedHookEntry[]>
-  [key: string]: unknown
-}
-
-export function pruneScopeGuardHook(
-  settingsPath: string,
-  log: (msg: string) => void,
-  warn: (msg: string) => void,
-): boolean {
-  if (!existsSync(settingsPath)) return false
-  let settings: ClaudeSettings
-  try {
-    settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as ClaudeSettings
-  } catch (e) {
-    warn(`scope-guard prune: ${settingsPath} is not valid JSON: ${(e as Error).message}`)
-    return false
-  }
-  const pre = settings.hooks?.PreToolUse
-  if (!pre) return false
-  const filtered = pre.filter(
-    (entry) => !(entry.hooks ?? []).some((h) => h.command?.includes('scope-guard.js')),
-  )
-  if (filtered.length === pre.length) return false
-  settings.hooks = { ...settings.hooks, PreToolUse: filtered }
-  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
-  log('removed scope-guard from ~/.claude/settings.json')
-  return true
-}
-
-/**
- * Removes @pinperepette/grounded hooks from ~/.codex/hooks.json.
- *
- * grounded currently emits Claude-style hook payload fields such as
- * `decision: "approve"` and `suppressOutput`, which Codex rejects. Keep
- * grounded available for Claude, but never leave its hooks installed in Codex.
- */
-export function pruneGroundedCodexHooks(
-  hooksPath: string,
-  log: (msg: string) => void,
-  warn: (msg: string) => void,
-): boolean {
-  if (!existsSync(hooksPath)) return false
-  let config: HookConfig
-  try {
-    config = JSON.parse(readFileSync(hooksPath, 'utf8')) as HookConfig
-  } catch (e) {
-    warn(`codex grounded prune: ${hooksPath} is not valid JSON: ${(e as Error).message}`)
-    return false
-  }
-
-  const hooks = config.hooks
-  if (!hooks) return false
-
-  let removed = 0
-  const filteredHooks: Record<string, GroundedHookEntry[]> = {}
-  for (const [event, entries] of Object.entries(hooks)) {
-    const kept = entries.filter((entry) => {
-      const isGrounded =
-        entry._tag === '@pinperepette/grounded' ||
-        (entry.hooks ?? []).some(
-          (hook) =>
-            hook._tag === '@pinperepette/grounded' ||
-            hook.command?.includes('@pinperepette/grounded') === true,
-        )
-      if (isGrounded) removed += 1
-      return !isGrounded
-    })
-    if (kept.length > 0) filteredHooks[event] = kept
-  }
-
-  if (removed === 0) return false
-  config.hooks = filteredHooks
-  writeFileSync(hooksPath, `${JSON.stringify(config, null, 2)}\n`)
-  log(`removed ${removed} grounded hook(s) from ~/.codex/hooks.json`)
-  return true
-}
-
-function installCodexHooks(cwd: string, log: (msg: string) => void): void {
-  const srcDir = join(TEMPLATES_DIR, 'hooks')
-  const destDir = join(cwd, '.codex', 'hooks')
-  mkdirSync(destDir, { recursive: true })
-  for (const file of readdirSync(srcDir)) {
-    const src = join(srcDir, file)
-    const dest = join(destDir, file)
-    copyFileSync(src, dest)
-    chmodSync(dest, 0o755)
-    log(`.codex/hooks/${file}`)
-  }
-}
-
-function installProjectSkills(
-  cwd: string,
-  config: DevConfig,
-  log: (msg: string) => void,
-  warn: (msg: string) => void,
-): void {
-  const selectedSuperpowers = SUPERPOWER_SKILLS.filter((s) => config.skills.includes(s.id))
-  if (selectedSuperpowers.length === 0) return
-
-  const globalSkillsDir = join(homedir(), '.agents', 'skills')
-  const fallbackDir = join(homedir(), '.claude', 'skills')
-  const sourceDir = existsSync(globalSkillsDir)
-    ? globalSkillsDir
-    : existsSync(fallbackDir)
-      ? fallbackDir
-      : null
-
-  if (sourceDir === null) {
-    warn(
-      `No global skills directory found (${globalSkillsDir} or ${fallbackDir}). Skipping skill copy.`,
-    )
-    return
-  }
-
-  const destRoot = join(cwd, '.claude', 'skills')
-  mkdirSync(destRoot, { recursive: true })
-
-  for (const skill of selectedSuperpowers) {
-    const src = join(sourceDir, skill.id)
-    if (!existsSync(src)) {
-      warn(`Skill not found in ${sourceDir}: ${skill.id}`)
-      continue
-    }
-    const dest = join(destRoot, skill.id)
-    cpSync(src, dest, { recursive: true, dereference: true })
-    stampSkillFrontmatter(join(dest, 'SKILL.md'), skill, warn)
-    log(`.claude/skills/${skill.id}/`)
-  }
-}
-
-/**
- * Installs skills owned by this package (currently just `policies`).
- * These are always copied, regardless of superpower selection, because
- * they're referenced by the kernel CLAUDE.md.
- */
-const BD_ONLY_SKILLS = new Set<string>([
-  'to-bd-issues',
-  'spec-verifier',
-  'parallel-tickets',
-  'plan-brief',
-])
-
-function installOwnedSkills(
-  cwd: string,
-  config: DevConfig,
-  log: (msg: string) => void,
-): void {
-  const srcDir = join(TEMPLATES_DIR, 'skills')
-  if (!existsSync(srcDir)) return
-  const destRoot = join(cwd, '.claude', 'skills')
-  mkdirSync(destRoot, { recursive: true })
-  const beadsEnabled = config.tools.includes('beads')
-  for (const entry of readdirSync(srcDir)) {
-    if (BD_ONLY_SKILLS.has(entry) && !beadsEnabled) continue
-    const src = join(srcDir, entry)
-    const dest = join(destRoot, entry)
-    cpSync(src, dest, { recursive: true, dereference: true })
-    log(`.claude/skills/${entry}/`)
-  }
-}
-
-/**
- * Ensures SKILL.md frontmatter reflects the skill's classification:
- * - reference: sets `disable-model-invocation: true` and `user-invocable: false`
- * - action:    sets `disable-model-invocation: true`
- * - workflow:  default (both invocable) + optional `allowed-tools`
- *
- * Does not touch the skill body. Existing frontmatter fields are preserved
- * unless we're explicitly overriding them.
- */
-function stampSkillFrontmatter(
-  path: string,
-  skill: SuperpowerSkill,
-  warn: (msg: string) => void,
-): void {
-  if (!existsSync(path)) {
-    warn(`Skill has no SKILL.md: ${skill.id}`)
-    return
-  }
-  const raw = readFileSync(path, 'utf8')
-  let front: Record<string, string> = {}
-  let body = raw
-  if (raw.startsWith('---\n')) {
-    const end = raw.indexOf('\n---\n', 4)
-    if (end !== -1) {
-      const yaml = raw.slice(4, end)
-      body = raw.slice(end + 5)
-      for (const line of yaml.split('\n')) {
-        const match = line.match(/^([a-zA-Z_-]+):\s*(.*)$/)
-        if (match) front[match[1]] = match[2]
-      }
-    }
-  }
-
-  if (skill.classification === 'reference') {
-    front['disable-model-invocation'] = 'true'
-    front['user-invocable'] = 'false'
-  } else if (skill.classification === 'action') {
-    front['disable-model-invocation'] = 'true'
-  }
-  if (skill.allowedTools && skill.allowedTools.length > 0 && !front['allowed-tools']) {
-    front['allowed-tools'] = skill.allowedTools.join(' ')
-  }
-
-  if (!front['description'] || front['description'].length < 40) {
-    warn(
-      `Skill ${skill.id} has a short or missing description — Claude may not load it when relevant.`,
-    )
-    if (!front['description']) {
-      front['description'] = skill.description
-    }
-  }
-
-  const yamlLines = Object.entries(front).map(([k, v]) => `${k}: ${v}`)
-  writeFileSync(path, `---\n${yamlLines.join('\n')}\n---\n${body}`)
-}
-
-/**
- * Run an external command with a HARD timeout enforced via SIGKILL and the
- * child attached to the parent's TTY so Ctrl-C reaches it via the process
- * group. Returns a typed result.
- *
- * Why this exists (vs `execSync`):
- * - `execSync({ timeout })` sends SIGTERM, which a misbehaving child can
- *   catch and ignore — the parent then waits indefinitely. We use SIGKILL,
- *   which is uncatchable.
- * - `execSync` runs the child detached from the controlling TTY; SIGINT
- *   from a `Ctrl-C` press doesn't reach the child process group. With
- *   `stdio: 'inherit'` the child shares the parent's TTY and is part of
- *   its foreground process group, so the kernel delivers SIGINT to it
- *   directly when the user hits Ctrl-C.
- *
- * Reasons a child would otherwise hang past `execSync`'s timeout in this
- * codebase: `bd init` blocked on a global `core.hooksPath` hook calling
- * back into `bd` while bd holds the dolt lock, and `claude plugin install`
- * stalling on a remote network call.
- */
 type RunResult =
   | { ok: true }
   | { ok: false; reason: 'exit'; code: number }
@@ -849,20 +39,7 @@ export function runCommand(
     timeout: opts.timeoutMs,
     killSignal: 'SIGKILL',
   })
-  if (result.error) {
-    // Distinguish timeout (which spawnSync surfaces as ETIMEDOUT) from
-    // genuine spawn failures (binary not found, permission denied, etc.).
-    const errno = (result.error as NodeJS.ErrnoException).code
-    if (errno === 'ETIMEDOUT') {
-      return { ok: false, reason: 'timeout', afterMs: opts.timeoutMs }
-    }
-    return { ok: false, reason: 'spawn-error', message: result.error.message }
-  }
-  if (result.signal) {
-    return { ok: false, reason: 'signal', signal: result.signal }
-  }
-  if (result.status === 0) return { ok: true }
-  return { ok: false, reason: 'exit', code: result.status ?? -1 }
+  return normalizeRunResult(result, opts.timeoutMs)
 }
 
 function runCommandCapture(
@@ -879,19 +56,22 @@ function runCommandCapture(
     timeout: opts.timeoutMs,
     killSignal: 'SIGKILL',
   })
+  const normalized = normalizeRunResult(result, opts.timeoutMs)
+  if (!normalized.ok) return normalized
+  return { ok: true, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
+}
+
+function normalizeRunResult(
+  result: ReturnType<typeof spawnSync>,
+  timeoutMs: number,
+): RunResult {
   if (result.error) {
     const errno = (result.error as NodeJS.ErrnoException).code
-    if (errno === 'ETIMEDOUT') {
-      return { ok: false, reason: 'timeout', afterMs: opts.timeoutMs }
-    }
+    if (errno === 'ETIMEDOUT') return { ok: false, reason: 'timeout', afterMs: timeoutMs }
     return { ok: false, reason: 'spawn-error', message: result.error.message }
   }
-  if (result.signal) {
-    return { ok: false, reason: 'signal', signal: result.signal }
-  }
-  if (result.status === 0) {
-    return { ok: true, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
-  }
+  if (result.signal) return { ok: false, reason: 'signal', signal: result.signal }
+  if (result.status === 0) return { ok: true }
   return { ok: false, reason: 'exit', code: result.status ?? -1 }
 }
 
@@ -908,48 +88,30 @@ function runFailureMessage(r: RunResult & { ok: false }): string {
   }
 }
 
-/**
- * Result of attempting to initialise beads in a project directory.
- * Distinct cases let callers (and tests) reason about each terminal state
- * explicitly rather than parsing log strings.
- */
+function commandExists(cmd: string): boolean {
+  return spawnSync('sh', ['-lc', `command -v ${cmd}`], { stdio: 'ignore' }).status === 0
+}
+
+function noGitHooksEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'",
+  }
+}
+
 export type BeadsCliResult =
   | { status: 'created' }
   | { status: 'exists' }
   | { status: 'no-bd' }
   | { status: 'failed'; error: string }
 
-/**
- * Initialise beads in `cwd`. Returns a structured result instead of taking
- * log/warn callbacks so callers (and tests) decide how to surface the outcome.
- *
- * `bd init` triggers a `git commit` for the new `.beads/` files. If the user
- * has `core.hooksPath` set globally (which beads' own setup configures, so
- * this is common for bd users) those global hooks fire on every git commit —
- * including the one inside bd init. Each global hook calls back into `bd`,
- * but bd is still holding the dolt DB lock, so `bd hooks run` blocks waiting
- * for it and the commit hangs indefinitely.
- *
- * Fix: neutralise git hooks for ONLY this `bd init` invocation by setting
- * `core.hooksPath=/dev/null` via `GIT_CONFIG_PARAMETERS`. This affects only
- * the subprocess; the user's global config and the repo's own `.git/config`
- * are untouched, so bd's hook integration (which `bd init` writes into the
- * repo's `.git/config`) works for every subsequent commit. We get full beads
- * functionality with no deadlock and no timeout reliance.
- *
- * `--non-interactive` is auto-detected when stdin isn't a TTY (our case under
- * execSync), but set explicitly to pin the contract.
- */
 export function installBeadsCli(cwd: string): BeadsCliResult {
   if (existsSync(join(cwd, '.beads'))) return { status: 'exists' }
   if (!commandExists('bd')) return { status: 'no-bd' }
   const r = runCommand('bd', ['init', '--non-interactive'], {
     cwd,
     timeoutMs: 60_000,
-    env: {
-      ...process.env,
-      GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'",
-    },
+    env: noGitHooksEnv(),
   })
   if (r.ok) return { status: 'created' }
   return { status: 'failed', error: runFailureMessage(r) }
@@ -975,49 +137,26 @@ export function configureBeadsAfterInit(cwd: string): BeadsConfigureResult {
     if (!remote.ok) return remote
   }
 
-  const validation = runCommand('bd', ['--sandbox', 'config', 'set', 'validation.on-create', 'warn'], {
-    cwd,
-    timeoutMs: 10_000,
-    env: noGitHooksEnv(),
-  })
-  if (!validation.ok) return { ok: false, error: runFailureMessage(validation) }
-
-  const hooks = runCommand('bd', ['hooks', 'install'], {
-    cwd,
-    timeoutMs: 30_000,
-  })
-  if (!hooks.ok && hooks.reason !== 'exit') {
-    return { ok: false, error: runFailureMessage(hooks) }
+  for (const args of [
+    ['--sandbox', 'config', 'set', 'validation.on-create', 'warn'],
+    ...(remoteUrl === null
+      ? []
+      : [
+          ['--sandbox', 'config', 'set', 'sync.remote', remoteUrl],
+          ['--sandbox', 'config', 'set', 'federation.remote', remoteUrl],
+          ['--sandbox', 'config', 'set', 'export.git-add', 'false'],
+        ]),
+  ]) {
+    const result = runCommand('bd', args, { cwd, timeoutMs: 10_000, env: noGitHooksEnv() })
+    if (!result.ok) return { ok: false, error: runFailureMessage(result) }
   }
 
-  if (remoteUrl !== null) {
-    const sync = runCommand('bd', ['--sandbox', 'config', 'set', 'sync.remote', remoteUrl], {
-      cwd,
-      timeoutMs: 10_000,
-      env: noGitHooksEnv(),
-    })
-    if (!sync.ok) return { ok: false, error: runFailureMessage(sync) }
-
-    const federation = runCommand('bd', ['--sandbox', 'config', 'set', 'federation.remote', remoteUrl], {
-      cwd,
-      timeoutMs: 10_000,
-      env: noGitHooksEnv(),
-    })
-    if (!federation.ok) return { ok: false, error: runFailureMessage(federation) }
-
-    const exportGitAdd = runCommand('bd', ['--sandbox', 'config', 'set', 'export.git-add', 'false'], {
-      cwd,
-      timeoutMs: 10_000,
-      env: noGitHooksEnv(),
-    })
-    if (!exportGitAdd.ok) return { ok: false, error: runFailureMessage(exportGitAdd) }
-  }
+  const hooks = runCommand('bd', ['hooks', 'install'], { cwd, timeoutMs: 30_000 })
+  if (!hooks.ok && hooks.reason !== 'exit') return { ok: false, error: runFailureMessage(hooks) }
 
   for (const file of ['AGENTS.md', 'CLAUDE.md']) {
     const path = join(cwd, file)
-    if (existsSync(path)) {
-      trimBeadsIntegrationBlock(path)
-    }
+    if (existsSync(path)) trimBeadsIntegrationBlock(path)
   }
 
   return { ok: true }
@@ -1087,9 +226,7 @@ function configureBeadsDoltRemote(cwd: string, remoteUrl: string): BeadsConfigur
   if (!list.ok) return { ok: false, error: runFailureMessage(list) }
 
   const origin = parseDoltRemoteList(list.stdout).get('origin')
-  if (origin !== undefined && sameGitRemote(origin, remoteUrl)) {
-    return { ok: true }
-  }
+  if (origin !== undefined && sameGitRemote(origin, remoteUrl)) return { ok: true }
   if (origin !== undefined) {
     const remove = runCommand('bd', ['--sandbox', 'dolt', 'remote', 'remove', 'origin'], {
       cwd,
@@ -1105,13 +242,6 @@ function configureBeadsDoltRemote(cwd: string, remoteUrl: string): BeadsConfigur
   })
   if (!add.ok) return { ok: false, error: runFailureMessage(add) }
   return { ok: true }
-}
-
-function noGitHooksEnv(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'",
-  }
 }
 
 function parseDoltRemoteList(stdout: string): Map<string, string> {
@@ -1145,6 +275,14 @@ function gitPathTracked(cwd: string, relPath: string): boolean {
   return r.ok
 }
 
+function appendToGitignore(cwd: string, pattern: string): void {
+  const path = join(cwd, '.gitignore')
+  const existing = existsSync(path) ? readFileSync(path, 'utf8') : ''
+  if (existing.split(/\r?\n/).includes(pattern)) return
+  const prefix = existing.length === 0 || existing.endsWith('\n') ? '' : '\n'
+  writeFileSync(path, `${existing}${prefix}${pattern}\n`)
+}
+
 export type SeedConstitutionResult =
   | { ok: true; created: number }
   | { ok: false; error: string }
@@ -1160,42 +298,17 @@ export function seedConstitutionDecisions(
     cwd,
     timeoutMs: 10_000,
   })
-
   const existingTitles = new Set<string>()
   if (list.ok && list.stdout) {
     try {
       const issues = JSON.parse(list.stdout) as Array<{ title?: string }>
-      for (const issue of issues) {
-        if (issue.title) existingTitles.add(issue.title)
-      }
+      for (const issue of issues) if (issue.title) existingTitles.add(issue.title)
     } catch {
-      // Fall through; treat as no existing decisions.
+      // Treat malformed output as empty.
     }
   }
 
-  const decisions: Array<{ title: string; body: string }> = [
-    {
-      title: `Constitution: package manager is ${config.packageManager}`,
-      body: `## Decision\nUse \`${config.packageManager}\` for all dependency management commands.\n\n## Rationale\nDocumented in .dev.config.json. Hooks normalize alternative invocations.\n\n## Alternatives Considered\nnpm, pnpm, yarn — rejected per project choice.`,
-    },
-    {
-      title: `Constitution: test command is ${config.commands.test ?? 'unset'}`,
-      body: `## Decision\nThe canonical test command is \`${config.commands.test ?? 'unset'}\`. Pre-stop verification matches against this string.\n\n## Rationale\nExplicit single-source command keeps proof-of-work checks deterministic.\n\n## Alternatives Considered\nMultiple test runners — rejected to keep the verification gate simple.`,
-    },
-    {
-      title: 'Constitution: destructive ops require explicit user approval',
-      body: '## Decision\nNever run destructive commands without explicit user approval. The destructive-command-guard hook enforces this; salvageable cases are rewritten rather than denied.\n\n## Rationale\nIrreversible actions need a human in the loop.\n\n## Alternatives Considered\nFully autonomous — rejected; blast radius of mistakes is too high.',
-    },
-    {
-      title: 'Constitution: no follow-up questions in agent output',
-      body: '## Decision\nAgent responses must not end with follow-up prompts. This is a prompt-level style rule, not a runtime hook gate.\n\n## Rationale\nFollow-up questions force the user to opt out of unsolicited work; net negative on flow. Runtime Stop hooks cannot invisibly rewrite final answers, so prose style must not be enforced with blocking hook output.\n\n## Alternatives Considered\nBlocking Stop hook — rejected because the hook feedback is visible and creates output cruft.',
-    },
-    {
-      title: 'Constitution: no completion claims without proof',
-      body: '## Decision\nNever claim completion without having executed the configured test command this session. Pre-stop-verification hook enforces this.\n\n## Rationale\nUnverified claims are the most expensive failure mode.\n\n## Alternatives Considered\nAdvisory rule only — rejected; agents skip the run.',
-    },
-  ]
-
+  const decisions = constitutionDecisions(config)
   let created = 0
   for (const decision of decisions) {
     if (existingTitles.has(decision.title)) continue
@@ -1209,147 +322,69 @@ export function seedConstitutionDecisions(
         '--silent',
         '--body-file=-',
       ],
-      {
-        cwd,
-        timeoutMs: 10_000,
-        input: decision.body,
-      },
+      { cwd, timeoutMs: 10_000, input: decision.body },
     )
-    if (!create.ok) {
-      return {
-        ok: false,
-        error: `Failed to create decision: ${runFailureMessage(create)}`,
-      }
-    }
+    if (!create.ok) return { ok: false, error: `Failed to create decision: ${runFailureMessage(create)}` }
     const id = create.stdout.trim()
-    if (id) {
-      spawnSync('bd', ['update', id, '--status', 'pinned'], {
-        cwd,
-        timeout: 10_000,
-      })
-    }
+    if (id) spawnSync('bd', ['update', id, '--status', 'pinned'], { cwd, timeout: 10_000 })
     created += 1
   }
 
   if (created > 0) {
-    spawnSync('bd', ['config', 'set', 'validation.on-create', 'error'], {
-      cwd,
-      timeout: 10_000,
-    })
+    spawnSync('bd', ['config', 'set', 'validation.on-create', 'error'], { cwd, timeout: 10_000 })
   }
-
   return { ok: true, created }
 }
 
-const LEGACY_RETIRED_PATHS = [
-  '.claude/commands/spec.md',
-  '.claude/specs/TEMPLATE.md',
-  '.claude/hooks/bin/oisin-dev',
-]
-const WARN_IF_PRESENT = ['.claude/specs', '.claude/plans', 'docs/research']
-const REMOVED_CONFIG_FIELDS = ['enforcement', 'beadsWorkflow', 'mcp']
-
-export function removeLegacyRetiredPaths(cwd: string): { removed: string[]; warnings: string[] } {
-  const removed: string[] = []
-  const warnings: string[] = []
-
-  for (const rel of LEGACY_RETIRED_PATHS) {
-    const path = join(cwd, rel)
-    if (existsSync(path)) {
-      rmSync(path)
-      removed.push(rel)
-    }
-  }
-
-  for (const rel of WARN_IF_PRESENT) {
-    const path = join(cwd, rel)
-    if (!existsSync(path)) continue
-    const entries = readdirSync(path)
-    if (entries.length === 0) {
-      rmSync(path, { recursive: true })
-      removed.push(`${rel}/ (empty)`)
-    } else {
-      warnings.push(
-        `${rel}/ still has ${entries.length} file(s): ${entries.join(', ')} — review and delete manually; bd is the source of truth now.`,
-      )
-    }
-  }
-
-  return { removed, warnings }
-}
-
-export function trimBeadsIntegrationOnAgentDocs(cwd: string): string[] {
-  const trimmed: string[] = []
-  for (const file of ['AGENTS.md', 'CLAUDE.md']) {
-    const path = join(cwd, file)
-    if (!existsSync(path)) continue
-    const before = readFileSync(path, 'utf8')
-    trimBeadsIntegrationBlock(path)
-    const after = readFileSync(path, 'utf8')
-    if (after !== before) {
-      trimmed.push(file)
-    }
-  }
-  return trimmed
-}
-
-export function stripLegacyConfigFields(cwd: string): string[] {
-  const configPath = join(cwd, '.dev.config.json')
-  if (!existsSync(configPath)) return []
-  const raw = readFileSync(configPath, 'utf8')
-  const parsed = JSON.parse(raw) as Record<string, unknown>
-  const stripped: string[] = []
-  for (const field of REMOVED_CONFIG_FIELDS) {
-    if (field in parsed) {
-      delete parsed[field]
-      stripped.push(field)
-    }
-  }
-  if (stripped.length > 0) {
-    writeFileSync(configPath, `${JSON.stringify(parsed, null, 2)}\n`)
-  }
-  return stripped
-}
-
-function appendToGitignore(cwd: string, line: string): void {
-  const path = join(cwd, '.gitignore')
-  const existing = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  const lines = existing.split(/\r?\n/)
-  if (lines.some((l) => l.trim() === line)) return
-  const updated = (existing.endsWith('\n') || existing === '' ? existing : `${existing}\n`) + `${line}\n`
-  writeFileSync(path, updated)
+function constitutionDecisions(config: DevConfig): Array<{ title: string; body: string }> {
+  return [
+    {
+      title: `Constitution: package manager is ${config.packageManager}`,
+      body: `## Decision\nUse \`${config.packageManager}\` for dependency management commands.\n\n## Rationale\nCaptured by @oisincoveney/dev init answers and rendered to mise tasks.`,
+    },
+    {
+      title: `Constitution: test command is ${config.commands.test ?? 'unset'}`,
+      body: `## Decision\nThe canonical test command is \`${config.commands.test ?? 'unset'}\`.\n\n## Rationale\nExplicit single-source command keeps proof-of-work checks deterministic.`,
+    },
+    {
+      title: 'Constitution: destructive ops require explicit user approval',
+      body: '## Decision\nNever run destructive commands without explicit user approval. The destructive-command-guard hook enforces this.',
+    },
+    {
+      title: 'Constitution: no follow-up questions in agent output',
+      body: '## Decision\nAgent responses must not end with follow-up prompts. This is a prompt-level style rule.',
+    },
+    {
+      title: 'Constitution: no completion claims without proof',
+      body: '## Decision\nNever claim completion without having executed the configured test command this session. Pre-stop-verification hook enforces this.',
+    },
+  ]
 }
 
 export function trimBeadsIntegrationBlock(path: string): void {
-  const raw = readFileSync(path, 'utf8')
-  const begin = raw.indexOf('<!-- BEGIN BEADS INTEGRATION')
-  const end = raw.indexOf('<!-- END BEADS INTEGRATION -->')
-  if (begin === -1 || end === -1) return
-
-  const sessionStart = raw.indexOf('## Session Completion', begin)
-  if (sessionStart === -1 || sessionStart > end) return
-
-  const replacement =
-    '- Committing is always fine — on a ticket branch, a worktree, or directly on `main`. On a ticket branch or worktree the agent also pushes freely (that\'s the sandbox). Pushing `main` / `master` and any force-push still require explicit user approval.\n'
-  const trimmed = raw.slice(0, sessionStart) + replacement + raw.slice(end)
-  writeFileSync(path, trimmed)
+  if (!existsSync(path)) return
+  const content = readFileSync(path, 'utf8')
+  const start = content.indexOf('<!-- BEGIN BEADS INTEGRATION')
+  if (start === -1) return
+  const endMarker = '<!-- END BEADS INTEGRATION -->'
+  const end = content.indexOf(endMarker, start)
+  if (end === -1) return
+  const blockEnd = end + endMarker.length
+  const before = content.slice(0, start)
+  const block = content.slice(start, blockEnd)
+  const after = content.slice(blockEnd)
+  const sessionCompletion = block.indexOf('\n## Session Completion')
+  if (sessionCompletion === -1) return
+  const trimmedBlock = `${block.slice(0, sessionCompletion).trimEnd()}\n${endMarker}`
+  writeFileSync(path, `${before}${trimmedBlock}${after}`)
 }
 
-/**
- * Result of attempting to install the beads Claude Code plugin.
- */
 export type BeadsPluginResult =
   | { status: 'installed' }
   | { status: 'already-installed' }
   | { status: 'no-claude' }
   | { status: 'failed'; error: string }
 
-/**
- * Install the beads Claude Code plugin via the `claude` CLI. Slow and
- * network-bound (two execSync calls against the plugin marketplace).
- * Returns a structured result. Production caller composes this with
- * `installBeadsCli`; both are independently testable.
- */
 export function installBeadsPlugin(cwd: string): BeadsPluginResult {
   if (!commandExists('claude')) return { status: 'no-claude' }
   const marketplace = runCommand(
@@ -1360,618 +395,109 @@ export function installBeadsPlugin(cwd: string): BeadsPluginResult {
   if (!marketplace.ok && marketplace.reason !== 'exit') {
     return { status: 'failed', error: runFailureMessage(marketplace) }
   }
-  // marketplace add returns non-zero "already added" — that's fine, continue.
-
   const install = runCommand(
     'claude',
     ['plugin', 'install', '--scope', 'project', 'beads'],
     { cwd, timeoutMs: 60_000 },
   )
   if (install.ok) return { status: 'installed' }
-  // claude plugin install returns non-zero for "already installed". With
-  // stdio:'inherit' we don't capture stdout to detect that string, so treat
-  // any non-timeout, non-signal failure here as already-installed when the
-  // marketplace step succeeded — an idempotent re-install matches that.
   if (install.reason === 'exit') return { status: 'already-installed' }
   return { status: 'failed', error: runFailureMessage(install) }
 }
 
-function installMcpServers(
-  cwd: string,
-  target: 'claude' | 'codex',
-  servers: ReadonlyArray<string>,
+export function pruneScopeGuardHook(
+  settingsPath: string,
   log: (msg: string) => void,
   warn: (msg: string) => void,
-): void {
-  if (!commandExists(target)) {
-    warn(`MCP: \`${target}\` CLI not in PATH, skipping MCP server registration`)
-    return
-  }
-
-  for (const name of servers) {
-    const cmd = mcpServerInstallCommand(target, name)
-    if (!cmd) {
-      warn(`MCP: no install command defined for "${name}"`)
-      continue
-    }
-    try {
-      execSync(cmd, { cwd, stdio: 'pipe' })
-      log(`MCP: ${name} registered for ${target}`)
-    } catch (err) {
-      const msg = (err as Error).message
-      if (msg.includes('already')) {
-        log(`MCP: ${name} already registered for ${target}`)
-      } else {
-        warn(`MCP: ${name} failed for ${target} (${msg})`)
-      }
-    }
-  }
-}
-
-export function mcpServerInstallCommand(
-  target: 'claude' | 'codex',
-  name: string,
-): string | undefined {
-  const spec = mcpServerSpec(name)
-  if (!spec) return undefined
-  if (target === 'claude') {
-    if ('command' in spec) {
-      return `claude mcp add ${name} --scope project -- ${spec.command.join(' ')}`
-    }
-    return `claude mcp add ${name} --scope project --transport http ${spec.url} --header "Authorization: Bearer {env:${spec.bearerTokenEnvVar}}"`
-  }
-  if ('command' in spec) {
-    return `codex mcp add ${name} -- ${spec.command.join(' ')}`
-  }
-  return `codex mcp add ${name} --url ${spec.url} --bearer-token-env-var ${spec.bearerTokenEnvVar}`
-}
-
-type LocalMcpServerSpec = {
-  command: string[]
-}
-
-type RemoteMcpServerSpec = {
-  url: string
-  bearerTokenEnvVar: string
-}
-
-type McpServerSpec = LocalMcpServerSpec | RemoteMcpServerSpec
-
-function mcpServerSpec(name: string): McpServerSpec | undefined {
-  const specs: Record<string, McpServerSpec> = {
-    memory: {
-      command: ['npx', '-y', '@modelcontextprotocol/server-memory'],
-    },
-    serena: {
-      command: [
-        'uvx',
-        '--from',
-        'git+https://github.com/oraios/serena',
-        'serena',
-        'start-mcp-server',
-        '--project-from-cwd',
-      ],
-    },
-    github: {
-      url: 'https://api.githubcopilot.com/mcp/',
-      bearerTokenEnvVar: 'CODEX_GITHUB_PERSONAL_ACCESS_TOKEN',
-    },
-  }
-  return specs[name]
-}
-
-export interface McpRepairResult {
-  repaired: string[]
-  warnings: string[]
-}
-
-export function repairKnownProjectMcpConfigs(
-  cwd: string,
-  targets: ReadonlyArray<string>,
-): McpRepairResult {
-  const result: McpRepairResult = { repaired: [], warnings: [] }
-  if (targets.includes('claude')) repairClaudeMcpJson(cwd, result)
-  if (targets.includes('codex')) repairCodexMcpToml(cwd, result)
-  return result
-}
-
-function repairClaudeMcpJson(cwd: string, result: McpRepairResult): void {
-  const path = join(cwd, '.mcp.json')
-  if (!existsSync(path)) return
-
-  let parsed: unknown
+): boolean {
+  if (!existsSync(settingsPath)) return false
+  let settings: Record<string, unknown>
   try {
-    parsed = JSON.parse(readFileSync(path, 'utf8'))
-  } catch {
-    result.warnings.push('MCP: .mcp.json is not valid JSON; skipped repair')
-    return
-  }
-
-  if (!isRecord(parsed) || !isRecord(parsed.mcpServers)) return
-  let changed = false
-
-  for (const name of ['memory', 'serena']) {
-    const existing = parsed.mcpServers[name]
-    const spec = mcpServerSpec(name)
-    if (!isRecord(existing) || !spec || !('command' in spec)) continue
-
-    const [command, ...args] = spec.command
-    const next = {
-      ...existing,
-      type: 'stdio',
-      command,
-      args,
-      env: isRecord(existing.env) ? existing.env : {},
-    }
-    if (JSON.stringify(existing) !== JSON.stringify(next)) {
-      parsed.mcpServers[name] = next
-      changed = true
-    }
-  }
-
-  if (!changed) return
-  writeFileSync(path, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8')
-  result.repaired.push('.mcp.json')
-}
-
-function repairCodexMcpToml(cwd: string, result: McpRepairResult): void {
-  const path = join(cwd, '.codex', 'config.toml')
-  if (!existsSync(path)) return
-
-  let content = readFileSync(path, 'utf8')
-  const original = content
-  for (const name of ['memory', 'serena']) {
-    const spec = mcpServerSpec(name)
-    if (!spec || !('command' in spec)) continue
-    content = replaceCodexMcpTomlBlock(content, name, codexMcpTomlBlock(name, spec.command))
-  }
-
-  if (content === original) return
-  writeFileSync(path, content, 'utf8')
-  result.repaired.push('.codex/config.toml')
-}
-
-function replaceCodexMcpTomlBlock(content: string, name: string, block: string): string {
-  const lines = content.split('\n')
-  const start = lines.findIndex((line) => line.trim() === `[mcp_servers.${name}]`)
-  if (start === -1) return content
-
-  let end = start + 1
-  while (end < lines.length) {
-    const trimmed = lines[end].trim()
-    if (trimmed.startsWith('[mcp_servers.') && trimmed.endsWith(']')) break
-    if (trimmed.startsWith('[') && trimmed.endsWith(']') && !trimmed.startsWith('[mcp_servers.')) break
-    end += 1
-  }
-
-  const next = [...lines.slice(0, start), ...block.trimEnd().split('\n'), ...lines.slice(end)]
-  return `${next.join('\n').replace(/\n*$/, '')}\n`
-}
-
-function codexMcpTomlBlock(name: string, command: string[]): string {
-  const [binary, ...args] = command
-  const argsLines = args.map((arg) => `    ${JSON.stringify(arg)},`).join('\n')
-  return `[mcp_servers.${name}]\nargs = [\n${argsLines}\n]\ncommand = ${JSON.stringify(binary)}\n`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function usableMcpServers(
-  servers: unknown,
-  warn: (msg: string) => void,
-): string[] {
-  if (!Array.isArray(servers)) return []
-
-  const usable: string[] = []
-  for (const name of servers) {
-    if (typeof name !== 'string') continue
-    const spec = mcpServerSpec(name)
-    if (!spec) {
-      usable.push(name)
-      continue
-    }
-    if ('bearerTokenEnvVar' in spec && !process.env[spec.bearerTokenEnvVar]) {
-      warn(`MCP: ${name} skipped; set ${spec.bearerTokenEnvVar} to enable it`)
-      continue
-    }
-    usable.push(name)
-  }
-  return usable
-}
-
-export function generateOpencodeConfig(servers: ReadonlyArray<string>): unknown {
-  const mcp: Record<string, unknown> = {}
-  for (const name of servers) {
-    const spec = mcpServerSpec(name)
-    if (!spec) continue
-    if ('command' in spec) {
-      mcp[name] = {
-        type: 'local',
-        command: spec.command,
-        enabled: true,
-      }
-      continue
-    }
-    mcp[name] = {
-      type: 'remote',
-      url: spec.url,
-      enabled: true,
-      headers: {
-        Authorization: `Bearer {env:${spec.bearerTokenEnvVar}}`,
-      },
-    }
-  }
-  return {
-    $schema: 'https://opencode.ai/config.json',
-    mcp,
-  }
-}
-
-function commandExists(cmd: string): boolean {
-  try {
-    execSync(`command -v ${cmd}`, { stdio: 'ignore' })
-    return true
-  } catch {
+    settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>
+  } catch (e) {
+    warn(`scope-guard prune: ${settingsPath} is not valid JSON: ${(e as Error).message}`)
     return false
   }
-}
-
-function writeJson(path: string, data: unknown): void {
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`)
-}
-
-type HookEntry = { matcher?: string; hooks: { type: string; command: string; timeout?: number }[] }
-
-/** Hook scripts that were once shipped but have been retired. Entries are
- * stripped from existing settings.json on update so stale references don't
- * survive the merge. */
-const RETIRED_HOOK_SCRIPTS = new Set(['verify-grounding.sh'])
-
-/** Per-event raw hook commands that should be pruned on update. The harness
- * once registered `bd prime` on both SessionStart and PreCompact, but the
- * beads marketplace plugin now owns both events — running both fires bd prime
- * twice and wastes ~1K tokens per cold start (and again per /compact). Both
- * events are pruned because the plugin is the canonical source. */
-const RETIRED_HOOK_COMMANDS_BY_EVENT: Record<string, Set<string>> = {
-  SessionStart: new Set(['bd prime']),
-  PreCompact: new Set(['bd prime']),
-}
-
-const PRE_TOOL_DISPATCHED_HOOKS = new Set([
-  'audit-log.sh',
-  'docs-first.sh',
-  'worktree-write-guard.sh',
-  'require-claim.sh',
-  'require-swarm.sh',
-  'ts-style-guard.sh',
-  'import-validator.sh',
-  'ai-antipattern-guard.sh',
-  'destructive-command-guard.sh',
-  'bd-remember-protect.sh',
-  'plan-approval-guard.sh',
-  'bd-create-gate.sh',
-  'block-coauthor.sh',
-  'block-todowrite.sh',
-])
-
-const RETIRED_POST_TOOL_HOOKS = new Set(['post-edit-check.sh'])
-
-/** Extracts a stable handler key from a hook command — the value used to
- * dedupe across merges. For legacy `.sh` hooks this is the script filename
- * minus the extension. For TS-native dispatched hooks (`oisin-dev hook foo`)
- * this is the handler name. Both produce the same key so a hook migration
- * (script → dispatcher) replaces the old entry instead of duplicating it.
- *
- * The `.sh` match is intentionally strict so the PATH-prepend segment
- * (`PATH="$PWD/.claude/hooks/bin:$PATH"`) doesn't get misread as a script. */
-function extractHookScript(command: string): string | null {
-  const dispatchMatch = command.match(/oisin-dev hook ([a-z0-9-]+)/)
-  if (dispatchMatch) return `${dispatchMatch[1]}.sh`
-  const scriptMatches = hookScripts(command)
-  const lastScript = scriptMatches.at(-1)
-  return lastScript ?? null
-}
-
-function hookScripts(command: string): string[] {
-  const scripts = [...command.matchAll(/\.(?:claude|codex)\/hooks\/([^\s'"]+\.sh)/g)]
-    .map((match) => match[1])
-    .filter((script) => script !== 'run-quiet.sh')
-  if (scripts.includes('pre-tool-dispatch.sh')) {
-    return [...new Set([...scripts, ...PRE_TOOL_DISPATCHED_HOOKS])]
+  const removed = pruneHookCommands(settings, (command) => command.includes('scope-guard'))
+  if (removed > 0) {
+    mkdirSync(dirname(settingsPath), { recursive: true })
+    writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
+    log('removed scope-guard from ~/.claude/settings.json')
+    return true
   }
-  return scripts
+  return false
 }
 
-function pruneRetiredHooks(hooks: Record<string, HookEntry[]>): Record<string, HookEntry[]> {
-  const result: Record<string, HookEntry[]> = {}
-  for (const [event, entries] of Object.entries(hooks)) {
-    const retiredCommands = RETIRED_HOOK_COMMANDS_BY_EVENT[event]
-    const filteredEntries = entries
-      .map((entry) => ({
-        ...entry,
-        hooks: entry.hooks.filter((h) => {
-          const script = extractHookScript(h.command)
-          if (script !== null && RETIRED_HOOK_SCRIPTS.has(script)) return false
-          if (retiredCommands && retiredCommands.has(h.command.trim())) return false
-          return true
-        }),
-      }))
-      .filter((entry) => entry.hooks.length > 0)
-    if (filteredEntries.length > 0) {
-      result[event] = filteredEntries
-    }
-  }
-  return result
-}
-
-function compactPreToolDispatch(entries: HookEntry[]): HookEntry[] {
-  const hasDispatcher = entries.some((entry) =>
-    entry.hooks.some((hook) => hookScripts(hook.command).includes('pre-tool-dispatch.sh')),
-  )
-  if (!hasDispatcher) return entries
-  return entries
-    .map((entry) => ({
-      ...entry,
-      hooks: entry.hooks.filter((hook) => {
-        const scripts = hookScripts(hook.command)
-        if (scripts.includes('pre-tool-dispatch.sh')) return true
-        return !scripts.some((script) => PRE_TOOL_DISPATCHED_HOOKS.has(script))
-      }),
-    }))
-    .filter((entry) => entry.hooks.length > 0)
-}
-
-function compactUserPromptContext(entries: HookEntry[]): HookEntry[] {
-  const hasBdContext = entries.some((entry) =>
-    entry.hooks.some((hook) => hookScripts(hook.command).includes('bd-context-inject.sh')),
-  )
-  if (!hasBdContext) return entries
-  return entries
-    .map((entry) => ({
-      ...entry,
-      hooks: entry.hooks.filter(
-        (hook) => !hookScripts(hook.command).includes('context-injector.sh'),
-      ),
-    }))
-    .filter((entry) => entry.hooks.length > 0)
-}
-
-function prunePostToolUse(entries: HookEntry[]): HookEntry[] {
-  return entries
-    .map((entry) => ({
-      ...entry,
-      hooks: entry.hooks.filter(
-        (hook) => !hookScripts(hook.command).some((script) => RETIRED_POST_TOOL_HOOKS.has(script)),
-      ),
-    }))
-    .filter((entry) => entry.hooks.length > 0)
-}
-
-export function mergeClaudeSettings(
-  existing: Record<string, unknown>,
-  generated: Record<string, unknown>,
-): Record<string, unknown> {
-  const existingHooks = pruneRetiredHooks(
-    ((existing as { hooks?: Record<string, HookEntry[]> }).hooks ?? {}) as Record<
-      string,
-      HookEntry[]
-    >,
-  )
-  const generatedHooks = (generated as { hooks?: Record<string, HookEntry[]> }).hooks ?? {}
-  const mergedHooks: Record<string, HookEntry[]> = { ...existingHooks }
-  if (mergedHooks.PostToolUse) {
-    const postToolUse = prunePostToolUse(mergedHooks.PostToolUse)
-    if (postToolUse.length > 0) {
-      mergedHooks.PostToolUse = postToolUse
-    } else {
-      delete mergedHooks.PostToolUse
-    }
-  }
-  for (const [event, genEntries] of Object.entries(generatedHooks)) {
-    if (!mergedHooks[event]) {
-      mergedHooks[event] = genEntries
-      continue
-    }
-    const result: HookEntry[] = [...mergedHooks[event]]
-    for (const genEntry of genEntries) {
-      const matcher = genEntry.matcher
-      const existingIdx = result.findIndex((e) => (e.matcher ?? '') === (matcher ?? ''))
-      if (existingIdx === -1) {
-        result.push(genEntry)
-      } else {
-        const updatedHooks = [...result[existingIdx].hooks]
-        for (const genHook of genEntry.hooks) {
-          const genScript = extractHookScript(genHook.command)
-          const genScripts = new Set(hookScripts(genHook.command))
-          for (let i = updatedHooks.length - 1; i >= 0; i--) {
-            const existingScript = extractHookScript(updatedHooks[i].command)
-            if (existingScript !== null && genScripts.has(existingScript)) {
-              updatedHooks.splice(i, 1)
-            }
-          }
-          const existingIdx2 = genScript
-            ? updatedHooks.findIndex((h) => extractHookScript(h.command) === genScript)
-            : updatedHooks.findIndex((h) => h.command === genHook.command)
-          if (existingIdx2 !== -1) {
-            updatedHooks[existingIdx2] = genHook
-          } else {
-            updatedHooks.push(genHook)
-          }
-        }
-        const seen = new Map<string, number>()
-        for (let i = 0; i < updatedHooks.length; i++) {
-          const key = extractHookScript(updatedHooks[i].command) ?? updatedHooks[i].command
-          seen.set(key, i)
-        }
-        result[existingIdx] = {
-          ...result[existingIdx],
-          hooks: updatedHooks.filter(
-            (_, i) =>
-              seen.get(extractHookScript(updatedHooks[i].command) ?? updatedHooks[i].command) === i,
-          ),
-        }
-      }
-    }
-    mergedHooks[event] =
-      event === 'PreToolUse'
-        ? compactPreToolDispatch(result)
-        : event === 'UserPromptSubmit'
-          ? compactUserPromptContext(result)
-          : result
-  }
-  return { ...existing, ...generated, hooks: mergedHooks }
-}
-
-function writeOrMergeSettings(
-  path: string,
-  generated: ReturnType<typeof generateClaudeSettings>,
+export function pruneGroundedCodexHooks(
+  hooksPath: string,
   log: (msg: string) => void,
-): void {
-  if (!existsSync(path)) {
-    writeJson(path, generated)
-    log('.claude/settings.json')
-    return
+  warn: (msg: string) => void,
+): boolean {
+  if (!existsSync(hooksPath)) return false
+  let config: Record<string, unknown>
+  try {
+    config = JSON.parse(readFileSync(hooksPath, 'utf8')) as Record<string, unknown>
+  } catch (e) {
+    warn(`codex grounded prune: ${hooksPath} is not valid JSON: ${(e as Error).message}`)
+    return false
   }
-
-  const existing = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
-  const existingHooks = pruneRetiredHooks((existing.hooks ?? {}) as Record<string, HookEntry[]>)
-  const generatedHooks = generated.hooks as Record<string, HookEntry[]>
-
-  // Merge hook events:
-  // - Events only in existing (e.g. PreCompact: bd prime) → keep as-is
-  // - Events only in generated → add
-  // - Events in both → merge by matcher:
-  //     * For a given matcher, generated hooks replace existing hooks for that matcher
-  //     * Matchers only in existing are kept (preserves custom hooks like ts-style-guard)
-  //     * Commands within a generated matcher that already appear in existing are deduped
-  const mergedHooks: Record<string, HookEntry[]> = { ...existingHooks }
-  if (mergedHooks.PostToolUse) {
-    const postToolUse = prunePostToolUse(mergedHooks.PostToolUse)
-    if (postToolUse.length > 0) {
-      mergedHooks.PostToolUse = postToolUse
-    } else {
-      delete mergedHooks.PostToolUse
-    }
+  const removed = pruneHookCommands(config, (command) => command.includes('@pinperepette/grounded'))
+  if (removed > 0) {
+    writeFileSync(hooksPath, `${JSON.stringify(config, null, 2)}\n`)
+    log(`removed ${removed} grounded hook(s) from ~/.codex/hooks.json`)
+    return true
   }
+  return false
+}
 
-  for (const [event, genEntries] of Object.entries(generatedHooks)) {
-    if (!mergedHooks[event]) {
-      mergedHooks[event] = genEntries
-      continue
-    }
-    const existingEntries = mergedHooks[event]
-    const result: HookEntry[] = [...existingEntries]
-
-    for (const genEntry of genEntries) {
-      const matcher = genEntry.matcher
-      const existingIdx = result.findIndex((e) => (e.matcher ?? '') === (matcher ?? ''))
-      if (existingIdx === -1) {
-        // New matcher — add it
-        result.push(genEntry)
+function pruneHookCommands(obj: unknown, shouldRemove: (command: string) => boolean): number {
+  if (Array.isArray(obj)) {
+    let removed = 0
+    for (let i = obj.length - 1; i >= 0; i -= 1) {
+      const item = obj[i]
+      if (
+        item &&
+        typeof item === 'object' &&
+        'command' in item &&
+        typeof (item as { command?: unknown }).command === 'string' &&
+        shouldRemove((item as { command: string }).command)
+      ) {
+        obj.splice(i, 1)
+        removed += 1
       } else {
-        // Merge hooks within this matcher.
-        // Generated hooks that reference a .claude/hooks/ script replace any existing
-        // hook referencing the same script (handles e.g. adding the cd prefix on update).
-        // Other existing hooks (user-custom, like bd prime) are preserved.
-        const updatedHooks = [...result[existingIdx].hooks]
-        for (const genHook of genEntry.hooks) {
-          const genScript = extractHookScript(genHook.command)
-          const genScripts = new Set(hookScripts(genHook.command))
-          for (let i = updatedHooks.length - 1; i >= 0; i--) {
-            const existingScript = extractHookScript(updatedHooks[i].command)
-            if (existingScript !== null && genScripts.has(existingScript)) {
-              updatedHooks.splice(i, 1)
-            }
-          }
-          const existingIdx2 = genScript
-            ? updatedHooks.findIndex((h) => extractHookScript(h.command) === genScript)
-            : updatedHooks.findIndex((h) => h.command === genHook.command)
-          if (existingIdx2 !== -1) {
-            updatedHooks[existingIdx2] = genHook
-          } else {
-            updatedHooks.push(genHook)
-          }
-        }
-        // Deduplicate: if the same script appears more than once (e.g. from a
-        // previous bad merge), keep the last occurrence for each script.
-        const seen = new Map<string, number>()
-        for (let i = 0; i < updatedHooks.length; i++) {
-          const key = extractHookScript(updatedHooks[i].command) ?? updatedHooks[i].command
-          seen.set(key, i)
-        }
-        result[existingIdx] = {
-          ...result[existingIdx],
-          hooks: updatedHooks.filter((_, i) => seen.get(extractHookScript(updatedHooks[i].command) ?? updatedHooks[i].command) === i),
+        const hadHooksArray = Boolean(
+          item &&
+          typeof item === 'object' &&
+          'hooks' in item &&
+          Array.isArray((item as { hooks?: unknown }).hooks),
+        )
+        const nestedRemoved = pruneHookCommands(item, shouldRemove)
+        removed += nestedRemoved
+        if (
+          nestedRemoved > 0 &&
+          hadHooksArray &&
+          item &&
+          typeof item === 'object' &&
+          (!('hooks' in item) ||
+            (Array.isArray((item as { hooks?: unknown }).hooks) &&
+              (item as { hooks: unknown[] }).hooks.length === 0))
+        ) {
+          obj.splice(i, 1)
         }
       }
     }
-    mergedHooks[event] =
-      event === 'PreToolUse'
-        ? compactPreToolDispatch(result)
-        : event === 'UserPromptSubmit'
-          ? compactUserPromptContext(result)
-          : result
+    return removed
   }
-
-  const merged = { ...existing, ...generated, hooks: mergedHooks }
-  writeJson(path, merged)
-  log('.claude/settings.json (merged)')
-}
-
-const DEV_BLOCK_START = '<!-- BEGIN @oisincoveney/dev managed block -->'
-const DEV_BLOCK_END = '<!-- END @oisincoveney/dev managed block -->'
-
-function writeOrMerge(path: string, managed: string, log: (msg: string) => void): void {
-  const wrapped = `${DEV_BLOCK_START}\n${managed}\n${DEV_BLOCK_END}\n`
-  if (!existsSync(path)) {
-    writeFileSync(path, wrapped)
-    log(path.split('/').pop() ?? path)
-    return
+  if (obj && typeof obj === 'object') {
+    let removed = 0
+    for (const [key, value] of Object.entries(obj)) {
+      const nestedRemoved = pruneHookCommands(value, shouldRemove)
+      removed += nestedRemoved
+      if (nestedRemoved > 0 && Array.isArray(value) && value.length === 0) {
+        delete (obj as Record<string, unknown>)[key]
+      }
+    }
+    return removed
   }
-  const existing = readFileSync(path, 'utf8')
-  if (existing.includes(DEV_BLOCK_START)) {
-    // Replace ALL existing managed blocks (a single canonical block survives).
-    // Prior installs sometimes appended instead of replacing, so files in the
-    // wild can have 2+ blocks; collapse them on update.
-    const re = new RegExp(
-      `${escapeRegex(DEV_BLOCK_START)}[\\s\\S]*?${escapeRegex(DEV_BLOCK_END)}\n?`,
-      'g',
-    )
-    let replaced = false
-    const updated = existing.replace(re, () => {
-      if (replaced) return ''
-      replaced = true
-      return wrapped
-    })
-    writeFileSync(path, updated)
-    log(`${path.split('/').pop()} (updated managed block)`)
-  } else {
-    // Prepend managed block, keep existing content
-    writeFileSync(path, `${wrapped}\n${existing}`)
-    log(`${path.split('/').pop()} (merged, preserved existing)`)
-  }
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-export function mergeManagedBlock(existing: string, managed: string): string {
-  const wrapped = `${DEV_BLOCK_START}\n${managed}\n${DEV_BLOCK_END}\n`
-  if (existing.includes(DEV_BLOCK_START)) {
-    const re = new RegExp(
-      `${escapeRegex(DEV_BLOCK_START)}[\\s\\S]*?${escapeRegex(DEV_BLOCK_END)}\n?`,
-      'g',
-    )
-    let replaced = false
-    return existing.replace(re, () => {
-      if (replaced) return ''
-      replaced = true
-      return wrapped
-    })
-  }
-  return `${wrapped}\n${existing}`
+  return 0
 }

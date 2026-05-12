@@ -1,0 +1,21 @@
+_min_copier_version: "9.0.0"
+_answers_file: .copier-answers.yml
+_templates_suffix: .jinja
+
+language: ""
+variant: ""
+languages: []
+variants: []
+framework: ""
+package_manager: ""
+commands: {}
+skills: []
+tools: []
+workflow: "none"
+contract_driven: false
+targets: []
+mcp_servers: []
+models: {}
+beads_enabled: false
+has_typescript: false
+has_frontend: false

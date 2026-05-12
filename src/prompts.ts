@@ -90,7 +90,7 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
     commands.lint === null &&
     commands.format === null
   if (allCommandsUnset) {
-    p.log.info('No commands configured yet. Run `oisin-dev set-commands` once you know them.')
+    p.log.info('No commands configured yet. Re-run `oisin-dev init` or edit `mise.toml` once you know them.')
   }
 
   const ruleSkills = ruleSkillsForVariant(variant)
