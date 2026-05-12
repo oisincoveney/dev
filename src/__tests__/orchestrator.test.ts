@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   applyInternalTemplate,
+  copierMiseArgs,
   runInitOrchestration,
   STATE_FILE,
   templateDataFromAnswers,
@@ -57,6 +58,18 @@ describe('thin orchestrator', () => {
     expect(data.targets).toContain('opencode')
   })
 
+  it('runs copier through the qualified mise pipx tool spec', () => {
+    expect(copierMiseArgs('recopy', '--trust', '--force')).toEqual([
+      'exec',
+      'pipx:copier@9.14.0',
+      '--',
+      'copier',
+      'recopy',
+      '--trust',
+      '--force',
+    ])
+  })
+
   it('renders the harness fallback with mise-managed tool declarations', () => {
     const data = templateDataFromAnswers(answers)
     applyInternalTemplate(dir, data)
@@ -94,6 +107,8 @@ describe('thin orchestrator', () => {
 
     expect(result).toEqual({ ok: true })
     expect(existsSync(join(dir, STATE_FILE))).toBe(true)
-    expect(readFileSync(join(dir, STATE_FILE), 'utf8')).toContain('"variant": "ts-library"')
+    const state = readFileSync(join(dir, STATE_FILE), 'utf8')
+    expect(state).toContain('"variant":"ts-library"')
+    expect(() => JSON.parse(state)).not.toThrow()
   })
 })

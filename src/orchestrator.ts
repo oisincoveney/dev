@@ -23,6 +23,7 @@ const __dirname = dirname(__filename)
 export const COPIER_TEMPLATE_DIR = resolve(__dirname, '..', 'templates', 'copier')
 export const STATE_FILE = '.copier-answers.yml'
 export const LEGACY_CONFIG_FILE = '.dev.config.json'
+export const COPIER_TOOL_SPEC = 'pipx:copier@9.14.0'
 
 export type OrchestratorResult =
   | { ok: true }
@@ -118,7 +119,7 @@ export function readInternalState(cwd: string): TemplateData | null {
 }
 
 export function writeInternalState(cwd: string, data: TemplateData): void {
-  writeFileSync(join(cwd, STATE_FILE), `${JSON.stringify({ _src_path: COPIER_TEMPLATE_DIR, ...data }, null, 2)}\n`)
+  writeFileSync(join(cwd, STATE_FILE), `${JSON.stringify({ _src_path: COPIER_TEMPLATE_DIR, ...data })}\n`)
 }
 
 export function runInitOrchestration(
@@ -137,18 +138,16 @@ export function runInitOrchestration(
   writeFileSync(dataFile, `${JSON.stringify(data, null, 2)}\n`)
   try {
     const copy = runMise(cwd, [
-      'exec',
-      'pipx:copier@9.14.0',
-      '--',
-      'copier',
-      'copy',
-      '--trust',
-      '--defaults',
-      '--overwrite',
-      '--data-file',
-      dataFile,
-      COPIER_TEMPLATE_DIR,
-      cwd,
+      ...copierMiseArgs(
+        'copy',
+        '--trust',
+        '--defaults',
+        '--overwrite',
+        '--data-file',
+        dataFile,
+        COPIER_TEMPLATE_DIR,
+        cwd,
+      ),
     ])
     if (!copy.ok) return copy
   } finally {
@@ -156,6 +155,10 @@ export function runInitOrchestration(
   }
 
   return runPostTemplateTools(cwd, data)
+}
+
+export function copierMiseArgs(...copierArgs: string[]): string[] {
+  return ['exec', COPIER_TOOL_SPEC, '--', 'copier', ...copierArgs]
 }
 
 export function runUpdateOrchestration(
@@ -178,7 +181,7 @@ export function runUpdateOrchestration(
   if (!trust.ok) return trust
   const install = runMise(cwd, ['install'])
   if (!install.ok) return install
-  const update = runMise(cwd, ['exec', '--', 'copier', 'update', '--trust', '--defaults'])
+  const update = runMise(cwd, copierMiseArgs('update', '--trust', '--defaults'))
   if (!update.ok) return update
   return runPostTemplateTools(cwd)
 }
@@ -201,7 +204,7 @@ export function runResetOrchestration(
   if (!trust.ok) return trust
   const install = runMise(cwd, ['install'])
   if (!install.ok) return install
-  const recopy = runMise(cwd, ['exec', '--', 'copier', 'recopy', '--trust', '--force'])
+  const recopy = runMise(cwd, copierMiseArgs('recopy', '--trust', '--force'))
   if (!recopy.ok) return recopy
   return runPostTemplateTools(cwd)
 }
@@ -314,6 +317,12 @@ function refreshCopierSourcePath(cwd: string): void {
   const path = join(cwd, STATE_FILE)
   if (!existsSync(path)) return
   const raw = readFileSync(path, 'utf8')
+  if (raw.trimStart().startsWith('{')) {
+    const data = JSON.parse(raw) as Record<string, unknown>
+    data._src_path = COPIER_TEMPLATE_DIR
+    writeFileSync(path, `${JSON.stringify(data)}\n`)
+    return
+  }
   const srcLine = `_src_path: ${JSON.stringify(COPIER_TEMPLATE_DIR)}`
   if (/^_src_path:/m.test(raw)) {
     writeFileSync(path, raw.replace(/^_src_path:.*$/m, srcLine))

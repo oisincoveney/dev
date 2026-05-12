@@ -80,7 +80,8 @@ describe('reset command helpers', () => {
     const result = runResetOrchestration(dir, { skipExternalTools: true })
 
     expect(result).toEqual({ ok: true })
-    expect(readFileSync(join(dir, STATE_FILE), 'utf8')).toContain('"variant": "ts-library"')
+    const state = JSON.parse(readFileSync(join(dir, STATE_FILE), 'utf8')) as { variant?: string }
+    expect(state.variant).toBe('ts-library')
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('Use the tracker workflow')
     expect(existsSync(join(dir, '.claude/hooks/pre-tool-dispatch.sh'))).toBe(true)
     expect(existsSync(join(dir, '.codex/hooks/pre-tool-dispatch.sh'))).toBe(true)
