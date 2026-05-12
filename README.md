@@ -82,7 +82,7 @@ oisin-dev update
 
 Dangerous reset path for generated agent configuration. It prints the paths it will remove, requires confirmation unless `--yes` is passed, requires a clean Git worktree unless `--force` is passed, deletes generated agent overlays and root agent docs, then runs `copier recopy --force`, `dotagents install`, and `lefthook install`.
 
-It never deletes `.beads`.
+If `.copier-answers.yml` is missing but legacy `.dev.config.json` exists, reset first converts `.dev.config.json` into `.copier-answers.yml` so older repos can use the same clean-break reset path. It never deletes `.beads`.
 
 ```sh
 oisin-dev reset

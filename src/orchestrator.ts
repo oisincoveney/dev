@@ -13,14 +13,16 @@ import {
 import { spawnSync } from 'node:child_process'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { DevConfig } from './config.js'
+import type { DevConfig, Language, PackageManager, Target, WorkflowFramework } from './config.js'
 import type { Answers } from './prompts.js'
+import type { ProjectVariant } from './skills.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 export const COPIER_TEMPLATE_DIR = resolve(__dirname, '..', 'templates', 'copier')
 export const STATE_FILE = '.copier-answers.yml'
+export const LEGACY_CONFIG_FILE = '.dev.config.json'
 
 export type OrchestratorResult =
   | { ok: true }
@@ -185,9 +187,14 @@ export function runResetOrchestration(
   cwd: string,
   options: OrchestratorOptions = {},
 ): OrchestratorResult {
+  const bootstrap = bootstrapInternalStateFromLegacyConfig(cwd)
+  if (!bootstrap.ok) return bootstrap
   if (options.skipExternalTools) return runUpdateOrchestration(cwd, options)
   if (!existsSync(join(cwd, STATE_FILE))) {
-    return { ok: false, message: `No ${STATE_FILE} found. Run \`oisin-dev init\` first.` }
+    return {
+      ok: false,
+      message: `No ${STATE_FILE} or ${LEGACY_CONFIG_FILE} found. Run \`oisin-dev init\` first.`,
+    }
   }
   refreshCopierSourcePath(cwd)
   const trust = runMise(cwd, ['trust', '-y'])
@@ -197,6 +204,74 @@ export function runResetOrchestration(
   const recopy = runMise(cwd, ['exec', '--', 'copier', 'recopy', '--trust', '--force'])
   if (!recopy.ok) return recopy
   return runPostTemplateTools(cwd)
+}
+
+export function bootstrapInternalStateFromLegacyConfig(cwd: string): OrchestratorResult {
+  if (existsSync(join(cwd, STATE_FILE))) return { ok: true }
+
+  const legacyPath = join(cwd, LEGACY_CONFIG_FILE)
+  if (!existsSync(legacyPath)) return { ok: true }
+
+  try {
+    const raw = JSON.parse(readFileSync(legacyPath, 'utf8')) as unknown
+    writeInternalState(cwd, legacyConfigToTemplateData(raw))
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      message: `Could not migrate ${LEGACY_CONFIG_FILE} to ${STATE_FILE}: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
+}
+
+function legacyConfigToTemplateData(value: unknown): TemplateData {
+  const config = objectRecord(value)
+  const language = stringValue(config.language, 'other') as Language
+  const variant = stringValue(config.variant, 'other-app') as ProjectVariant
+  const commands = objectRecord(config.commands ?? {})
+  const legacy: DevConfig = {
+    language,
+    variant,
+    languages: stringArray(config.languages, [language]) as Language[],
+    variants: stringArray(config.variants, [variant]) as ProjectVariant[],
+    framework: nullableString(config.framework),
+    packageManager: stringValue(config.packageManager, 'other') as PackageManager,
+    commands: {
+      dev: nullableString(commands.dev),
+      build: nullableString(commands.build),
+      test: nullableString(commands.test),
+      typecheck: nullableString(commands.typecheck),
+      lint: nullableString(commands.lint),
+      format: nullableString(commands.format),
+      e2e: nullableString(commands.e2e),
+    },
+    skills: stringArray(config.skills, []),
+    tools: stringArray(config.tools, []),
+    workflow: stringValue(config.workflow, 'none') as WorkflowFramework,
+    contractDriven: config.contractDriven === true,
+    targets: stringArray(config.targets, ['claude', 'codex', 'lefthook']) as Target[],
+    models: objectRecord(config.models ?? {}) as DevConfig['models'],
+  }
+  return templateDataFromConfig(legacy)
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.length > 0 ? value : fallback
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function stringArray(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return fallback
+  const strings = value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+  return strings.length > 0 ? strings : fallback
 }
 
 function runPostTemplateTools(cwd: string, data?: TemplateData): OrchestratorResult {
