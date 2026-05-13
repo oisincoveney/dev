@@ -146,7 +146,6 @@ Claude, Codex, Cursor, and OpenCode keep native config under `.claude/`, `.codex
 | `post-edit-check.sh` | Verifies edited files compile |
 | `pre-stop-verification.sh` | Blocks unsubstantiated "tests should pass" claims |
 | `pr-size-check.sh` | Warns on oversized PRs |
-| `tdd-guard.sh` | Enforces test-first order |
 
 **Settings** (`.claude/settings.json`):
 - Hook registrations with event bindings

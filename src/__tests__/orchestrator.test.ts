@@ -157,14 +157,13 @@ describe('thin orchestrator', () => {
     expect(lefthook).toContain('bd-ticket-ref:')
     expect(lefthook).toContain('typecheck:')
     expect(lefthook).toContain('run: mise run typecheck')
-    expect(lefthook).toContain('tdd-guard:')
     expect(lefthook).toContain('pr-size-check:')
   })
 
   it('can add lefthook commands when a hook has no commands section', () => {
     const merged = mergeLefthookCommands('pre-commit:\n  parallel: true\n', {
       'pre-commit': {
-        'tdd-guard': { run: '.claude/hooks/tdd-guard.sh' },
+        typecheck: { run: 'mise run typecheck' },
       },
     })
 
@@ -172,8 +171,8 @@ describe('thin orchestrator', () => {
       'pre-commit': {
         parallel: true,
         commands: {
-          'tdd-guard': {
-            run: '.claude/hooks/tdd-guard.sh',
+          typecheck: {
+            run: 'mise run typecheck',
           },
         },
       },

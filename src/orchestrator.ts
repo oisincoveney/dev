@@ -475,7 +475,6 @@ function requiredLefthookCommandBlocks(data: TemplateData): Record<string, Lefth
   const preCommit: LefthookCommands = {}
   if (data.commands.typecheck) preCommit.typecheck = { run: 'mise run typecheck' }
   if (data.commands.lint) preCommit.lint = { run: 'mise run lint' }
-  preCommit['tdd-guard'] = { run: '.claude/hooks/tdd-guard.sh' }
 
   const prePush: LefthookCommands = {}
   if (data.commands.test) prePush.test = { run: 'mise run test' }

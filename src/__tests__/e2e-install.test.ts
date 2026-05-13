@@ -321,7 +321,6 @@ just rules, no session completion
       'pre-compact-prime.sh',
       'pre-stop-verification.sh',
       'ai-antipattern-guard.sh',
-      'tdd-guard.sh',
       'pr-size-check.sh',
     ]
     for (const hook of hooks) {

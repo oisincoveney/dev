@@ -33,8 +33,6 @@ pre-commit:
       run: bunx tsc --noEmit
     lint:
       run: echo "no lint configured"
-    tdd-guard:
-      run: .claude/hooks/tdd-guard.sh
 
 pre-push:
   commands:
