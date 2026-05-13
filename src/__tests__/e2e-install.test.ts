@@ -331,6 +331,9 @@ just rules, no session completion
       const mode = statSync(path).mode
       expect(mode & 0o111).toBeGreaterThan(0)
     }
+    const prSizeCheck = readFileSync(join(hookDir, 'pr-size-check.sh'), 'utf8')
+    expect(prSizeCheck).toContain('advisory threshold')
+    expect(prSizeCheck).not.toContain('exit 1')
 
     // OpenCode plugin is valid TS-ish content
     const plugin = readFileSync(join(dir, '.opencode/plugins/dev-enforcer.ts'), 'utf8')

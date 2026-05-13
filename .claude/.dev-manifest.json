@@ -77,7 +77,7 @@
       "sha256": "7c00176da7831b5e41b37b207e143be51cf20834abdb2b197dd9c4ea4eaf2aee"
     },
     ".claude/hooks/pr-size-check.sh": {
-      "sha256": "12e1639a0d9be5a24b4df6b56697f606a8f85fd0089b4bbb2dc0a3d66c2b1e6c"
+      "sha256": "44bd08115fed4f002173197b1e5a61ae351731f8eeab8b6b1e924dda2b0dfb4b"
     },
     ".claude/hooks/swarm-digest.sh": {
       "sha256": "8599364535bd19fc23b0eb44cc170745af91448a6e35d54ea8248a8895c3dcb2"
@@ -233,7 +233,7 @@
       "sha256": "7c00176da7831b5e41b37b207e143be51cf20834abdb2b197dd9c4ea4eaf2aee"
     },
     ".codex/hooks/pr-size-check.sh": {
-      "sha256": "12e1639a0d9be5a24b4df6b56697f606a8f85fd0089b4bbb2dc0a3d66c2b1e6c"
+      "sha256": "44bd08115fed4f002173197b1e5a61ae351731f8eeab8b6b1e924dda2b0dfb4b"
     },
     ".codex/hooks/swarm-digest.sh": {
       "sha256": "8599364535bd19fc23b0eb44cc170745af91448a6e35d54ea8248a8895c3dcb2"
