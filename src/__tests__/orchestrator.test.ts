@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -9,6 +9,7 @@ import {
   mergeLefthookCommands,
   mergeMiseToolLines,
   runInitOrchestration,
+  runUpdateOrchestration,
   STATE_FILE,
   templateDataFromAnswers,
 } from '../orchestrator.js'
@@ -187,5 +188,18 @@ describe('thin orchestrator', () => {
     const state = readFileSync(join(dir, STATE_FILE), 'utf8')
     expect(state).toContain('"variant":"ts-library"')
     expect(() => JSON.parse(state)).not.toThrow()
+  })
+
+  it('prunes retired generated hook files during update', () => {
+    expect(runInitOrchestration(dir, answers, { skipExternalTools: true })).toEqual({ ok: true })
+    mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    mkdirSync(join(dir, '.codex/hooks'), { recursive: true })
+    writeFileSync(join(dir, '.claude/hooks/tdd-guard.sh'), 'old')
+    writeFileSync(join(dir, '.codex/hooks/tdd-guard.sh'), 'old')
+
+    expect(runUpdateOrchestration(dir, { skipExternalTools: true })).toEqual({ ok: true })
+
+    expect(existsSync(join(dir, '.claude/hooks/tdd-guard.sh'))).toBe(false)
+    expect(existsSync(join(dir, '.codex/hooks/tdd-guard.sh'))).toBe(false)
   })
 })

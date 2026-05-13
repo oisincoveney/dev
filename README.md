@@ -72,7 +72,7 @@ Interactive setup for an existing project. Run inside a directory with `package.
 
 ### `oisin-dev update`
 
-Runs `copier update --defaults`, then `dotagents install`, then `lefthook install`. It requires a clean Git worktree and does not delete generated agent directories.
+Runs `copier recopy --force`, then `dotagents install`, then `lefthook install`. It requires a clean Git worktree and does not delete generated agent directories.
 
 ```sh
 oisin-dev update

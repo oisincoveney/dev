@@ -25,6 +25,10 @@ export const COPIER_TEMPLATE_DIR = resolve(__dirname, '..', 'templates', 'copier
 export const STATE_FILE = '.copier-answers.yml'
 export const LEGACY_CONFIG_FILE = '.dev.config.json'
 export const COPIER_TOOL_SPEC = 'pipx:copier@9.14.0'
+const RETIRED_GENERATED_PATHS = [
+  '.claude/hooks/tdd-guard.sh',
+  '.codex/hooks/tdd-guard.sh',
+] as const
 
 export type OrchestratorResult =
   | { ok: true }
@@ -172,6 +176,7 @@ export function runUpdateOrchestration(
       return { ok: false, message: `No ${STATE_FILE} found. Run \`oisin-dev init\` first.` }
     }
     applyInternalTemplate(cwd, data)
+    pruneRetiredGeneratedPaths(cwd)
     return { ok: true }
   }
   if (!existsSync(join(cwd, STATE_FILE))) {
@@ -183,7 +188,7 @@ export function runUpdateOrchestration(
   if (!trust.ok) return trust
   const install = runMise(cwd, ['install'])
   if (!install.ok) return install
-  const update = runMise(cwd, copierMiseArgs('update', '--trust', '--defaults'))
+  const update = runMise(cwd, copierMiseArgs('recopy', '--trust', '--force'))
   if (!update.ok) return update
   return runPostTemplateTools(cwd, data ?? undefined)
 }
@@ -283,6 +288,7 @@ function stringArray(value: unknown, fallback: string[]): string[] {
 
 function runPostTemplateTools(cwd: string, data?: TemplateData): OrchestratorResult {
   const templateData = data ?? readInternalState(cwd) ?? undefined
+  pruneRetiredGeneratedPaths(cwd)
   ensureMiseToml(cwd, templateData)
   ensureLefthookYml(cwd, templateData)
   const trust = runMise(cwd, ['trust', '-y'])
@@ -300,6 +306,12 @@ function runPostTemplateTools(cwd: string, data?: TemplateData): OrchestratorRes
     if (!lefthook.ok) return lefthook
   }
   return { ok: true }
+}
+
+function pruneRetiredGeneratedPaths(cwd: string): void {
+  for (const relPath of RETIRED_GENERATED_PATHS) {
+    rmSync(join(cwd, relPath), { recursive: true, force: true })
+  }
 }
 
 function runMise(cwd: string, args: string[]): OrchestratorResult {

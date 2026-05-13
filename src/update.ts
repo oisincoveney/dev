@@ -1,7 +1,7 @@
 /**
  * `oisin-dev update`
  *
- * Non-destructively applies the Copier update path, then refreshes dotagents
+ * Non-destructively reapplies the local Copier template, then refreshes dotagents
  * skill links and lefthook. Use `oisin-dev reset` for the dangerous path.
  */
 
