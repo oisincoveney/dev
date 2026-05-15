@@ -170,6 +170,11 @@ describe('thin orchestrator', () => {
     expect(lefthook).toContain('bd-ticket-ref:')
     expect(lefthook).toContain('typecheck:')
     expect(lefthook).toContain('run: mise run typecheck')
+    expect(lefthook).toContain('post-commit:')
+    expect(lefthook).toContain('post-merge:')
+    expect(lefthook).toContain('post-checkout:')
+    expect(lefthook).toContain('bd-dolt-push:')
+    expect(lefthook).toContain('run: .claude/hooks/beads-sync.sh push-best-effort')
     expect(lefthook).toContain('pr-size-check:')
   })
 

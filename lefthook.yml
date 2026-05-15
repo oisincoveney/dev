@@ -48,8 +48,22 @@ pre-commit:
       run: bunx tsc --noEmit
     lint:
       run: echo "no lint configured"
+post-commit:
+  commands:
+    bd-dolt-push:
+      run: .claude/hooks/beads-sync.sh push-best-effort
+post-merge:
+  commands:
+    bd-dolt-pull:
+      run: .claude/hooks/beads-sync.sh pull-best-effort
+post-checkout:
+  commands:
+    bd-dolt-pull:
+      run: .claude/hooks/beads-sync.sh pull-best-effort
 pre-push:
   commands:
+    bd-dolt-push:
+      run: .claude/hooks/beads-sync.sh push-best-effort
     test:
       run: bun test
     pr-size-check:

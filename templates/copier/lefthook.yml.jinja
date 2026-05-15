@@ -32,8 +32,29 @@ pre-commit:
       run: mise run lint
 {% endif %}
 
+{% if beads_enabled %}
+post-commit:
+  commands:
+    bd-dolt-push:
+      run: .claude/hooks/beads-sync.sh push-best-effort
+
+post-merge:
+  commands:
+    bd-dolt-pull:
+      run: .claude/hooks/beads-sync.sh pull-best-effort
+
+post-checkout:
+  commands:
+    bd-dolt-pull:
+      run: .claude/hooks/beads-sync.sh pull-best-effort
+{% endif %}
+
 pre-push:
   commands:
+{% if beads_enabled %}
+    bd-dolt-push:
+      run: .claude/hooks/beads-sync.sh push-best-effort
+{% endif %}
 {% if "test" in commands %}
     test:
       run: mise run test

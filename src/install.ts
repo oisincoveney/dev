@@ -255,8 +255,9 @@ function configureBeadsDoltRemote(cwd: string, remoteUrl: string): BeadsConfigur
   })
   if (!list.ok) return { ok: false, error: runFailureMessage(list) }
 
+  const doltRemoteUrl = toDoltGitRemoteUrl(remoteUrl)
   const origin = parseDoltRemoteList(list.stdout).get('origin')
-  if (origin !== undefined && sameGitRemote(origin, remoteUrl)) return { ok: true }
+  if (origin !== undefined && sameGitRemote(origin, doltRemoteUrl)) return { ok: true }
   if (origin !== undefined) {
     const remove = runCommand('bd', ['--sandbox', 'dolt', 'remote', 'remove', 'origin'], {
       cwd,
@@ -265,7 +266,7 @@ function configureBeadsDoltRemote(cwd: string, remoteUrl: string): BeadsConfigur
     })
     if (!remove.ok) return { ok: false, error: runFailureMessage(remove) }
   }
-  const add = runCommand('bd', ['--sandbox', 'dolt', 'remote', 'add', 'origin', remoteUrl], {
+  const add = runCommand('bd', ['--sandbox', 'dolt', 'remote', 'add', 'origin', doltRemoteUrl], {
     cwd,
     timeoutMs: 10_000,
     env: noGitHooksEnv(),
@@ -292,9 +293,16 @@ function sameGitRemote(a: string, b: string): boolean {
 function normalizeGitRemote(url: string): string {
   return url
     .replace(/^git\+ssh:\/\//, 'ssh://')
-    .replace(/^ssh:\/\/git@([^/]+)\/\.?\//, 'git@$1:')
-    .replace(/^git@([^:]+):\.?\//, 'git@$1:')
+    .replace(/^ssh:\/\/git@([^/]+)\//, 'git@$1:')
     .replace(/\/+$/, '')
+}
+
+function toDoltGitRemoteUrl(remoteUrl: string): string {
+  const normalized = normalizeGitRemote(remoteUrl)
+  const scpLike = normalized.match(/^git@([^:]+):(.+)$/)
+  if (scpLike) return `git+ssh://git@${scpLike[1]}/${scpLike[2]}`
+  if (normalized.startsWith('ssh://')) return `git+${normalized}`
+  return normalized
 }
 
 function gitPathTracked(cwd: string, relPath: string): boolean {

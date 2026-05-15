@@ -176,8 +176,8 @@ describe('end-to-end install with real side effects', () => {
       })
       expect(remotes.status).toBe(0)
       expect(remotes.stdout).toContain('origin')
-      expect(remotes.stdout).toContain('github.com')
-      expect(remotes.stdout).toContain('example/repo.git')
+      expect(remotes.stdout).toContain('git+ssh://git@github.com/example/repo.git')
+      expect(remotes.stdout).not.toContain('/./')
     },
     BD_INIT_TIMEOUT_MS,
   )
@@ -196,6 +196,16 @@ describe('end-to-end install with real side effects', () => {
       expect(spawnSync('git', ['add', '.beads/issues.jsonl'], { cwd: dir }).status).toBe(0)
 
       const first = migrateBeadsRepoBackedDolt(dir)
+      expect(
+        spawnSync('bd', ['--sandbox', 'dolt', 'remote', 'remove', 'origin'], { cwd: dir }).status,
+      ).toBe(0)
+      expect(
+        spawnSync(
+          'bd',
+          ['--sandbox', 'dolt', 'remote', 'add', 'origin', 'git+ssh://git@github.com/./example/repo.git'],
+          { cwd: dir },
+        ).status,
+      ).toBe(0)
       const second = migrateBeadsRepoBackedDolt(dir)
       expect(first.config.ok).toBe(true)
       expect(second.config.ok).toBe(true)
@@ -214,6 +224,14 @@ describe('end-to-end install with real side effects', () => {
       })
       expect(tracked.status).not.toBe(0)
       expect(existsSync(join(dir, '.beads/issues.jsonl'))).toBe(true)
+
+      const remotes = spawnSync('bd', ['--sandbox', 'dolt', 'remote', 'list'], {
+        cwd: dir,
+        encoding: 'utf8',
+      })
+      expect(remotes.status).toBe(0)
+      expect(remotes.stdout).toContain('git+ssh://git@github.com/example/repo.git')
+      expect(remotes.stdout).not.toContain('/./')
     },
     BD_INIT_TIMEOUT_MS,
   )
@@ -337,6 +355,7 @@ just rules, no session completion
       'pre-stop-verification.sh',
       'ai-antipattern-guard.sh',
       'pr-size-check.sh',
+      'beads-sync.sh',
     ]
     for (const hook of hooks) {
       const path = join(hookDir, hook)
@@ -360,7 +379,11 @@ just rules, no session completion
     const lefthook = readFileSync(join(dir, 'lefthook.yml'), 'utf8')
     expect(lefthook).toContain('commit-msg:')
     expect(lefthook).toContain('pre-commit:')
+    expect(lefthook).toContain('post-commit:')
+    expect(lefthook).toContain('post-merge:')
+    expect(lefthook).toContain('post-checkout:')
     expect(lefthook).toContain('pre-push:')
+    expect(lefthook).toContain('beads-sync.sh push-best-effort')
     expect(lefthook).toContain('mise run typecheck')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks.typecheck]')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('run = "cargo check"')
