@@ -90,6 +90,51 @@ describe('reset command helpers', () => {
     expect(existsSync(join(dir, '.codex/hooks/pre-tool-dispatch.sh'))).toBe(true)
   })
 
+  it('infers beads workflow when resetting an older beads repo with stale legacy config', () => {
+    mkdirSync(join(dir, '.beads'), { recursive: true })
+    writeFileSync(
+      join(dir, '.dev.config.json'),
+      `${JSON.stringify(
+        {
+          language: 'typescript',
+          variant: 'ts-library',
+          framework: null,
+          packageManager: 'bun',
+          commands: {
+            test: 'bun test',
+            typecheck: 'tsc --noEmit',
+          },
+          skills: ['code-quality'],
+          tools: [],
+          workflow: 'none',
+          contractDriven: false,
+          targets: ['claude', 'codex'],
+        },
+        null,
+        2,
+      )}\n`,
+    )
+
+    const result = runResetOrchestration(dir, { skipExternalTools: true })
+
+    expect(result).toEqual({ ok: true })
+    const state = JSON.parse(readFileSync(join(dir, STATE_FILE), 'utf8')) as {
+      tools?: string[]
+      workflow?: string
+      beads_enabled?: boolean
+    }
+    expect(state.tools).toContain('beads')
+    expect(state.workflow).toBe('bd')
+    expect(state.beads_enabled).toBe(true)
+
+    const claudeSettings = readFileSync(join(dir, '.claude/settings.json'), 'utf8')
+    expect(claudeSettings).toContain('OISIN_DEV_BEADS=1')
+    expect(claudeSettings).toContain('bd-context-inject.sh')
+    expect(claudeSettings).toContain('swarm-digest.sh')
+    expect(existsSync(join(dir, '.agents/skills/caveman/SKILL.md'))).toBe(true)
+    expect(existsSync(join(dir, '.codex/skills/tracker-workflow'))).toBe(true)
+  })
+
   it('requires a clean Git worktree', () => {
     expect(spawnSync('git', ['init'], { cwd: dir }).status).toBe(0)
     writeFileSync(join(dir, 'file.txt'), 'dirty')

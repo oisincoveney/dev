@@ -3,12 +3,10 @@
 # One line: <variant> · <workflow> · branch · ready count
 set -euo pipefail
 
-CONFIG_FILE=".dev.config.json"
-
 parts=()
-if [[ -f "$CONFIG_FILE" ]]; then
-  variant=$(jq -r '.variant // empty' "$CONFIG_FILE" 2>/dev/null || true)
-  workflow=$(jq -r '.workflow // empty' "$CONFIG_FILE" 2>/dev/null || true)
+if [[ -f ".copier-answers.yml" ]]; then
+  variant=$(awk -F': ' '/^variant:/ {print $2; exit}' .copier-answers.yml | tr -d '"' || true)
+  workflow=$(awk -F': ' '/^workflow:/ {print $2; exit}' .copier-answers.yml | tr -d '"' || true)
   [[ -n "$variant" ]] && parts+=("$variant")
   [[ -n "$workflow" && "$workflow" != "none" ]] && parts+=("$workflow")
 fi

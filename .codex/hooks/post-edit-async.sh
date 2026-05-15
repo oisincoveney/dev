@@ -15,7 +15,7 @@ case "$FILE_PATH" in
   *) exit 0 ;;
 esac
 
-if [[ ! -f ".dev.config.json" ]]; then
+if [[ ! -f "mise.toml" ]]; then
   exit 0
 fi
 

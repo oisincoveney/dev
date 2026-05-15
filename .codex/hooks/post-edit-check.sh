@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PostToolUse hook for Write|Edit — runs typecheck + lint after TS/Rust/Go edits.
-# Reads commands from .dev.config.json at the project root.
+# Runs canonical mise tasks after edits.
 # Exit 0 = allow, Exit 2 = hard block.
 set -euo pipefail
 
@@ -15,13 +15,18 @@ case "$FILE_PATH" in
   *) exit 0 ;;
 esac
 
-CONFIG_FILE=".dev.config.json"
-if [[ ! -f "$CONFIG_FILE" ]]; then
+if [[ ! -f "mise.toml" ]]; then
   exit 0
 fi
 
-TYPECHECK_CMD=$(jq -r '.commands.typecheck // empty' "$CONFIG_FILE")
-LINT_CMD=$(jq -r '.commands.lint // empty' "$CONFIG_FILE")
+TYPECHECK_CMD=""
+LINT_CMD=""
+if grep -Eq '^[[:space:]]*(typecheck[[:space:]]*=|\[tasks\.typecheck\])' mise.toml; then
+  TYPECHECK_CMD="MISE_TRUSTED_CONFIG_PATHS=\"$PWD/mise.toml\" mise run --raw typecheck"
+fi
+if grep -Eq '^[[:space:]]*(lint[[:space:]]*=|\[tasks\.lint\])' mise.toml; then
+  LINT_CMD="MISE_TRUSTED_CONFIG_PATHS=\"$PWD/mise.toml\" mise run --raw lint"
+fi
 
 errors=""
 

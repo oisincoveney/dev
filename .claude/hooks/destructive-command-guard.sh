@@ -54,9 +54,14 @@ if echo "$SCAN" | grep -qE 'git[[:space:]]+reset[[:space:]]+--hard'; then
         "Use git stash or git checkout <file> for targeted rollbacks."
 fi
 
-if echo "$SCAN" | grep -qE 'git[[:space:]]+push[[:space:]]+.*--force\b|git[[:space:]]+push[[:space:]]+-f\b'; then
-  block "Force push can destroy remote history." \
-        "Use --force-with-lease if you must, or ask first."
+if echo "$SCAN" | grep -qE 'git[[:space:]]+push\b'; then
+  if echo "$SCAN" | grep -qE 'git[[:space:]]+push([[:space:]][^;&|]*)?[[:space:]]+(origin[[:space:]]+)?(main|master|release/[A-Za-z0-9._/-]+)([[:space:];&|]|$)'; then
+    block "Pushing protected branches requires explicit user approval." \
+          "Protected branches: main, master, release/*."
+  fi
+  if echo "$SCAN" | grep -qE 'git[[:space:]]+push[[:space:]].*(refs/tags/|--tags\b|[[:space:]]tag[[:space:]])'; then
+    block "Pushing tags requires explicit user approval." ""
+  fi
 fi
 
 if echo "$SCAN" | grep -qE 'git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f'; then

@@ -9,8 +9,6 @@
 # content (deps) last. Maximizes Anthropic prompt-cache hit across sessions.
 set -euo pipefail
 
-CONFIG_FILE=".dev.config.json"
-
 # Communication mode — caveman (full) inlined. Skips Skill round-trip and
 # replaces the now-retired communication-style.md rule. Off switch:
 # "stop caveman" / "normal mode".
@@ -30,20 +28,20 @@ CAVEMAN
 
 context="$caveman_mode"
 
-if [[ -f "$CONFIG_FILE" ]]; then
-  language=$(jq -r '.language // empty' "$CONFIG_FILE")
-  variant=$(jq -r '.variant // empty' "$CONFIG_FILE")
-  workflow=$(jq -r '.workflow // empty' "$CONFIG_FILE")
-  dev=$(jq -r '.commands.dev // empty' "$CONFIG_FILE")
-  build=$(jq -r '.commands.build // empty' "$CONFIG_FILE")
-  test_cmd=$(jq -r '.commands.test // empty' "$CONFIG_FILE")
-  typecheck=$(jq -r '.commands.typecheck // empty' "$CONFIG_FILE")
-  lint=$(jq -r '.commands.lint // empty' "$CONFIG_FILE")
-  format=$(jq -r '.commands.format // empty' "$CONFIG_FILE")
+if [[ -f ".copier-answers.yml" || -f "mise.toml" ]]; then
+  language=$(awk -F': ' '/^language:/ {print $2; exit}' .copier-answers.yml 2>/dev/null | tr -d '"' || true)
+  variant=$(awk -F': ' '/^variant:/ {print $2; exit}' .copier-answers.yml 2>/dev/null | tr -d '"' || true)
+  workflow=$(awk -F': ' '/^workflow:/ {print $2; exit}' .copier-answers.yml 2>/dev/null | tr -d '"' || true)
+  dev="mise run dev"
+  build="mise run build"
+  test_cmd="mise run test"
+  typecheck="mise run typecheck"
+  lint="mise run lint"
+  format="mise run format"
 
   project_info="Project: $variant ($language) | workflow: $workflow
 
-Commands (use these exact strings — do not guess alternatives):
+Commands (use these exact mise tasks — do not guess package-manager alternatives):
   dev:       $dev
   build:     $build
   test:      $test_cmd

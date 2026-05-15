@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook — when running inside an implementation-agent worker (cwd under
+# Stop hook — when running inside a parallel-tickets worker (cwd under
 # .claude/worktrees/<name>/), block stop if the worker hasn't completed
 # its lifecycle: uncommitted changes, unpushed commits, or a bd ticket
 # still in_progress on its branch.
@@ -64,8 +64,8 @@ if [[ "$UPSTREAM_OK" -eq 0 ]]; then
   fi
 fi
 
-# Any in_progress bd ticket? If bd is unavailable, skip this check.
-if command -v bd >/dev/null 2>&1; then
+# Any in_progress bd ticket? If bd or a beads repo is unavailable, skip this check.
+if [[ -d "$WORKTREE_ROOT/.beads" ]] && command -v bd >/dev/null 2>&1; then
   IN_PROGRESS=$(cd "$WORKTREE_ROOT" && bd list --status in_progress --json 2>/dev/null | jq -r '.[].id // empty' 2>/dev/null || true)
   if [[ -n "$IN_PROGRESS" ]]; then
     while IFS= read -r tid; do

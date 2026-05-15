@@ -8,6 +8,7 @@ import {
   copierMiseArgs,
   mergeLefthookCommands,
   mergeMiseToolLines,
+  mergeMiseTaskBlocks,
   runInitOrchestration,
   runUpdateOrchestration,
   STATE_FILE,
@@ -121,12 +122,23 @@ describe('thin orchestrator', () => {
     expect(mise).toContain('"npm:@sentry/dotagents" = "latest"')
     expect(mise).toContain('"aqua:evilmartians/lefthook" = "latest"')
     expect(mise).toContain('"aqua:steveyegge/beads" = "1.0.2"')
+    expect(mise).toContain('[tasks.typecheck]')
+    expect(mise).toContain('run = "tsc --noEmit"')
   })
 
   it('can add harness tools to a mise file without a tools section', () => {
     expect(mergeMiseToolLines('[tasks.test]\nrun = "npm test"\n', ['"pipx:copier" = "9.14.0"'])).toBe(
       '[tools]\n"pipx:copier" = "9.14.0"\n\n[tasks.test]\nrun = "npm test"\n',
     )
+  })
+
+  it('can add missing mise tasks while preserving existing task definitions', () => {
+    expect(
+      mergeMiseTaskBlocks('[tasks.test]\nrun = "npm test"\n', {
+        test: 'bun test',
+        typecheck: 'tsc --noEmit',
+      }),
+    ).toBe('[tasks.test]\nrun = "npm test"\n\n[tasks.typecheck]\nrun = "tsc --noEmit"\n')
   })
 
   it('preserves existing lefthook commands while adding harness commands', () => {
@@ -188,6 +200,48 @@ describe('thin orchestrator', () => {
     const state = readFileSync(join(dir, STATE_FILE), 'utf8')
     expect(state).toContain('"variant":"ts-library"')
     expect(() => JSON.parse(state)).not.toThrow()
+  })
+
+  it('reads YAML Copier answers during update orchestration', () => {
+    writeFileSync(
+      join(dir, STATE_FILE),
+      [
+        '_src_path: /tmp/template',
+        'language: typescript',
+        'variant: ts-library',
+        'languages:',
+        '  - typescript',
+        'variants:',
+        '  - ts-library',
+        'framework: ""',
+        'package_manager: bun',
+        'commands:',
+        '  test: bun test',
+        '  typecheck: tsc --noEmit',
+        'skills:',
+        '  - code-quality',
+        'tools:',
+        '  - beads',
+        'workflow: bd',
+        'contract_driven: false',
+        'targets:',
+        '  - claude',
+        '  - codex',
+        'mcp_servers: []',
+        'models: {}',
+        'beads_enabled: true',
+        'has_typescript: true',
+        'has_frontend: false',
+        '',
+      ].join('\n'),
+    )
+
+    expect(runUpdateOrchestration(dir, { skipExternalTools: true })).toEqual({ ok: true })
+
+    const claudeSettings = readFileSync(join(dir, '.claude/settings.json'), 'utf8')
+    expect(claudeSettings).toContain('OISIN_DEV_BEADS=1')
+    expect(claudeSettings).toContain('bd-context-inject.sh')
+    expect(existsSync(join(dir, '.codex/skills/caveman'))).toBe(true)
   })
 
   it('prunes retired generated hook files during update', () => {

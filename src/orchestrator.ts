@@ -119,8 +119,8 @@ export function readInternalState(cwd: string): TemplateData | null {
   const path = join(cwd, STATE_FILE)
   if (!existsSync(path)) return null
   const raw = readFileSync(path, 'utf8')
-  if (raw.trimStart().startsWith('{')) return JSON.parse(raw) as TemplateData
-  return null
+  const parsed = raw.trimStart().startsWith('{') ? JSON.parse(raw) : parse(raw)
+  return normalizeTemplateData(parsed)
 }
 
 export function writeInternalState(cwd: string, data: TemplateData): void {
@@ -170,6 +170,8 @@ export function runUpdateOrchestration(
   cwd: string,
   options: OrchestratorOptions = {},
 ): OrchestratorResult {
+  const bootstrap = bootstrapInternalStateFromLegacyConfig(cwd)
+  if (!bootstrap.ok) return bootstrap
   const data = readInternalState(cwd)
   if (options.skipExternalTools) {
     if (data === null) {
@@ -226,7 +228,7 @@ export function bootstrapInternalStateFromLegacyConfig(cwd: string): Orchestrato
 
   try {
     const raw = JSON.parse(readFileSync(legacyPath, 'utf8')) as unknown
-    writeInternalState(cwd, legacyConfigToTemplateData(raw))
+    writeInternalState(cwd, legacyConfigToTemplateData(cwd, raw))
     return { ok: true }
   } catch (err) {
     return {
@@ -236,11 +238,16 @@ export function bootstrapInternalStateFromLegacyConfig(cwd: string): Orchestrato
   }
 }
 
-function legacyConfigToTemplateData(value: unknown): TemplateData {
+function legacyConfigToTemplateData(cwd: string, value: unknown): TemplateData {
   const config = objectRecord(value)
   const language = stringValue(config.language, 'other') as Language
   const variant = stringValue(config.variant, 'other-app') as ProjectVariant
   const commands = objectRecord(config.commands ?? {})
+  const configuredTools = stringArray(config.tools, [])
+  const configuredWorkflow = stringValue(config.workflow, 'none') as WorkflowFramework
+  const inferredTools = inferLegacyTools(cwd, configuredTools, configuredWorkflow)
+  const inferredWorkflow =
+    inferredTools.includes('beads') && configuredWorkflow === 'none' ? 'bd' : configuredWorkflow
   const legacy: DevConfig = {
     language,
     variant,
@@ -258,13 +265,79 @@ function legacyConfigToTemplateData(value: unknown): TemplateData {
       e2e: nullableString(commands.e2e),
     },
     skills: stringArray(config.skills, []),
-    tools: stringArray(config.tools, []),
-    workflow: stringValue(config.workflow, 'none') as WorkflowFramework,
+    tools: inferredTools,
+    workflow: inferredWorkflow as WorkflowFramework,
     contractDriven: config.contractDriven === true,
     targets: stringArray(config.targets, ['claude', 'codex', 'lefthook']) as Target[],
     models: objectRecord(config.models ?? {}) as DevConfig['models'],
   }
   return templateDataFromConfig(legacy)
+}
+
+function inferLegacyTools(
+  cwd: string,
+  configuredTools: ReadonlyArray<string>,
+  configuredWorkflow: WorkflowFramework,
+): string[] {
+  const tools = new Set(configuredTools)
+  if (
+    configuredWorkflow === 'bd' ||
+    existsSync(join(cwd, '.beads')) ||
+    fileContains(join(cwd, 'AGENTS.md'), 'BEGIN BEADS INTEGRATION') ||
+    fileContains(join(cwd, 'CLAUDE.md'), 'BEGIN BEADS INTEGRATION') ||
+    fileContains(join(cwd, 'mise.toml'), 'steveyegge/beads')
+  ) {
+    tools.add('beads')
+  }
+  return [...tools]
+}
+
+function fileContains(path: string, needle: string): boolean {
+  return existsSync(path) && readFileSync(path, 'utf8').includes(needle)
+}
+
+function normalizeTemplateData(value: unknown): TemplateData | null {
+  const data = objectRecord(value)
+  if (Object.keys(data).length === 0) return null
+  const language = stringValue(data.language, 'other')
+  const variant = stringValue(data.variant, 'other-app')
+  const languages = stringArray(data.languages, [language])
+  const variants = stringArray(data.variants, [variant])
+  const tools = stringArray(data.tools, [])
+  const commands = objectRecord(data.commands ?? {})
+  const workflow = stringValue(data.workflow, tools.includes('beads') ? 'bd' : 'none')
+  const beadsEnabled =
+    data.beads_enabled === true ||
+    tools.includes('beads') ||
+    workflow === 'bd'
+  const normalizedTools = new Set(tools)
+  if (beadsEnabled) normalizedTools.add('beads')
+
+  return {
+    language,
+    variant,
+    languages,
+    variants,
+    framework: stringValue(data.framework, ''),
+    package_manager: stringValue(data.package_manager ?? data.packageManager, 'other'),
+    commands: Object.fromEntries(
+      Object.entries(commands).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0,
+      ),
+    ),
+    skills: stringArray(data.skills, []),
+    tools: [...normalizedTools],
+    workflow,
+    contract_driven: data.contract_driven === true || data.contractDriven === true,
+    targets: stringArray(data.targets, []),
+    mcp_servers: stringArray(data.mcp_servers ?? data.mcpServers, []),
+    models: objectRecord(data.models ?? {}) as Record<string, string>,
+    beads_enabled: beadsEnabled,
+    has_typescript: data.has_typescript === true || languages.includes('typescript'),
+    has_frontend:
+      data.has_frontend === true ||
+      variants.some((entry) => entry === 'ts-frontend' || entry === 'ts-fullstack'),
+  }
 }
 
 function objectRecord(value: unknown): Record<string, unknown> {
@@ -300,6 +373,7 @@ function runPostTemplateTools(cwd: string, data?: TemplateData): OrchestratorRes
   if (!dotagents.ok) return dotagents
   const dotagentsDoctor = runMise(cwd, ['exec', '--', 'dotagents', 'doctor', '--fix'])
   if (!dotagentsDoctor.ok) return dotagentsDoctor
+  if (templateData !== undefined) syncSkillLinks(cwd, templateData)
 
   if (data === undefined || data.targets.includes('lefthook')) {
     const lefthook = runMise(cwd, ['exec', '--', 'lefthook', 'install', '--force'])
@@ -395,7 +469,8 @@ export function ensureMiseToml(cwd: string, data?: TemplateData): void {
   }
 
   const existing = readFileSync(path, 'utf8')
-  writeFileSync(path, mergeMiseToolLines(existing, requiredMiseToolLines(data)))
+  const withTools = mergeMiseToolLines(existing, requiredMiseToolLines(data))
+  writeFileSync(path, mergeMiseTaskBlocks(withTools, data?.commands ?? {}))
 }
 
 export function mergeMiseToolLines(existing: string, requiredLines: string[]): string {
@@ -428,6 +503,21 @@ export function mergeMiseToolLines(existing: string, requiredLines: string[]): s
 
   lines.splice(toolsStart + 1, 0, ...missing)
   return `${lines.join('\n').replace(/\s+$/, '')}\n`
+}
+
+export function mergeMiseTaskBlocks(existing: string, commands: Record<string, string>): string {
+  const missing = Object.entries(commands).filter(([name]) => !hasTomlSection(existing, `tasks.${name}`))
+  if (missing.length === 0) return existing
+
+  const suffix = missing
+    .map(([name, command]) => ['', `[tasks.${name}]`, `run = ${JSON.stringify(command)}`].join('\n'))
+    .join('\n')
+  return `${existing.replace(/\s+$/, '')}\n${suffix}\n`
+}
+
+function hasTomlSection(source: string, section: string): boolean {
+  const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`^\\s*\\[${escaped}\\]\\s*$`, 'm').test(source)
 }
 
 export function ensureLefthookYml(cwd: string, data?: TemplateData): void {

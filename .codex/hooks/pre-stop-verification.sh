@@ -18,13 +18,12 @@ TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || tr
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."' 2>/dev/null || true)
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty' 2>/dev/null || true)
 
-CONFIG="$CWD/.dev.config.json"
-
-# Fail open: if no config or final message, don't block.
-[[ ! -f "$CONFIG" || -z "$LAST_MSG" ]] && exit 0
-
-TEST_CMD=$(jq -r '.commands.test // empty' "$CONFIG" 2>/dev/null || true)
-[[ -z "$TEST_CMD" ]] && exit 0
+# Fail open: if no mise task or final message, don't block.
+[[ ! -f "$CWD/mise.toml" || -z "$LAST_MSG" ]] && exit 0
+if ! grep -Eq '^[[:space:]]*(test[[:space:]]*=|\[tasks\.test\])' "$CWD/mise.toml"; then
+  exit 0
+fi
+TEST_CMD="mise run test"
 
 # Check for completion-claim language in the last assistant message.
 # Conservative patterns — must look like a terminal completion statement.

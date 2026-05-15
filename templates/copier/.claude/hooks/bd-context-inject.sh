@@ -13,9 +13,28 @@ command -v bd >/dev/null 2>&1 || exit 0
 
 cd "$CWD"
 
+run_bd_bounded() {
+  out_file=$(mktemp "${TMPDIR:-/tmp}/bd-context.XXXXXX")
+  status_file=$(mktemp "${TMPDIR:-/tmp}/bd-context-status.XXXXXX")
+  (bd "$@" >"$out_file" 2>/dev/null; printf '%s\n' "$?" >"$status_file") &
+  pid=$!
+  (
+    sleep "${OISIN_DEV_BD_CONTEXT_TIMEOUT:-2}"
+    kill "$pid" 2>/dev/null || true
+  ) &
+  killer=$!
+  wait "$pid" 2>/dev/null || true
+  kill "$killer" 2>/dev/null || true
+  status=$(cat "$status_file" 2>/dev/null || echo 1)
+  if [[ "$status" == "0" ]]; then
+    cat "$out_file"
+  fi
+  rm -f "$out_file" "$status_file"
+}
+
 BRANCH=$(git branch --show-current 2>/dev/null || echo "")
 CLAIMED=$(
-  bd list --status in_progress --json 2>/dev/null \
+  run_bd_bounded list --status in_progress --json \
     | jq -r '[.[] | "\(.id) [\(.priority // "P?")] \(.title)"] | join("; ")' 2>/dev/null \
     || echo ""
 )
@@ -24,7 +43,7 @@ if [[ -n "$CLAIMED" ]]; then
   STATE="Claimed: $CLAIMED"
 else
   READY=$(
-    bd ready --json 2>/dev/null \
+    run_bd_bounded ready --json \
       | jq -r '.[0] | if . == null then "" else "Ready: \(.id) [\(.priority // "P?")] \(.title)" end' 2>/dev/null \
       || echo ""
   )

@@ -10,16 +10,17 @@ set -euo pipefail
 INPUT=$(cat)
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."' 2>/dev/null || echo ".")
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || echo "")
-CONFIG="$CWD/.dev.config.json"
 BASELINE="$CWD/.claude/baseline-failures.json"
 
-[[ ! -f "$BASELINE" || ! -f "$CONFIG" ]] && exit 0
+[[ ! -f "$BASELINE" || ! -f "$CWD/mise.toml" ]] && exit 0
 
 SKIPPED=$(jq -r '.skipped // false' "$BASELINE" 2>/dev/null || echo "true")
 [[ "$SKIPPED" == "true" ]] && exit 0
 
-TEST_CMD=$(jq -r '.commands.test // empty' "$CONFIG" 2>/dev/null || echo "")
-[[ -z "$TEST_CMD" || "$TEST_CMD" == "null" ]] && exit 0
+if ! grep -Eq '^[[:space:]]*(test[[:space:]]*=|\[tasks\.test\])' "$CWD/mise.toml"; then
+  exit 0
+fi
+TEST_CMD="MISE_TRUSTED_CONFIG_PATHS=\"$CWD/mise.toml\" mise run --raw test"
 
 # Running the full configured test command at every Stop made ordinary response
 # finalization pay the full suite cost repeatedly. Keep the regression guard

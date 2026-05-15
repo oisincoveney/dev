@@ -1,0 +1,8 @@
+---
+description: Shared project rules for AI coding agents
+globs: ["**/*"]
+---
+
+# Project Rules
+
+Use `AGENTS.md` as the canonical project instruction file. Skills live in `.agents/skills/` and are linked into tool-specific locations by dotagents.

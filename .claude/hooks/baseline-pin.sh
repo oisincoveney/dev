@@ -11,7 +11,6 @@ set -euo pipefail
 INPUT=$(cat)
 CWD=$(echo "$INPUT" | jq -r '.cwd // "."' 2>/dev/null || echo ".")
 [[ -z "$CWD" || "$CWD" == "null" ]] && CWD="."
-CONFIG="$CWD/.dev.config.json"
 BASELINE="$CWD/.claude/baseline-failures.json"
 
 mkdir -p "$(dirname "$BASELINE")" 2>/dev/null || true
@@ -23,10 +22,11 @@ write_skipped() {
   exit 0
 }
 
-[[ ! -f "$CONFIG" ]] && write_skipped "no .dev.config.json"
-
-TEST_CMD=$(jq -r '.commands.test // empty' "$CONFIG" 2>/dev/null || echo "")
-[[ -z "$TEST_CMD" || "$TEST_CMD" == "null" ]] && write_skipped "no test command configured"
+[[ ! -f "$CWD/mise.toml" ]] && write_skipped "no mise.toml"
+if ! grep -Eq '^[[:space:]]*(test[[:space:]]*=|\[tasks\.test\])' "$CWD/mise.toml"; then
+  write_skipped "no mise test task configured"
+fi
+TEST_CMD="MISE_TRUSTED_CONFIG_PATHS=\"$CWD/mise.toml\" mise run --raw test"
 
 cd "$CWD"
 

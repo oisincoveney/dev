@@ -54,9 +54,14 @@ if echo "$SCAN" | grep -qE 'git[[:space:]]+reset[[:space:]]+--hard'; then
         "Use git stash or git checkout <file> for targeted rollbacks."
 fi
 
-if echo "$SCAN" | grep -qE 'git[[:space:]]+push[[:space:]]+.*--force\b|git[[:space:]]+push[[:space:]]+-f\b'; then
-  block "Force push can destroy remote history." \
-        "Use --force-with-lease if you must, or ask first."
+if echo "$SCAN" | grep -qE 'git[[:space:]]+push\b'; then
+  if echo "$SCAN" | grep -qE 'git[[:space:]]+push([[:space:]][^;&|]*)?[[:space:]]+(origin[[:space:]]+)?(main|master|release/[A-Za-z0-9._/-]+)([[:space:];&|]|$)'; then
+    block "Pushing protected branches requires explicit user approval." \
+          "Protected branches: main, master, release/*."
+  fi
+  if echo "$SCAN" | grep -qE 'git[[:space:]]+push[[:space:]].*(refs/tags/|--tags\b|[[:space:]]tag[[:space:]])'; then
+    block "Pushing tags requires explicit user approval." ""
+  fi
 fi
 
 if echo "$SCAN" | grep -qE 'git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f'; then
@@ -79,6 +84,48 @@ fi
 if echo "$SCAN" | grep -qE 'rm[[:space:]]+-[a-zA-Z]*r[a-zA-Z]*f|rm[[:space:]]+-[a-zA-Z]*f[a-zA-Z]*r|rm[[:space:]]+-rf'; then
   block "rm -rf is irreversible." "Delete specific files by name instead."
 fi
+
+is_allowed_curl_file_url() {
+  local url=$1
+  case "$url" in
+    https://github.com/*/blob/*|http://github.com/*/blob/*)
+      return 1
+      ;;
+    https://raw.githubusercontent.com/*|http://raw.githubusercontent.com/*)
+      return 0
+      ;;
+    https://github.com/*/raw/*|http://github.com/*/raw/*)
+      return 0
+      ;;
+  esac
+
+  local clean="${url%%[\?#]*}"
+  case "$clean" in
+    *.md|*.markdown|*.mdx|*.txt|*.rst|*.adoc|\
+    *.js|*.jsx|*.ts|*.tsx|*.mjs|*.cjs|\
+    *.json|*.jsonc|*.yaml|*.yml|*.toml|*.xml|\
+    *.css|*.scss|*.sass|*.less|*.html|*.htm|\
+    *.py|*.rb|*.go|*.rs|*.java|*.kt|*.kts|*.swift|\
+    *.c|*.h|*.cc|*.cpp|*.cxx|*.hpp|*.cs|\
+    *.sh|*.bash|*.zsh|*.fish|*.ps1|\
+    *.sql|*.graphql|*.gql|*.proto|*.dockerfile|*/Dockerfile)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+while IFS= read -r url; do
+  if [[ -n "$url" ]] && ! is_allowed_curl_file_url "$url"; then
+    block "curl is not allowed for agent web lookups." \
+          "Direct markdown/code file URLs are allowed; use WebSearch/WebFetch or an approved browser tool for webpages."
+  fi
+done < <(
+  printf '%s\n' "$SCAN" |
+    grep -E '(^|[;&|[:space:]])(command[[:space:]]+)?curl([[:space:]]|$)' |
+    grep -Eo 'https?://[^[:space:];|&<>"'\''`)]+' || true
+)
 
 if echo "$SCAN" | grep -qiE 'DROP[[:space:]]+(TABLE|DATABASE|SCHEMA)\b'; then
   block "DROP TABLE/DATABASE is irreversible." ""
