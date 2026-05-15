@@ -24,6 +24,16 @@ fi
 export GIT_TERMINAL_PROMPT=0
 export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}"
 
+# bd dolt push/pull shells out to git inside Dolt's bare git-remote-cache.
+# Do not let global/repo hooks recurse back into this sync hook from there.
+GIT_CONFIG_INDEX="${GIT_CONFIG_COUNT:-0}"
+if [[ ! "$GIT_CONFIG_INDEX" =~ ^[0-9]+$ ]]; then
+  GIT_CONFIG_INDEX=0
+fi
+export "GIT_CONFIG_KEY_${GIT_CONFIG_INDEX}=core.hooksPath"
+export "GIT_CONFIG_VALUE_${GIT_CONFIG_INDEX}=/dev/null"
+export GIT_CONFIG_COUNT=$((GIT_CONFIG_INDEX + 1))
+
 LOCK_DIR=".beads/.oisin-dev-sync.lock"
 LOCKED=0
 for _ in 1 2 3 4 5 6 7 8 9 10; do
