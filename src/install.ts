@@ -127,11 +127,22 @@ export interface BeadsMigrationReport {
   remoteUrl: string | null
 }
 
-export function configureBeadsAfterInit(cwd: string): BeadsConfigureResult {
+interface BeadsGitHygieneReport {
+  gitignoreUpdated: boolean
+  issuesJsonlTracked: boolean
+  issuesJsonlUntracked: boolean
+}
+
+export function configureBeadsAfterInit(
+  cwd: string,
+  options: { applyGitHygiene?: boolean } = {},
+): BeadsConfigureResult {
   if (!commandExists('bd')) return { ok: false, error: 'bd not in PATH' }
   if (!existsSync(join(cwd, '.beads'))) return { ok: false, error: '.beads/ does not exist' }
 
   const remoteUrl = getGitOriginUrl(cwd)
+  const issuesJsonlBeforeHooks =
+    remoteUrl !== null && options.applyGitHygiene !== false ? readBeadsIssuesJsonl(cwd) : null
   if (remoteUrl !== null) {
     const remote = configureBeadsDoltRemote(cwd, remoteUrl)
     if (!remote.ok) return remote
@@ -159,53 +170,69 @@ export function configureBeadsAfterInit(cwd: string): BeadsConfigureResult {
     if (existsSync(path)) trimBeadsIntegrationBlock(path)
   }
 
+  if (remoteUrl !== null && options.applyGitHygiene !== false) {
+    const hygiene = ensureRepoBackedBeadsGitHygiene(cwd, issuesJsonlBeforeHooks)
+    if (!hygiene.ok) return hygiene
+  }
+
   return { ok: true }
 }
 
 export function migrateBeadsRepoBackedDolt(cwd: string): BeadsMigrationReport {
-  const issuesJsonlPath = join(cwd, '.beads/issues.jsonl')
-  const initialIssuesJsonl = existsSync(issuesJsonlPath)
-    ? readFileSync(issuesJsonlPath, 'utf8')
-    : null
+  const issuesJsonlBeforeConfigure = readBeadsIssuesJsonl(cwd)
+  const config = configureBeadsAfterInit(cwd, { applyGitHygiene: false })
+  const hygiene = ensureRepoBackedBeadsGitHygiene(cwd, issuesJsonlBeforeConfigure)
+
+  return {
+    config,
+    gitignoreUpdated: hygiene.ok ? hygiene.gitignoreUpdated : false,
+    issuesJsonlTracked: hygiene.ok ? hygiene.issuesJsonlTracked : false,
+    issuesJsonlUntracked: hygiene.ok ? hygiene.issuesJsonlUntracked : false,
+    remoteUrl: getGitOriginUrl(cwd),
+  }
+}
+
+function ensureRepoBackedBeadsGitHygiene(
+  cwd: string,
+  preservedIssuesJsonl: string | null = readBeadsIssuesJsonl(cwd),
+): (BeadsGitHygieneReport & { ok: true }) | { ok: false; error: string } {
   const beforeGitignore = existsSync(join(cwd, '.gitignore'))
     ? readFileSync(join(cwd, '.gitignore'), 'utf8')
     : ''
+
   appendToGitignore(cwd, '.beads/issues.jsonl')
+
   const afterGitignore = existsSync(join(cwd, '.gitignore'))
     ? readFileSync(join(cwd, '.gitignore'), 'utf8')
     : ''
-
-  const config = configureBeadsAfterInit(cwd)
   const issuesJsonlTracked = gitPathTracked(cwd, '.beads/issues.jsonl')
   let issuesJsonlUntracked = false
+
   if (issuesJsonlTracked) {
     const rm = runCommand('git', ['rm', '--cached', '.beads/issues.jsonl'], {
       cwd,
       timeoutMs: 10_000,
       env: noGitHooksEnv(),
     })
-    if (!rm.ok) {
-      return {
-        config: { ok: false, error: runFailureMessage(rm) },
-        gitignoreUpdated: beforeGitignore !== afterGitignore,
-        issuesJsonlTracked,
-        issuesJsonlUntracked: false,
-        remoteUrl: getGitOriginUrl(cwd),
-      }
-    }
+    if (!rm.ok) return { ok: false, error: runFailureMessage(rm) }
     issuesJsonlUntracked = true
   }
-  if (initialIssuesJsonl !== null && !existsSync(issuesJsonlPath)) {
-    writeFileSync(issuesJsonlPath, initialIssuesJsonl, 'utf8')
+
+  if (preservedIssuesJsonl !== null) {
+    writeFileSync(join(cwd, '.beads/issues.jsonl'), preservedIssuesJsonl, 'utf8')
   }
 
   return {
-    config,
+    ok: true,
     gitignoreUpdated: beforeGitignore !== afterGitignore,
     issuesJsonlTracked,
     issuesJsonlUntracked,
-    remoteUrl: getGitOriginUrl(cwd),
   }
+}
+
+function readBeadsIssuesJsonl(cwd: string): string | null {
+  const path = join(cwd, '.beads/issues.jsonl')
+  return existsSync(path) ? readFileSync(path, 'utf8') : null
 }
 
 function getGitOriginUrl(cwd: string): string | null {

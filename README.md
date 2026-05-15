@@ -90,9 +90,23 @@ oisin-dev reset --yes
 oisin-dev reset --force --yes
 ```
 
+### Beads Git hygiene
+
+When Beads is configured with a Git remote, `oisin-dev init` and the idempotent
+configuration step adopt the repo-backed Dolt workflow: `sync.remote`,
+`federation.remote`, and the Dolt `origin` remote point at the Git `origin`,
+`export.git-add` is `false`, and `.beads/issues.jsonl` is ignored and removed
+from Git tracking when necessary.
+
+The Beads-generated `.beads/.gitignore` still owns local runtime files such as
+Dolt state, sockets, backup data, logs, lock files, and local export state.
+Keep `.beads/.gitignore`, `.beads/config.yaml`, `.beads/metadata.json`, and
+`.beads/README.md` tracked. Shared ticket state lives in `refs/dolt/data` in the
+same Git repo, so normal code commits should not include `.beads/issues.jsonl`.
+
 ### `oisin-dev beads-migrate`
 
-Adopts the repo-backed Dolt workflow for an existing Beads repo. It is idempotent: it points `sync.remote`, `federation.remote`, and `bd dolt remote origin` at the Git `origin` URL, sets `export.git-add` to `false`, ignores `.beads/issues.jsonl`, and removes `.beads/issues.jsonl` from Git tracking with `git rm --cached` when needed.
+Adopts the same repo-backed Dolt workflow for an existing Beads repo. It is idempotent and can be used to repair older repos that already committed `.beads/issues.jsonl`.
 
 ```sh
 oisin-dev beads-migrate
@@ -105,8 +119,6 @@ git clone <repo>
 bd bootstrap
 bd dolt pull
 ```
-
-Shared ticket state lives in `refs/dolt/data` in the same Git repo. Normal code commits should not include `.beads/issues.jsonl`.
 
 ### `oisin-dev tickets`
 

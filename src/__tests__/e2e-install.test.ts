@@ -137,7 +137,7 @@ describe('end-to-end install with real side effects', () => {
   )
 
   it(
-    'configureBeadsAfterInit wires repo-backed Dolt sync to git origin',
+    'configureBeadsAfterInit wires repo-backed Dolt sync to git origin and untracks JSONL',
     () => {
       expect(spawnSync('git', ['init'], { cwd: dir }).status).toBe(0)
       expect(
@@ -147,6 +147,9 @@ describe('end-to-end install with real side effects', () => {
       ).toBe(0)
 
       installBeadsCli(dir)
+      writeFileSync(join(dir, '.beads/issues.jsonl'), '{}\n')
+      expect(spawnSync('git', ['add', '.beads/issues.jsonl'], { cwd: dir }).status).toBe(0)
+
       const result = configureBeadsAfterInit(dir)
       expect(result.ok).toBe(true)
 
@@ -154,6 +157,15 @@ describe('end-to-end install with real side effects', () => {
       expect(yaml).toContain('sync.remote: "git@github.com:example/repo.git"')
       expect(yaml).toContain('federation.remote: "git@github.com:example/repo.git"')
       expect(yaml).toContain('export.git-add: false')
+
+      const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8')
+      expect(gitignore).toContain('.beads/issues.jsonl')
+      const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '.beads/issues.jsonl'], {
+        cwd: dir,
+        encoding: 'utf8',
+      })
+      expect(tracked.status).not.toBe(0)
+      expect(existsSync(join(dir, '.beads/issues.jsonl'))).toBe(true)
 
       const remotes = spawnSync('bd', ['dolt', 'remote', 'list'], {
         cwd: dir,
