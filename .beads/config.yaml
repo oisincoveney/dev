@@ -53,6 +53,9 @@
 # - github.org
 # - github.repo
 
-sync.remote: "git+ssh://git@github.com/oisincoveney/dev.git"
+export.auto: false
+export.git-add: false
+dolt.auto-push: false
+no-push: true
 
 validation.on-create: "warn"

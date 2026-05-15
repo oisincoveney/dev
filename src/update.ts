@@ -6,7 +6,10 @@
  */
 
 import * as p from '@clack/prompts'
-import { runUpdateOrchestration, STATE_FILE } from './orchestrator.js'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { configureBeadsAfterInit } from './install.js'
+import { readInternalState, runUpdateOrchestration, STATE_FILE } from './orchestrator.js'
 import { gitWorktreeClean } from './reset.js'
 
 export async function runUpdate(): Promise<void> {
@@ -27,5 +30,13 @@ export async function runUpdate(): Promise<void> {
     process.exit(1)
   }
   spinner.stop('Updated')
+
+  const state = readInternalState(cwd)
+  if (state?.beads_enabled === true || existsSync(join(cwd, '.beads'))) {
+    const configure = configureBeadsAfterInit(cwd)
+    if (configure.ok) p.log.success('beads: configured repo-backed workflow')
+    else p.log.warn(`beads: post-update configuration failed (${configure.error})`)
+  }
+
   p.outro('Commit the updated files.')
 }

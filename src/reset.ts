@@ -2,7 +2,8 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
-import { runResetOrchestration } from './orchestrator.js'
+import { configureBeadsAfterInit } from './install.js'
+import { readInternalState, runResetOrchestration } from './orchestrator.js'
 
 export const RESET_PATHS = [
   '.agents',
@@ -58,6 +59,13 @@ export async function runReset(argv: ReadonlyArray<string> = process.argv.slice(
   if (!result.ok) {
     p.log.error(result.message)
     process.exit(1)
+  }
+
+  const state = readInternalState(cwd)
+  if (state?.beads_enabled === true || existsSync(join(cwd, '.beads'))) {
+    const configure = configureBeadsAfterInit(cwd)
+    if (configure.ok) p.log.success('beads: configured repo-backed workflow')
+    else p.log.warn(`beads: post-reset configuration failed (${configure.error})`)
   }
 
   p.outro('Reset generated agent configuration.')

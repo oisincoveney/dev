@@ -153,9 +153,12 @@ export function configureBeadsAfterInit(
     ...(remoteUrl === null
       ? []
       : [
-          ['--sandbox', 'config', 'set', 'sync.remote', remoteUrl],
-          ['--sandbox', 'config', 'set', 'federation.remote', remoteUrl],
+          ['--sandbox', 'config', 'unset', 'sync.remote'],
+          ['--sandbox', 'config', 'unset', 'federation.remote'],
+          ['--sandbox', 'config', 'set', 'export.auto', 'false'],
           ['--sandbox', 'config', 'set', 'export.git-add', 'false'],
+          ['--sandbox', 'config', 'set', 'dolt.auto-push', 'false'],
+          ['--sandbox', 'config', 'set', 'no-push', 'true'],
         ]),
   ]) {
     const result = runCommand('bd', args, { cwd, timeoutMs: 10_000, env: noGitHooksEnv() })

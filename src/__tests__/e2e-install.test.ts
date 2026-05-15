@@ -154,9 +154,12 @@ describe('end-to-end install with real side effects', () => {
       expect(result.ok).toBe(true)
 
       const yaml = readFileSync(join(dir, '.beads/config.yaml'), 'utf8')
-      expect(yaml).toContain('sync.remote: "git@github.com:example/repo.git"')
-      expect(yaml).toContain('federation.remote: "git@github.com:example/repo.git"')
+      expect(yaml).not.toMatch(/^sync\.remote:/m)
+      expect(yaml).not.toMatch(/^federation\.remote:/m)
+      expect(yaml).toContain('export.auto: false')
       expect(yaml).toContain('export.git-add: false')
+      expect(yaml).toContain('dolt.auto-push: false')
+      expect(yaml).toContain('no-push: true')
 
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8')
       expect(gitignore).toContain('.beads/issues.jsonl')

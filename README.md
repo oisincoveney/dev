@@ -93,10 +93,12 @@ oisin-dev reset --force --yes
 ### Beads Git hygiene
 
 When Beads is configured with a Git remote, `oisin-dev init` and the idempotent
-configuration step adopt the repo-backed Dolt workflow: `sync.remote`,
-`federation.remote`, and the Dolt `origin` remote point at the Git `origin`,
-`export.git-add` is `false`, and `.beads/issues.jsonl` is ignored and removed
-from Git tracking when necessary.
+configuration step adopt the repo-backed Dolt workflow: the Dolt `origin` remote
+points at the Git `origin`, automatic JSONL export/staging and automatic Dolt
+push are disabled, and `.beads/issues.jsonl` is ignored and removed from Git
+tracking when necessary. Do not configure Beads `sync.remote` or
+`federation.remote` for this harness; normal `bd` mutations stay local and
+agents push tracker state explicitly with `bd dolt push` at workflow boundaries.
 
 The Beads-generated `.beads/.gitignore` still owns local runtime files such as
 Dolt state, sockets, backup data, logs, lock files, and local export state.
