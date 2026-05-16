@@ -389,14 +389,20 @@ just rules, no session completion
 
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     expect(agents).toContain('Main thread is the orchestrator')
-    expect(agents).toContain('if the user asks a question, answer it')
+    expect(agents).toContain('explicit inline current-branch tiny-edit lane')
+    expect(agents).toContain('No Worktrunk setup for `/quick`')
+    expect(agents).toContain('Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>` are required for `/work-next`, approved tracker work')
+    expect(agents).toContain('question means answer only')
     expect(agents).toContain('official docs/web first')
     expect(agents).toContain('Do not end with follow-up prompts')
+    expect(agents).not.toContain('It still runs in a Worktrunk-managed agent worktree')
     expect(agents).not.toContain('codex_hooks')
 
     const bootstrap = readFileSync(join(dir, '.codex/hooks/context-bootstrap.sh'), 'utf8')
     expect(bootstrap).toContain('COMMUNICATION MODE — caveman')
     expect(bootstrap).toContain('question means answer only')
+    expect(bootstrap).toContain('/quick means inline tiny edit')
+    expect(bootstrap).toContain('Worktrunk required for /work-next, approved tracker work')
   })
 
   it('settings.json hooks reference real script paths', async () => {

@@ -7,13 +7,13 @@ description: Tracker-first development workflow for @oisincoveney/dev. Use for /
 
 The tracker is the single source of truth. Beads is the first-class tracker adapter. Machine-readable workflow state lives in `metadata.workflow` JSON and is accessed through `oisin-dev tracker`.
 
-Main thread is always orchestrator. All implementation happens in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>`, including `/quick`.
+Main thread is always orchestrator. Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>` are required for `/work-next`, approved tracker work, multi-ticket work, delegated agents, and normal implementation tasks. Current checkout is allowed for answer-only, investigation-only, and explicit `/quick` inline edits.
 
-Use `wt` for agent worktree lifecycle. Do not create full clones, scratch directories, `/tmp` or `/private/tmp` workspaces, or `TMPDIR` overrides for agent implementation work. Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
+Use `wt` for Worktrunk lifecycle. Do not create full clones, scratch directories, `/tmp` or `/private/tmp` workspaces, or `TMPDIR` overrides. Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
 
 ## Commands
 
-- `/quick [P2|P3] <task>` — low-ceremony path. Defaults to P3; explicit P2 allowed. Never P0/P1. Dispatch a quick implementation agent in a Worktrunk worktree for `quick/p3/<slug>` or `quick/p2/<slug>`. Run normal verification, commit, merge back after verification, resolve conflicts if still quick, then push/PR by branch rules.
+- `/quick [P2|P3] <task>` — explicit inline current-branch tiny-edit lane. Defaults to P3; explicit P2 allowed; P0/P1 blocked. No Worktrunk setup and no delegated implementation agent. Requires read-before-edit, relevant docs-first research, focused verification, and a commit on the current branch. Reject `/quick` for migrations, auth/security/billing/data-risk, broad refactors, generated files, new dependencies, releases, or ambiguous work.
 - `/plan [priority] <goal>` — create tracker item in `review` state and stop. Single-task and multi-ticket plans both require review.
 - `/approve <id>` — hash current title, description, priority, type, and `metadata.workflow.plan`; store approval and move item to `ready`.
 - `/work-next` — execute approved ready tracker work through implementation agents.
@@ -83,7 +83,7 @@ Serial graph work still uses one focused agent per task in dependency order.
 
 ## Verification
 
-`/quick` uses normal verification only. Every tracked ticket close requires fresh-context verification.
+`/quick` uses focused normal verification only. Every tracked ticket close requires fresh-context verification.
 
 Verifier is read-only:
 - Original AC failure blocks close.

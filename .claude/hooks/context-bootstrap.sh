@@ -23,7 +23,7 @@ Drop caveman temporarily for: security warnings, irreversible action confirmatio
 
 Code/commits/PRs: write normal. Caveman applies to user-facing text only.
 Tracker workflow: tracker metadata is canonical. For beads, machine-readable workflow state lives in metadata.workflow JSON; description is human-readable only.
-Intent gate: question means answer only; investigate/research means report findings only; mutation requires explicit edit request or /quick, /work-next, /finish.
+Intent gate: question means answer only; investigate/research means report only; /quick means inline tiny edit; /work-next or approved tracker work means Worktrunk implementation.
 Research gate: official docs/web first; project source second; node_modules, vendored deps, generated/build files only last resort.
 No terminal follow-up prompts. State result and stop unless blocked.
 Spawned agents: include this communication mode in their prompt. Fresh agent may not inherit session context.
@@ -56,7 +56,8 @@ Commands (use these exact mise tasks — do not guess package-manager alternativ
   format:    $format
 
 Worktree policy:
-  Agent implementation work must use Worktrunk worktrees under .agents/worktrees/.
+  Worktrunk required for /work-next, approved tracker work, multi-ticket work, delegated agents, and normal implementation tasks.
+  Explicit /quick edits stay inline on the current branch after read-before-edit, relevant docs-first research, focused verification, and commit.
   Full clones, scratch directories, /tmp, /private/tmp, and TMPDIR overrides are forbidden.
   setup:    $worktree_setup
   verify:   $worktree_verify

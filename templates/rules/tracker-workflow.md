@@ -7,13 +7,13 @@ description: Tracker-first workflow rules: quick lane, planning approval, worktr
 
 Tracker is the single source of truth. Beads is the first adapter. Workflow state is JSON in `metadata.workflow`, accessed through `oisin-dev tracker`.
 
-Main thread is always orchestrator. All implementation runs in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>`.
+Main thread is always orchestrator. Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>` are required for `/work-next`, approved tracker work, multi-ticket work, delegated agents, and normal implementation tasks. Current checkout is allowed for answer-only, investigation-only, and explicit `/quick` inline edits.
 
-Use `wt` for worktree lifecycle. Do not use full repo clones, scratch directories, `/tmp`, `/private/tmp`, or `TMPDIR` overrides for agent implementation work. Worktree setup, verification, and teardown run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
+Use `wt` for Worktrunk lifecycle. Do not use full repo clones, scratch directories, `/tmp`, `/private/tmp`, or `TMPDIR` overrides. Worktree setup, verification, and teardown run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
 
 ## Commands
 
-- `/quick [P2|P3] <task>` — no tracker approval, normal verification only, implementation agent in Worktrunk quick worktree, commit, merge back when verified.
+- `/quick [P2|P3] <task>` — explicit inline current-branch tiny-edit lane. No tracker approval, no Worktrunk setup, focused verification only, commit on current branch.
 - `/plan [priority] <goal>` — create tracker item in `review`; stop.
 - `/approve <id>` — store approval hash; move item to `ready`.
 - `/work-next` — execute approved ready tracker work.
@@ -29,7 +29,7 @@ Any plan change after approval invalidates approval. Runtime and notes do not.
 
 `/quick` defaults P3. Explicit `/quick P2` allowed. P0/P1 never quick.
 
-Quick work must be bounded, low-risk, have a focused verification command, and avoid protected domains: auth, security, billing, data migration, deployment/release, CI, public API/CLI/file-format contracts, and new dependencies.
+Quick work must be explicitly invoked with `/quick`, bounded, low-risk, preceded by read-before-edit and relevant docs-first research, have a focused verification command, and avoid protected domains: migrations, auth/security/billing/data-risk, broad refactors, generated files, new dependencies, releases, ambiguous work, CI, public API/CLI/file-format contracts.
 
 ## Graph Work
 
