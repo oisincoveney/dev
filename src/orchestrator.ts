@@ -435,6 +435,7 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   if (data.targets.includes('claude')) {
     copyTree(join(COPIER_TEMPLATE_DIR, '.claude', 'hooks'), join(cwd, '.claude', 'hooks'))
     chmodTree(join(cwd, '.claude', 'hooks'))
+    copyTree(join(COPIER_TEMPLATE_DIR, '.claude', 'commands'), join(cwd, '.claude', 'commands'))
     writeGeneratedFile(cwd, '.claude/settings.json', JSON.stringify(claudeSettings(data), null, 2) + '\n')
   }
 
@@ -445,6 +446,7 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   }
 
   if (data.targets.includes('opencode')) {
+    copyTree(join(COPIER_TEMPLATE_DIR, '.opencode', 'commands'), join(cwd, '.opencode', 'commands'))
     writeGeneratedFile(cwd, '.opencode/plugins/dev-enforcer.ts', opencodePlugin(data))
   }
 
