@@ -1,6 +1,6 @@
 # @oisincoveney/dev
 
-Opinionated AI development environment harness for multi-language projects. Copier owns template lifecycle, dotagents owns shared skill sync, mise owns tool installation and canonical commands, lefthook owns Git hooks, and Beads owns task/memory workflow state.
+Opinionated AI development environment harness for multi-language projects. Copier owns template lifecycle, dotagents owns shared skill sync, mise owns tool installation and canonical commands, Worktrunk owns agent worktree lifecycle, lefthook owns Git hooks, and Beads owns task/memory workflow state.
 
 ## What it does
 
@@ -11,6 +11,7 @@ Running `oisin-dev init` inside an existing project walks you through prompts, t
 - **`CLAUDE.md`** — Claude entrypoint pointing back to `AGENTS.md`
 - **`.agents/skills/` + `agents.toml`** — canonical skills and dotagents metadata
 - **`mise.toml`** — canonical project commands (`mise run test`, `mise run lint`, etc.)
+- **`.config/wt.toml`** — Worktrunk hooks for agent worktree setup, verification, and teardown
 - **`lefthook.yml`** — Git hooks (pre-commit, commit-msg, pre-push)
 - **`.claude/`, `.codex/`, `.cursor/`, `.opencode/`** — native runtime overlays for each agent
 
@@ -122,6 +123,34 @@ bd bootstrap
 bd dolt pull
 ```
 
+That fresh clone flow is for humans bootstrapping a checkout. Agent implementation work must stay in the existing repo and use Worktrunk-managed worktrees.
+
+### Agent worktrees
+
+Generated projects require one agent workspace lane:
+
+```sh
+WORKTRUNK_WORKTREE_PATH="$PWD/.agents/worktrees/{{ branch | sanitize }}" wt switch --create task/<id>-<slug>
+mise run worktree:setup
+mise run worktree:verify
+mise run worktree:teardown
+```
+
+Worktrunk project hooks in `.config/wt.toml` call those `mise` tasks automatically during `wt switch`, `wt merge`, and `wt remove`. The canonical root is `.agents/worktrees/<task-or-branch>`. `.claude/worktrees/` and `.codex/worktrees/` are recognized only for compatibility with existing tool-native worktree behavior.
+
+Agent-side full clones and scratch workspaces are forbidden. The generated shell guards block `git clone`, `gh repo clone`, clone workflows under `/tmp` or `/private/tmp`, and `TMPDIR=...` overrides used to move repo work into temp space.
+
+Worktrunk was selected after checking current maintained options:
+
+| Tool | Classification |
+|---|---|
+| Worktrunk | Selected: wraps native Git worktrees, supports project lifecycle hooks in `.config/wt.toml`, has status/merge/remove flows, and is designed for parallel agent workflows. |
+| Native Git worktree | Substrate only: reliable and universal, but no shared setup/verify/teardown hooks or opinionated cleanup flow by itself. |
+| CodeRabbit `git-worktree-runner` | Considered: agent/editor-oriented setup runner, but it is a separate Bash workflow rather than a project hook layer that can delegate to `mise` lifecycle tasks. |
+| `workmux` | Considered: useful when tmux is the coordination layer, but this harness must work across Claude, Codex, OpenCode, Cursor, and non-tmux sessions. |
+| `gwq` | Considered: strong fuzzy worktree manager, but the core value is navigation/status rather than enforceable project lifecycle hooks. |
+| Branchlet | Considered: simple CLI with post-create actions and config copying, but less suited to hard lifecycle gates and merge/remove verification. |
+
 ### `oisin-dev tickets`
 
 Launches the local Beads web UI for the current workspace by delegating to [`beads-ui`](https://github.com/mantoni/beads-ui). It works from non-JavaScript projects too; no `package.json` or project-local npm install is required.
@@ -138,6 +167,7 @@ bunx @oisincoveney/dev tickets --open
 - `.agents/skills/` — canonical generated skills.
 - `agents.toml` — lightweight agent metadata.
 - `mise.toml` — canonical task definitions.
+- `.config/wt.toml` — Worktrunk lifecycle hooks that call canonical `mise` worktree tasks.
 
 ### Tool overlays
 
@@ -199,6 +229,7 @@ Template answers are stored in `.copier-answers.yml`; shared skill/agent metadat
 "pipx:copier" = "9.14.0"
 "npm:@sentry/dotagents" = "latest"
 "aqua:evilmartians/lefthook" = "latest"
+"github:max-sixty/worktrunk" = "latest"
 
 [tasks.test]
 run = "bun test"
@@ -208,6 +239,15 @@ run = "tsc --noEmit"
 
 [tasks.lint]
 run = "biome check ."
+
+[tasks."worktree:setup"]
+run = "mise install"
+
+[tasks."worktree:verify"]
+run = "mise run typecheck && mise run lint && mise run test"
+
+[tasks."worktree:teardown"]
+run = "..."
 ```
 
 Use `oisin-dev update` for normal non-destructive template updates and `oisin-dev reset` for explicit destructive regeneration.
@@ -237,7 +277,13 @@ Supported language/variant combinations:
 
 ### Required tools
 
-Runtime setup expects `mise`. Project-local `mise.toml` installs Copier, dotagents, lefthook, and `bd` when Beads is enabled, so users do not need to install those globally.
+Runtime setup expects `mise`. Project-local `mise.toml` installs Copier, dotagents, lefthook, Worktrunk, and `bd` when Beads is enabled, so users do not need to install those globally.
+
+If the local mise platform cannot resolve `github:max-sixty/worktrunk`, install Worktrunk with the official fallback:
+
+```sh
+cargo install worktrunk
+```
 
 This repo's tests run against real `bd` for e2e coverage — they don't skip when it's missing. Install via [mise](https://mise.jdx.dev/) (preferred):
 

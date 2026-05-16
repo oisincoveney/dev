@@ -11,6 +11,21 @@ import {
   RESET_PATHS,
 } from '../reset.js'
 import { runResetOrchestration, STATE_FILE } from '../orchestrator.js'
+import { testSubprocessEnv } from './helpers/git-env.js'
+
+function git(
+  cwd: string,
+  args: string[],
+  extraEnv: NodeJS.ProcessEnv = {},
+): ReturnType<typeof spawnSync> {
+  return spawnSync('git', args, {
+    cwd,
+    env: testSubprocessEnv({
+      GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'",
+      ...extraEnv,
+    }),
+  })
+}
 
 describe('reset command helpers', () => {
   let dir: string
@@ -136,23 +151,19 @@ describe('reset command helpers', () => {
   })
 
   it('requires a clean Git worktree', () => {
-    expect(spawnSync('git', ['init'], { cwd: dir }).status).toBe(0)
+    expect(git(dir, ['init']).status).toBe(0)
     writeFileSync(join(dir, 'file.txt'), 'dirty')
 
     const dirty = gitWorktreeClean(dir)
     expect(dirty.ok).toBe(false)
 
-    expect(spawnSync('git', ['add', 'file.txt'], { cwd: dir }).status).toBe(0)
+    expect(git(dir, ['add', 'file.txt']).status).toBe(0)
     expect(
-      spawnSync('git', ['commit', '-m', 'chore: initial'], {
-        cwd: dir,
-        env: {
-          ...process.env,
-          GIT_AUTHOR_NAME: 'Test',
-          GIT_AUTHOR_EMAIL: 'test@example.com',
-          GIT_COMMITTER_NAME: 'Test',
-          GIT_COMMITTER_EMAIL: 'test@example.com',
-        },
+      git(dir, ['commit', '-m', 'chore: initial'], {
+        GIT_AUTHOR_NAME: 'Test',
+        GIT_AUTHOR_EMAIL: 'test@example.com',
+        GIT_COMMITTER_NAME: 'Test',
+        GIT_COMMITTER_EMAIL: 'test@example.com',
       }).status,
     ).toBe(0)
 

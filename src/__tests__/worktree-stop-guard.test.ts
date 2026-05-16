@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { testSubprocessEnv } from './helpers/git-env.js'
 
 const HOOK = resolve(__dirname, '..', '..', 'templates', 'hooks', 'worktree-stop-guard.sh')
 
@@ -14,7 +15,11 @@ function hasCmd(name: string): boolean {
 const canRun = hasCmd('bash') && hasCmd('jq') && hasCmd('git')
 
 function git(cwd: string, ...args: string[]): { status: number; stdout: string; stderr: string } {
-  const r = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd, encoding: 'utf8' })
+  const r = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: testSubprocessEnv(),
+  })
   return { status: r.status ?? -1, stdout: r.stdout, stderr: r.stderr }
 }
 
@@ -22,7 +27,7 @@ function runHook(cwd: string): { status: number; stdout: string; stderr: string 
   const r = spawnSync('bash', [HOOK], {
     input: JSON.stringify({ cwd }),
     encoding: 'utf8',
-    env: { ...process.env, PATH: process.env.PATH ?? '' },
+    env: testSubprocessEnv({ PATH: process.env.PATH ?? '' }),
   })
   return { status: r.status ?? -1, stdout: r.stdout, stderr: r.stderr }
 }
@@ -40,8 +45,8 @@ describe.skipIf(!canRun)('worktree-stop-guard.sh', () => {
     baseDir = mkdtempSync(join(tmpdir(), 'wsg-'))
     mainRepo = join(baseDir, 'main')
     remoteRepo = join(baseDir, 'remote.git')
-    spawnSync('git', ['init', '--bare', remoteRepo])
-    spawnSync('git', ['init', '-b', 'main', mainRepo])
+    git(baseDir, 'init', '--bare', remoteRepo)
+    git(baseDir, 'init', '-b', 'main', mainRepo)
     git(mainRepo, 'config', 'user.email', 'test@example.com')
     git(mainRepo, 'config', 'user.name', 'Test')
     git(mainRepo, 'remote', 'add', 'origin', remoteRepo)
@@ -51,7 +56,7 @@ describe.skipIf(!canRun)('worktree-stop-guard.sh', () => {
     git(mainRepo, 'push', '-u', 'origin', 'main')
     git(mainRepo, 'remote', 'set-head', 'origin', 'main')
 
-    const worktreeParent = join(mainRepo, '.claude', 'worktrees')
+    const worktreeParent = join(mainRepo, '.agents', 'worktrees')
     spawnSync('mkdir', ['-p', worktreeParent])
     worktreeRoot = join(worktreeParent, 'agent-001')
     git(mainRepo, 'worktree', 'add', '-b', 'ticket/abc', worktreeRoot)
@@ -67,6 +72,13 @@ describe.skipIf(!canRun)('worktree-stop-guard.sh', () => {
     const r = runHook(mainRepo)
     expect(r.status).toBe(0)
     expect(r.stderr).toBe('')
+  })
+
+  it('enforces lifecycle inside .agents/worktrees', () => {
+    writeFileSync(join(worktreeRoot, 'foo.txt'), 'wip\n')
+    const r = runHook(join(worktreeRoot, 'nested'))
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('uncommitted changes')
   })
 
   it('blocks stop with uncommitted changes', () => {
@@ -114,7 +126,12 @@ describe.skipIf(!canRun)('worktree-stop-guard.sh', () => {
   })
 
   it('exits 0 when input cwd is missing', () => {
-    const r = spawnSync('bash', [HOOK], { input: '{}', encoding: 'utf8' })
+    const r = spawnSync('bash', [HOOK], {
+      input: '{}',
+      encoding: 'utf8',
+      cwd: mainRepo,
+      env: testSubprocessEnv(),
+    })
     expect(r.status).toBe(0)
   })
 })

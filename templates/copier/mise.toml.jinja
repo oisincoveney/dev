@@ -5,6 +5,7 @@ bun = "1.3"
 "pipx:copier" = "9.14.0"
 "npm:@sentry/dotagents" = "latest"
 "aqua:evilmartians/lefthook" = "latest"
+"github:max-sixty/worktrunk" = "latest"
 {% if beads_enabled -%}
 "aqua:steveyegge/beads" = "1.0.2"
 {% endif %}
@@ -23,3 +24,38 @@ run = {{ command | tojson }}
 [tasks.verify]
 depends = [{% for name in verify %}"{{ name }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 {% endif -%}
+
+[tasks."worktree:setup"]
+run = """
+mise install
+if [[ -f package.json && -f bun.lockb || -f package.json && -f bun.lock ]]; then
+  command -v bun >/dev/null 2>&1 && bun install --frozen-lockfile || true
+elif [[ -f package.json && -f pnpm-lock.yaml ]]; then
+  command -v pnpm >/dev/null 2>&1 && pnpm install --frozen-lockfile || true
+elif [[ -f package.json && -f yarn.lock ]]; then
+  command -v yarn >/dev/null 2>&1 && yarn install --immutable || true
+elif [[ -f package.json && -f package-lock.json ]]; then
+  command -v npm >/dev/null 2>&1 && npm ci || true
+else
+  echo "No dependency setup detected for this worktree."
+fi
+"""
+
+[tasks."worktree:verify"]
+{% if verify -%}
+run = "{% for name in verify %}mise run {{ name }}{% if not loop.last %} && {% endif %}{% endfor %}"
+{% else -%}
+run = "echo \"No worktree verification task configured.\""
+{% endif -%}
+
+[tasks."worktree:teardown"]
+run = """
+for dir in .claude/hook-state .codex/hook-state .cursor/hook-state .opencode/hook-state; do
+  [[ -e "$dir" ]] || continue
+  if git ls-files -- "$dir" | grep -q .; then
+    echo "Skipping tracked runtime path: $dir"
+  else
+    rm -rf "$dir"
+  fi
+done
+"""

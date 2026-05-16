@@ -7,11 +7,13 @@ description: Tracker-first development workflow for @oisincoveney/dev. Use for /
 
 The tracker is the single source of truth. Beads is the first-class tracker adapter. Machine-readable workflow state lives in `metadata.workflow` JSON and is accessed through `oisin-dev tracker`.
 
-Main thread is always orchestrator. All implementation happens in isolated agent worktrees, including `/quick`.
+Main thread is always orchestrator. All implementation happens in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>`, including `/quick`.
+
+Use `wt` for agent worktree lifecycle. Do not create full clones, scratch directories, `/tmp` or `/private/tmp` workspaces, or `TMPDIR` overrides for agent implementation work. Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
 
 ## Commands
 
-- `/quick [P2|P3] <task>` — low-ceremony path. Defaults to P3; explicit P2 allowed. Never P0/P1. Dispatch a quick implementation agent in `quick/p3/<slug>` or `quick/p2/<slug>`. Run normal verification, commit, merge back after verification, resolve conflicts if still quick, then push/PR by branch rules.
+- `/quick [P2|P3] <task>` — low-ceremony path. Defaults to P3; explicit P2 allowed. Never P0/P1. Dispatch a quick implementation agent in a Worktrunk worktree for `quick/p3/<slug>` or `quick/p2/<slug>`. Run normal verification, commit, merge back after verification, resolve conflicts if still quick, then push/PR by branch rules.
 - `/plan [priority] <goal>` — create tracker item in `review` state and stop. Single-task and multi-ticket plans both require review.
 - `/approve <id>` — hash current title, description, priority, type, and `metadata.workflow.plan`; store approval and move item to `ready`.
 - `/work-next` — execute approved ready tracker work through implementation agents.
@@ -104,6 +106,6 @@ Branches:
 - tracked task/child: `task/<id>-<slug>`
 - collisions append `-2`, `-3`, etc.
 
-Implementation agents commit before returning. Worktrees end clean.
+Implementation agents commit before returning. Worktrees end clean. Canonical path is `.agents/worktrees/<branch-sanitized>`; `.claude/worktrees/` and `.codex/worktrees/` are compatibility roots only.
 
 Allow normal and force pushes on non-protected branches. Allow PR creation any time. Block pushes to `main`, `master`, release branches, and tags unless explicitly authorized.

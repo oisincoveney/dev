@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # PreToolUse hook for Write|Edit — when running inside an implementation-agent
-# worker (cwd under .claude/worktrees/<name>/), block any write whose
+# worker (cwd under .agents/worktrees/<name>/, .claude/worktrees/<name>/,
+# or .codex/worktrees/<name>/), block any write whose
 # absolute path escapes that worktree root.
 #
-# Background: implementation agents use worktree isolation, placing them under
-# .claude/worktrees/agent-XXX/. Workers that issue
+# Background: implementation agents use Worktrunk-managed worktree isolation,
+# placing them under .agents/worktrees/<branch>/ by default. Compatibility
+# paths under .claude/worktrees/ and .codex/worktrees/ are also recognized.
+# Workers that issue
 # absolute-path writes to /Users/.../<project>/... resolve to the main
 # checkout, not the worktree, silently corrupting state. This hook makes
 # that physically impossible.
@@ -23,22 +26,21 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)
 # Determine cwd: prefer hook-provided cwd, fall back to PWD.
 [[ -z "$CWD" ]] && CWD="${PWD:-$(pwd)}"
 
-# Only enforce when we're inside a worktree directory. The worktree
-# convention is .claude/worktrees/<name>/ at the project root.
+# Only enforce when we're inside a recognized worktree directory.
 case "$CWD" in
-  */.claude/worktrees/*) ;;
+  */.agents/worktrees/*|*/.claude/worktrees/*|*/.codex/worktrees/*) ;;
   *) exit 0 ;;
 esac
 
 # Compute the worktree root: everything up to and including the
-# .claude/worktrees/<name> segment. Anything written outside that root
+# <tool>/worktrees/<name> segment. Anything written outside that root
 # leaks into the main checkout.
-WORKTREE_ROOT=$(printf '%s' "$CWD" | sed -E 's|(/.claude/worktrees/[^/]+).*|\1|')
+WORKTREE_ROOT=$(printf '%s' "$CWD" | sed -E 's#(/\.(agents|claude|codex)/worktrees/[^/]+).*#\1#')
 
-# Defensive: the case-match above guarantees `.claude/worktrees/` is
+# Defensive: the case-match above guarantees a recognized worktree path is
 # present, but if the regex somehow didn't reduce the path, fail open.
 case "$WORKTREE_ROOT" in
-  */.claude/worktrees/*) ;;
+  */.agents/worktrees/*|*/.claude/worktrees/*|*/.codex/worktrees/*) ;;
   *) exit 0 ;;
 esac
 

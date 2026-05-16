@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Stop hook — when running inside an implementation-agent worktree (cwd under
-# .claude/worktrees/<name>/), block stop if the worker hasn't completed
+# .agents/worktrees/<name>/, .claude/worktrees/<name>/, or
+# .codex/worktrees/<name>/), block stop if the worker hasn't completed
 # its lifecycle: uncommitted changes, unpushed commits, or a bd ticket
 # still in_progress on its branch.
 #
@@ -18,12 +19,12 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)
 
 # Only enforce inside a worktree.
 case "$CWD" in
-  */.claude/worktrees/*) ;;
+  */.agents/worktrees/*|*/.claude/worktrees/*|*/.codex/worktrees/*) ;;
   *) exit 0 ;;
 esac
 
 # Resolve worktree root.
-WORKTREE_ROOT=$(printf '%s' "$CWD" | sed -E 's|(/.claude/worktrees/[^/]+).*|\1|')
+WORKTREE_ROOT=$(printf '%s' "$CWD" | sed -E 's#(/\.(agents|claude|codex)/worktrees/[^/]+).*#\1#')
 [[ -z "$WORKTREE_ROOT" || ! -d "$WORKTREE_ROOT" ]] && exit 0
 
 # All git commands run against the worktree, regardless of caller cwd.

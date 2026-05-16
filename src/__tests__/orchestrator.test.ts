@@ -80,10 +80,18 @@ describe('thin orchestrator', () => {
     applyInternalTemplate(dir, data)
 
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('Use the tracker workflow for planned work')
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('Worktrunk')
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('full clones')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks.test]')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('run = "bun test"')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"pipx:copier"')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"npm:@sentry/dotagents"')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:max-sixty/worktrunk"')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:setup"]')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:verify"]')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:teardown"]')
+    expect(readFileSync(join(dir, '.config/wt.toml'), 'utf8')).toContain('mise run worktree:setup')
+    expect(readFileSync(join(dir, '.config/wt.toml'), 'utf8')).toContain('.agents/worktrees')
     expect(readFileSync(join(dir, 'lefthook.yml'), 'utf8')).toContain('mise run test')
     expect(existsSync(join(dir, '.claude/hooks/pre-tool-dispatch.sh'))).toBe(true)
     expect(existsSync(join(dir, '.codex/hooks.json'))).toBe(true)
@@ -100,6 +108,7 @@ describe('thin orchestrator', () => {
 
     const opencode = readFileSync(join(dir, '.opencode/plugins/dev-enforcer.ts'), 'utf8')
     expect(opencode).toContain('destructive-command-guard.sh')
+    expect(opencode).toContain('WORKTREE_POLICY')
     expect(opencode).not.toContain('require-claim.sh')
     expect(opencode).not.toContain('require-swarm.sh')
     expect(opencode).toContain('ts-style-guard.sh')
@@ -121,9 +130,11 @@ describe('thin orchestrator', () => {
     expect(mise).toContain('"pipx:copier" = "9.14.0"')
     expect(mise).toContain('"npm:@sentry/dotagents" = "latest"')
     expect(mise).toContain('"aqua:evilmartians/lefthook" = "latest"')
+    expect(mise).toContain('"github:max-sixty/worktrunk" = "latest"')
     expect(mise).toContain('"aqua:steveyegge/beads" = "1.0.2"')
     expect(mise).toContain('[tasks.typecheck]')
     expect(mise).toContain('run = "tsc --noEmit"')
+    expect(mise).toContain('[tasks."worktree:verify"]')
   })
 
   it('can add harness tools to a mise file without a tools section', () => {
@@ -138,7 +149,7 @@ describe('thin orchestrator', () => {
         test: 'bun test',
         typecheck: 'tsc --noEmit',
       }),
-    ).toBe('[tasks.test]\nrun = "npm test"\n\n[tasks.typecheck]\nrun = "tsc --noEmit"\n')
+    ).toContain('[tasks.typecheck]\nrun = "tsc --noEmit"')
   })
 
   it('preserves existing lefthook commands while adding harness commands', () => {

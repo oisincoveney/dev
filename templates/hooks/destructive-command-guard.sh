@@ -49,6 +49,27 @@ block() {
   exit 2
 }
 
+if echo "$SCAN" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+clone([[:space:];&|]|$)'; then
+  block "Full repo clones are blocked for agent work." \
+        "Use Worktrunk: WORKTRUNK_WORKTREE_PATH='\${PWD}/.agents/worktrees/{{ branch | sanitize }}' wt switch --create <branch>."
+fi
+
+if echo "$SCAN" | grep -qE '(^|[;&|[:space:]])gh[[:space:]]+repo[[:space:]]+clone([[:space:];&|]|$)'; then
+  block "GitHub repo clones are blocked for agent work." \
+        "Use the existing checkout and create a Worktrunk worktree under .agents/worktrees/."
+fi
+
+if echo "$SCAN" | grep -qE '(^|[;&|[:space:]])cd[[:space:]]+(/private)?/tmp([/[:space:];&|]|$).*(git[[:space:]]+clone|gh[[:space:]]+repo[[:space:]]+clone)'; then
+  block "Cloning from /tmp or /private/tmp is blocked for agent work." \
+        "Use Worktrunk-managed worktrees under .agents/worktrees/."
+fi
+
+if echo "$SCAN" | grep -qE '(^|[;&|[:space:]])(export[[:space:]]+)?TMPDIR=' ||
+   echo "$SCAN" | grep -qE '(^|[;&|[:space:]])env[[:space:]][^;&|]*TMPDIR='; then
+  block "TMPDIR overrides are blocked for repo work." \
+        "Use the repository checkout and Worktrunk worktree lifecycle tasks instead of temp scratch space."
+fi
+
 if echo "$SCAN" | grep -qE 'git[[:space:]]+reset[[:space:]]+--hard'; then
   block "git reset --hard is destructive and irreversible." \
         "Use git stash or git checkout <file> for targeted rollbacks."

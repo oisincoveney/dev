@@ -6,7 +6,7 @@ Configured with @oisincoveney/dev. Shared rules live here; reusable playbooks li
 
 {% if beads_enabled -%}
 - Use the tracker workflow for planned work; beads is the first tracker adapter.
-- `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in an agent worktree, verifies, commits, and may push/PR when branch rules allow.
+- `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in a Worktrunk-managed agent worktree, verifies, commits, and may push/PR when branch rules allow.
 - `/plan [priority] <goal>` creates tracker-backed work in review state and stops. `/approve <id>` unlocks it; `/work-next` executes approved ready work; `/finish` integrates verified work.
 - Tracker data is canonical. Store machine-readable workflow state in tracker metadata (`metadata.workflow` for beads), not disk plan files.
 - Run `bd prime` for workflow context when starting or after compaction.
@@ -14,6 +14,8 @@ Configured with @oisincoveney/dev. Shared rules live here; reusable playbooks li
 - Do not commit `.beads/issues.jsonl`; shared ticket state lives in repo-backed Dolt refs.
 {% endif -%}
 - Never run destructive commands without explicit user approval.
+- Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>`; full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.
+- Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
 - Read before editing; verify before claiming done.
 - Say "I need to verify" when uncertain, then check.
 - User constraints are non-negotiable.
@@ -33,6 +35,7 @@ Use `mise run <task>` for canonical project commands.
 - Skills: `.agents/skills/`, linked into tool-specific locations by dotagents.
 - Git hooks: `lefthook.yml`.
 - Commands/tool versions: `mise.toml`.
+- Worktree lifecycle: Worktrunk project hooks in `.config/wt.toml`; canonical agent root is `.agents/worktrees/`.
 - Runtime overlays: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`.
 
 {% if beads_enabled -%}

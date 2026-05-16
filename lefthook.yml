@@ -45,9 +45,9 @@ pre-commit:
   parallel: true
   commands:
     typecheck:
-      run: bunx tsc --noEmit
+      run: mise run typecheck
     lint:
-      run: echo "no lint configured"
+      run: mise run lint
 post-commit:
   commands:
     bd-dolt-push:
@@ -65,7 +65,7 @@ pre-push:
     bd-dolt-push:
       run: .claude/hooks/beads-sync.sh push-best-effort
     test:
-      run: bun test
+      run: mise run test
     pr-size-check:
       run: .claude/hooks/pr-size-check.sh
     semgrep:

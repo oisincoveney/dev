@@ -30,7 +30,9 @@ function runHook({ cwd, filePath }: HookInput): {
 }
 
 describe.skipIf(!canRun)('worktree-write-guard.sh', () => {
-  const WORKTREE = '/Users/x/proj/.claude/worktrees/agent-001'
+  const WORKTREE = '/Users/x/proj/.agents/worktrees/task-001'
+  const CLAUDE_WORKTREE = '/Users/x/proj/.claude/worktrees/agent-001'
+  const CODEX_WORKTREE = '/Users/x/proj/.codex/worktrees/agent-001'
 
   it('allows writes outside any worktree (orchestrator context)', () => {
     const r = runHook({ cwd: '/Users/x/proj', filePath: '/Users/x/proj/src/foo.ts' })
@@ -42,6 +44,16 @@ describe.skipIf(!canRun)('worktree-write-guard.sh', () => {
     const r = runHook({ cwd: WORKTREE, filePath: `${WORKTREE}/src/foo.ts` })
     expect(r.status).toBe(0)
     expect(r.stderr).toBe('')
+  })
+
+  it('allows absolute writes under Claude compatibility worktrees', () => {
+    const r = runHook({ cwd: CLAUDE_WORKTREE, filePath: `${CLAUDE_WORKTREE}/src/foo.ts` })
+    expect(r.status).toBe(0)
+  })
+
+  it('allows absolute writes under Codex compatibility worktrees', () => {
+    const r = runHook({ cwd: CODEX_WORKTREE, filePath: `${CODEX_WORKTREE}/src/foo.ts` })
+    expect(r.status).toBe(0)
   })
 
   it('allows absolute writes in nested worktree subdirs', () => {
@@ -63,7 +75,7 @@ describe.skipIf(!canRun)('worktree-write-guard.sh', () => {
   it('blocks absolute writes to a sibling worktree', () => {
     const r = runHook({
       cwd: WORKTREE,
-      filePath: '/Users/x/proj/.claude/worktrees/agent-002/src/foo.ts',
+      filePath: '/Users/x/proj/.agents/worktrees/task-002/src/foo.ts',
     })
     expect(r.status).toBe(2)
   })

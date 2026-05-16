@@ -33,6 +33,44 @@ describe.skipIf(!canRun)('destructive-command-guard.sh', () => {
     expect(r.status).toBe(2)
   })
 
+  it('blocks git clone', () => {
+    const r = runHook('git clone https://github.com/example/repo.git')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('Full repo clones are blocked')
+  })
+
+  it('blocks gh repo clone', () => {
+    const r = runHook('gh repo clone example/repo')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('GitHub repo clones are blocked')
+  })
+
+  it('blocks clone destinations under /tmp', () => {
+    const r = runHook('git clone https://github.com/example/repo.git /tmp/repo')
+    expect(r.status).toBe(2)
+  })
+
+  it('blocks clone destinations under /private/tmp', () => {
+    const r = runHook('git clone https://github.com/example/repo.git /private/tmp/repo')
+    expect(r.status).toBe(2)
+  })
+
+  it('blocks cd /tmp followed by clone', () => {
+    const r = runHook('cd /tmp && git clone https://github.com/example/repo.git')
+    expect(r.status).toBe(2)
+  })
+
+  it('blocks repo work with TMPDIR overrides', () => {
+    const r = runHook('TMPDIR=/tmp/agent-scratch mise run test')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('TMPDIR overrides are blocked')
+  })
+
+  it('blocks env TMPDIR overrides', () => {
+    const r = runHook('env TMPDIR=/private/tmp/agent-scratch bun test')
+    expect(r.status).toBe(2)
+  })
+
   it('allows force push on non-protected branches', () => {
     const r = runHook('git push --force-with-lease origin task/abc')
     expect(r.status).toBe(0)

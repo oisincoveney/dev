@@ -7,11 +7,13 @@ description: Tracker-first workflow rules: quick lane, planning approval, worktr
 
 Tracker is the single source of truth. Beads is the first adapter. Workflow state is JSON in `metadata.workflow`, accessed through `oisin-dev tracker`.
 
-Main thread is always orchestrator. All implementation runs in isolated agent worktrees.
+Main thread is always orchestrator. All implementation runs in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>`.
+
+Use `wt` for worktree lifecycle. Do not use full repo clones, scratch directories, `/tmp`, `/private/tmp`, or `TMPDIR` overrides for agent implementation work. Worktree setup, verification, and teardown run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
 
 ## Commands
 
-- `/quick [P2|P3] <task>` — no tracker approval, normal verification only, implementation agent in quick worktree, commit, merge back when verified.
+- `/quick [P2|P3] <task>` — no tracker approval, normal verification only, implementation agent in Worktrunk quick worktree, commit, merge back when verified.
 - `/plan [priority] <goal>` — create tracker item in `review`; stop.
 - `/approve <id>` — store approval hash; move item to `ready`.
 - `/work-next` — execute approved ready tracker work.

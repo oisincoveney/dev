@@ -19,6 +19,15 @@ import {
 } from '../install.js'
 import { applyInternalTemplate, templateDataFromConfig } from '../orchestrator.js'
 import type { Answers } from '../prompts.js'
+import { testSubprocessEnv } from './helpers/git-env.js'
+
+function git(cwd: string, ...args: string[]): ReturnType<typeof spawnSync> {
+  return spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: testSubprocessEnv({ GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'" }),
+  })
+}
 
 const answers: Answers = {
   language: 'rust',
@@ -139,16 +148,12 @@ describe('end-to-end install with real side effects', () => {
   it(
     'configureBeadsAfterInit wires repo-backed Dolt sync to git origin and untracks JSONL',
     () => {
-      expect(spawnSync('git', ['init'], { cwd: dir }).status).toBe(0)
-      expect(
-        spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:example/repo.git'], {
-          cwd: dir,
-        }).status,
-      ).toBe(0)
+      expect(git(dir, 'init').status).toBe(0)
+      expect(git(dir, 'remote', 'add', 'origin', 'git@github.com:example/repo.git').status).toBe(0)
 
       installBeadsCli(dir)
       writeFileSync(join(dir, '.beads/issues.jsonl'), '{}\n')
-      expect(spawnSync('git', ['add', '.beads/issues.jsonl'], { cwd: dir }).status).toBe(0)
+      expect(git(dir, 'add', '.beads/issues.jsonl').status).toBe(0)
 
       const result = configureBeadsAfterInit(dir)
       expect(result.ok).toBe(true)
@@ -163,10 +168,7 @@ describe('end-to-end install with real side effects', () => {
 
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8')
       expect(gitignore).toContain('.beads/issues.jsonl')
-      const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '.beads/issues.jsonl'], {
-        cwd: dir,
-        encoding: 'utf8',
-      })
+      const tracked = git(dir, 'ls-files', '--error-unmatch', '.beads/issues.jsonl')
       expect(tracked.status).not.toBe(0)
       expect(existsSync(join(dir, '.beads/issues.jsonl'))).toBe(true)
 
@@ -185,15 +187,11 @@ describe('end-to-end install with real side effects', () => {
   it(
     'migrateBeadsRepoBackedDolt is idempotent and always untracks issues.jsonl',
     () => {
-      expect(spawnSync('git', ['init'], { cwd: dir }).status).toBe(0)
-      expect(
-        spawnSync('git', ['remote', 'add', 'origin', 'git@github.com:example/repo.git'], {
-          cwd: dir,
-        }).status,
-      ).toBe(0)
+      expect(git(dir, 'init').status).toBe(0)
+      expect(git(dir, 'remote', 'add', 'origin', 'git@github.com:example/repo.git').status).toBe(0)
       installBeadsCli(dir)
       writeFileSync(join(dir, '.beads/issues.jsonl'), '')
-      expect(spawnSync('git', ['add', '.beads/issues.jsonl'], { cwd: dir }).status).toBe(0)
+      expect(git(dir, 'add', '.beads/issues.jsonl').status).toBe(0)
 
       const first = migrateBeadsRepoBackedDolt(dir)
       expect(
@@ -218,10 +216,7 @@ describe('end-to-end install with real side effects', () => {
 
       const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8')
       expect(gitignore).toContain('.beads/issues.jsonl')
-      const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '.beads/issues.jsonl'], {
-        cwd: dir,
-        encoding: 'utf8',
-      })
+      const tracked = git(dir, 'ls-files', '--error-unmatch', '.beads/issues.jsonl')
       expect(tracked.status).not.toBe(0)
       expect(existsSync(join(dir, '.beads/issues.jsonl'))).toBe(true)
 
@@ -374,6 +369,7 @@ just rules, no session completion
     expect(plugin).toContain("import { spawnSync } from 'node:child_process'")
     expect(plugin).toContain('destructive-command-guard.sh')
     expect(plugin).toContain('block-todowrite.sh')
+    expect(plugin).toContain('WORKTREE_POLICY')
 
     // Lefthook YAML is valid structure
     const lefthook = readFileSync(join(dir, 'lefthook.yml'), 'utf8')
@@ -387,6 +383,9 @@ just rules, no session completion
     expect(lefthook).toContain('mise run typecheck')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks.typecheck]')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('run = "cargo check"')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:max-sixty/worktrunk"')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:setup"]')
+    expect(readFileSync(join(dir, '.config/wt.toml'), 'utf8')).toContain('.agents/worktrees')
   })
 
   it('settings.json hooks reference real script paths', async () => {

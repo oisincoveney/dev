@@ -428,6 +428,7 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   writeGeneratedFile(cwd, 'AGENTS.md', agentsMd(data))
   writeGeneratedFile(cwd, 'CLAUDE.md', claudeMd())
   writeGeneratedFile(cwd, 'agents.toml', agentsToml(data))
+  writeGeneratedFile(cwd, '.config/wt.toml', worktrunkToml())
   ensureMiseToml(cwd, data)
   ensureLefthookYml(cwd, data)
 
@@ -506,18 +507,28 @@ export function mergeMiseToolLines(existing: string, requiredLines: string[]): s
 }
 
 export function mergeMiseTaskBlocks(existing: string, commands: Record<string, string>): string {
-  const missing = Object.entries(commands).filter(([name]) => !hasTomlSection(existing, `tasks.${name}`))
+  const requiredTasks = { ...commands, ...worktreeTaskCommands(commands) }
+  const missing = Object.entries(requiredTasks).filter(([name]) => !hasMiseTaskSection(existing, name))
   if (missing.length === 0) return existing
 
   const suffix = missing
-    .map(([name, command]) => ['', `[tasks.${name}]`, `run = ${JSON.stringify(command)}`].join('\n'))
+    .map(([name, command]) => ['', miseTaskHeader(name), `run = ${JSON.stringify(command)}`].join('\n'))
     .join('\n')
   return `${existing.replace(/\s+$/, '')}\n${suffix}\n`
+}
+
+function hasMiseTaskSection(source: string, name: string): boolean {
+  return hasTomlSection(source, `tasks.${name}`) || hasTomlSection(source, `tasks."${name}"`)
 }
 
 function hasTomlSection(source: string, section: string): boolean {
   const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return new RegExp(`^\\s*\\[${escaped}\\]\\s*$`, 'm').test(source)
+}
+
+function miseTaskHeader(name: string): string {
+  if (/^[A-Za-z0-9_-]+$/.test(name)) return `[tasks.${name}]`
+  return `[tasks.${JSON.stringify(name)}]`
 }
 
 export function ensureLefthookYml(cwd: string, data?: TemplateData): void {
@@ -632,6 +643,7 @@ function requiredMiseToolLines(data?: TemplateData): string[] {
     '"pipx:copier" = "9.14.0"',
     '"npm:@sentry/dotagents" = "latest"',
     '"aqua:evilmartians/lefthook" = "latest"',
+    '"github:max-sixty/worktrunk" = "latest"',
   ]
   if (data?.beads_enabled === true) lines.push('"aqua:steveyegge/beads" = "1.0.2"')
   return lines
@@ -715,7 +727,7 @@ export function agentsMd(data: TemplateData): string {
   ]
   if (data.beads_enabled) {
     lines.push('- Use the tracker workflow for planned work; beads is the first tracker adapter.')
-    lines.push('- `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in an agent worktree, verifies, commits, and may push/PR when branch rules allow.')
+    lines.push('- `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in a Worktrunk-managed agent worktree, verifies, commits, and may push/PR when branch rules allow.')
     lines.push('- `/plan [priority] <goal>` creates tracker-backed work in review state and stops. `/approve <id>` unlocks it; `/work-next` executes approved ready work; `/finish` integrates verified work.')
     lines.push('- Tracker data is canonical. Store machine-readable workflow state in tracker metadata (`metadata.workflow` for beads), not disk plan files.')
     lines.push('- Run `bd prime` for workflow context when starting or after compaction.')
@@ -723,6 +735,8 @@ export function agentsMd(data: TemplateData): string {
     lines.push('- Do not commit `.beads/issues.jsonl`; shared ticket state lives in repo-backed Dolt refs.')
   }
   lines.push('- Never run destructive commands without explicit user approval.')
+  lines.push('- Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>`; full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.')
+  lines.push('- Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.')
   lines.push('- Read before editing; verify before claiming done.')
   lines.push('- Say "I need to verify" when uncertain, then check.')
   lines.push('- User constraints are non-negotiable.')
@@ -736,6 +750,7 @@ export function agentsMd(data: TemplateData): string {
   lines.push('- Skills: `.agents/skills/`, linked into tool-specific locations by @oisincoveney/dev.')
   lines.push('- Git hooks: `lefthook.yml`.')
   lines.push('- Commands/tool versions: `mise.toml`.')
+  lines.push('- Worktree lifecycle: Worktrunk project hooks in `.config/wt.toml`; canonical agent root is `.agents/worktrees/`.')
   lines.push('- Runtime overlays: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`.')
   if (data.beads_enabled) {
     lines.push('', '## Beads Quick Reference', '')
@@ -779,6 +794,7 @@ function miseToml(data: TemplateData): string {
   lines.push('"pipx:copier" = "9.14.0"')
   lines.push('"npm:@sentry/dotagents" = "latest"')
   lines.push('"aqua:evilmartians/lefthook" = "latest"')
+  lines.push('"github:max-sixty/worktrunk" = "latest"')
   if (data.beads_enabled) lines.push('"aqua:steveyegge/beads" = "1.0.2"')
   for (const [name, command] of Object.entries(data.commands)) {
     lines.push('', `[tasks.${name}]`)
@@ -789,8 +805,62 @@ function miseToml(data: TemplateData): string {
     lines.push('', '[tasks.verify]')
     lines.push(`depends = [${verify.map((name) => JSON.stringify(name)).join(', ')}]`)
   }
+  for (const [name, command] of Object.entries(worktreeTaskCommands(data.commands))) {
+    lines.push('', miseTaskHeader(name))
+    lines.push(`run = ${JSON.stringify(command)}`)
+  }
   lines.push('')
   return lines.join('\n')
+}
+
+function worktreeTaskCommands(commands: Record<string, string>): Record<string, string> {
+  const verify = commands.verify !== undefined
+    ? 'mise run verify'
+    : ['typecheck', 'lint', 'test'].filter((name) => commands[name] !== undefined).map((name) => `mise run ${name}`).join(' && ')
+
+  return {
+    'worktree:setup': [
+      'mise install',
+      'if [[ -f package.json && -f bun.lockb || -f package.json && -f bun.lock ]]; then',
+      '  command -v bun >/dev/null 2>&1 && bun install --frozen-lockfile || true',
+      'elif [[ -f package.json && -f pnpm-lock.yaml ]]; then',
+      '  command -v pnpm >/dev/null 2>&1 && pnpm install --frozen-lockfile || true',
+      'elif [[ -f package.json && -f yarn.lock ]]; then',
+      '  command -v yarn >/dev/null 2>&1 && yarn install --immutable || true',
+      'elif [[ -f package.json && -f package-lock.json ]]; then',
+      '  command -v npm >/dev/null 2>&1 && npm ci || true',
+      'else',
+      '  echo "No dependency setup detected for this worktree."',
+      'fi',
+    ].join('\n'),
+    'worktree:verify': verify.length > 0 ? verify : 'echo "No worktree verification task configured."',
+    'worktree:teardown': [
+      'for dir in .claude/hook-state .codex/hook-state .cursor/hook-state .opencode/hook-state; do',
+      '  [[ -e "$dir" ]] || continue',
+      '  if git ls-files -- "$dir" | grep -q .; then',
+      '    echo "Skipping tracked runtime path: $dir"',
+      '  else',
+      '    rm -rf "$dir"',
+      '  fi',
+      'done',
+    ].join('\n'),
+  }
+}
+
+function worktrunkToml(): string {
+  return `# Worktrunk project hooks for @oisincoveney/dev generated worktrees.
+# Agent implementation work must create branches with:
+#   WORKTRUNK_WORKTREE_PATH="$PWD/.agents/worktrees/{{ branch | sanitize }}" wt switch --create <branch>
+
+[pre-start]
+setup = "mise run worktree:setup"
+
+[pre-merge]
+verify = "mise run worktree:verify"
+
+[pre-remove]
+teardown = "mise run worktree:teardown"
+`
 }
 
 function lefthookYml(data: TemplateData): string {
@@ -895,6 +965,8 @@ globs: ["**/*"]
 # Project Rules
 
 Use \`AGENTS.md\` as the canonical project instruction file. Skills live in \`.agents/skills/\` and are linked into tool-specific locations by @oisincoveney/dev.
+
+Agent implementation work must use Worktrunk (\`wt\`) worktrees under \`.agents/worktrees/<task-or-branch>\`. Full clones, scratch directories, \`/tmp\`, \`/private/tmp\`, and \`TMPDIR\` overrides are forbidden. Run setup, verification, and teardown through \`mise run worktree:setup\`, \`mise run worktree:verify\`, and \`mise run worktree:teardown\`.
 `
 }
 
@@ -914,6 +986,7 @@ interface ToolEvent {
 const HOOKS_DIR = '.claude/hooks'
 const HAS_TYPESCRIPT = ${JSON.stringify(data.has_typescript)}
 const BEADS_ENABLED = ${JSON.stringify(data.beads_enabled)}
+const WORKTREE_POLICY = 'Agent implementation work must use Worktrunk worktrees under .agents/worktrees; clones, temp scratch paths, and TMPDIR overrides are blocked.'
 
 function toolKey(tool: string): string {
   return tool.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
@@ -956,6 +1029,7 @@ export default {
     if (key.includes('bash') || key.includes('shell') || key.includes('exec')) {
       const destructive = runHook('destructive-command-guard.sh', toolInput)
       if (!destructive.allowed) throw new Error(destructive.message)
+      void WORKTREE_POLICY
       const coauthor = runDispatchedHook('block-coauthor', toolInput)
       if (!coauthor.allowed) throw new Error(coauthor.message)
       return

@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { gitSubprocessEnv } from './git-env.js'
 import * as p from '@clack/prompts'
 import { configureBeadsAfterInit } from './install.js'
 import { readInternalState, runResetOrchestration } from './orchestrator.js'
@@ -96,6 +97,7 @@ export function gitWorktreeClean(cwd: string): { ok: true } | { ok: false; messa
   const inside = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], {
     cwd,
     encoding: 'utf8',
+    env: gitSubprocessEnv(),
     stdio: 'pipe',
   })
   if (inside.status !== 0) {
@@ -108,6 +110,7 @@ export function gitWorktreeClean(cwd: string): { ok: true } | { ok: false; messa
   const status = spawnSync('git', ['status', '--porcelain'], {
     cwd,
     encoding: 'utf8',
+    env: gitSubprocessEnv(),
     stdio: 'pipe',
   })
   if (status.status !== 0) {

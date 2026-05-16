@@ -38,6 +38,9 @@ if [[ -f ".copier-answers.yml" || -f "mise.toml" ]]; then
   typecheck="mise run typecheck"
   lint="mise run lint"
   format="mise run format"
+  worktree_setup="mise run worktree:setup"
+  worktree_verify="mise run worktree:verify"
+  worktree_teardown="mise run worktree:teardown"
 
   project_info="Project: $variant ($language) | workflow: $workflow
 
@@ -47,7 +50,14 @@ Commands (use these exact mise tasks — do not guess package-manager alternativ
   test:      $test_cmd
   typecheck: $typecheck
   lint:      $lint
-  format:    $format"
+  format:    $format
+
+Worktree policy:
+  Agent implementation work must use Worktrunk worktrees under .agents/worktrees/.
+  Full clones, scratch directories, /tmp, /private/tmp, and TMPDIR overrides are forbidden.
+  setup:    $worktree_setup
+  verify:   $worktree_verify
+  teardown: $worktree_teardown"
 
   context="$context
 

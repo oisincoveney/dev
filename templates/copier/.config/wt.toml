@@ -1,0 +1,12 @@
+# Worktrunk project hooks for @oisincoveney/dev generated worktrees.
+# Agent implementation work must create branches with:
+#   WORKTRUNK_WORKTREE_PATH="$PWD/.agents/worktrees/{{ branch | sanitize }}" wt switch --create <branch>
+
+[pre-start]
+setup = "mise run worktree:setup"
+
+[pre-merge]
+verify = "mise run worktree:verify"
+
+[pre-remove]
+teardown = "mise run worktree:teardown"

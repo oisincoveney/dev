@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Stop hook — when running inside a parallel-tickets worker (cwd under
-# .claude/worktrees/<name>/), block stop if the worker hasn't completed
+# Stop hook — when running inside an implementation-agent worktree (cwd under
+# .agents/worktrees/<name>/, .claude/worktrees/<name>/, or
+# .codex/worktrees/<name>/), block stop if the worker hasn't completed
 # its lifecycle: uncommitted changes, unpushed commits, or a bd ticket
 # still in_progress on its branch.
 #
-# Background: workers were terminating after spec-verifier returned, treating
+# Background: workers can terminate after spec-verifier returns, treating
 # the verifier's "## Result: PASS" markdown as a return value and skipping
 # steps 6-10 (close + commit + push + status). This hook forces the worker
 # back into the loop until the worktree is clean.
@@ -18,12 +19,12 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null || true)
 
 # Only enforce inside a worktree.
 case "$CWD" in
-  */.claude/worktrees/*) ;;
+  */.agents/worktrees/*|*/.claude/worktrees/*|*/.codex/worktrees/*) ;;
   *) exit 0 ;;
 esac
 
 # Resolve worktree root.
-WORKTREE_ROOT=$(printf '%s' "$CWD" | sed -E 's|(/.claude/worktrees/[^/]+).*|\1|')
+WORKTREE_ROOT=$(printf '%s' "$CWD" | sed -E 's#(/\.(agents|claude|codex)/worktrees/[^/]+).*#\1#')
 [[ -z "$WORKTREE_ROOT" || ! -d "$WORKTREE_ROOT" ]] && exit 0
 
 # All git commands run against the worktree, regardless of caller cwd.
@@ -78,7 +79,7 @@ fi
 [[ ${#REASONS[@]} -eq 0 ]] && exit 0
 
 echo "" >&2
-echo "⛔ Parallel-tickets worker stop blocked." >&2
+echo "⛔ Implementation-agent worktree stop blocked." >&2
 echo "" >&2
 echo "   Worktree: $WORKTREE_ROOT" >&2
 echo "" >&2
