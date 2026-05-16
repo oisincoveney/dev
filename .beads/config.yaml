@@ -53,9 +53,14 @@
 # - github.org
 # - github.repo
 
-export.auto: false
-export.git-add: false
-dolt.auto-push: false
-no-push: true
+sync.remote: "git+ssh://git@github.com/./example/repo.git"
 
 validation.on-create: "warn"
+
+export.auto: false
+
+export.git-add: false
+
+dolt.auto-push: false
+
+no-push: true
