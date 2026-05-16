@@ -9,10 +9,10 @@ description: Uncertainty, scope discipline, constraints as hard requirements
 
 Before write code using external API/lib/feature not verified THIS session:
 1. Say: "I need to verify <X>"
-2. Verify in order: (a) docs via WebFetch/WebSearch, (b) first-party project source, (c) `node_modules`/vendored only as last resort.
+2. Verify in order: (a) official docs/web via WebFetch/WebSearch, (b) first-party project source, (c) `node_modules`/vendored/generated files only as last resort.
 3. Confirmed → proceed. Not confirmed → ask or use actual API.
 
-Research default: web + docs first. Don't open research by spelunking `node_modules` or lockfiles — noisy, often stale vs upstream. Buried dep files only when web/docs can't answer.
+Research default: official docs/web first. Don't open research by spelunking `node_modules`, lockfiles, build output, or generated files — noisy, often stale vs upstream. Buried dep files only when web/docs can't answer or pinned local behavior matters.
 
 Never claim API exists from training alone. Verify or abstain. Confident wrong > honest uncertain — false.
 
@@ -65,7 +65,9 @@ Don't add "Co-Authored-By: Claude" to commits.
 Do ONLY what asked. No bonus refactors, no unsolicited files, no proactive "improvements", no tangential cleanup. Spot something worth changing not asked → mention one line at end, don't fix.
 
 - User asks question → ANSWER. Don't jump to editing.
-- User asks investigate → INVESTIGATE. Don't implement mid-investigation.
+- User asks investigate/research → INVESTIGATE/REPORT. Don't implement mid-investigation.
+- User says quick/no-worktree without `/quick` → answer or investigate only. Mutations require explicit edit request or workflow command.
+- User uses `/quick`, `/work-next`, or `/finish` → follow tracker workflow exactly.
 - Clarifying question pending → wait before changes.
 - Never delete user files (PDFs, configs, artifacts, uncommitted work) without permission.
 - Scope creep during bug fix still scope creep. Fix bug; followup for rest.

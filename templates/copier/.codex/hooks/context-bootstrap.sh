@@ -23,6 +23,9 @@ Drop caveman temporarily for: security warnings, irreversible action confirmatio
 
 Code/commits/PRs: write normal. Caveman applies to user-facing text only.
 Tracker workflow: tracker metadata is canonical. For beads, machine-readable workflow state lives in metadata.workflow JSON; description is human-readable only.
+Intent gate: question means answer only; investigate/research means report findings only; mutation requires explicit edit request or /quick, /work-next, /finish.
+Research gate: official docs/web first; project source second; node_modules, vendored deps, generated/build files only last resort.
+No terminal follow-up prompts. State result and stop unless blocked.
 Spawned agents: include this communication mode in their prompt. Fresh agent may not inherit session context.
 CAVEMAN
 

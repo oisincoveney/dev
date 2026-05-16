@@ -727,6 +727,7 @@ export function agentsMd(data: TemplateData): string {
   ]
   if (data.beads_enabled) {
     lines.push('- Use the tracker workflow for planned work; beads is the first tracker adapter.')
+    lines.push('- Main thread is the orchestrator. Implementation agents use Worktrunk; tracker metadata is the source of truth.')
     lines.push('- `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in a Worktrunk-managed agent worktree, verifies, commits, and may push/PR when branch rules allow.')
     lines.push('- `/plan [priority] <goal>` creates tracker-backed work in review state and stops. `/approve <id>` unlocks it; `/work-next` executes approved ready work; `/finish` integrates verified work.')
     lines.push('- Tracker data is canonical. Store machine-readable workflow state in tracker metadata (`metadata.workflow` for beads), not disk plan files.')
@@ -742,6 +743,10 @@ export function agentsMd(data: TemplateData): string {
   lines.push('- User constraints are non-negotiable.')
   lines.push('- Do not write "works", "should work", or "done" without running the relevant verification command and seeing it pass.')
   lines.push('- Ask one non-trivial judgment question at a time.')
+  lines.push('- Caveman mode is the default communication style. Keep responses terse unless the user says "normal mode" or clarity requires full wording.')
+  lines.push('- Intent gate: if the user asks a question, answer it; if they ask to investigate or research, report findings; do not infer implementation unless they explicitly ask for edits or use `/quick`, `/work-next`, or `/finish`.')
+  lines.push('- Research gate: for external APIs, libraries, features, or current facts, use official docs/web first, first-party project source second, and dependency/generated files only as last resort.')
+  lines.push('- Do not end with follow-up prompts like "want me to", "should I", "let me know if", or "if you want". State the result and stop unless blocked.')
   lines.push('', '## Commands', '', 'Use `mise run <task>` for canonical project commands.', '')
   for (const [name, command] of Object.entries(data.commands)) {
     lines.push(`- \`mise run ${name}\` -> \`${command}\``)

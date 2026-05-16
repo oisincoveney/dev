@@ -386,6 +386,17 @@ just rules, no session completion
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:max-sixty/worktrunk"')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:setup"]')
     expect(readFileSync(join(dir, '.config/wt.toml'), 'utf8')).toContain('.agents/worktrees')
+
+    const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
+    expect(agents).toContain('Main thread is the orchestrator')
+    expect(agents).toContain('if the user asks a question, answer it')
+    expect(agents).toContain('official docs/web first')
+    expect(agents).toContain('Do not end with follow-up prompts')
+    expect(agents).not.toContain('codex_hooks')
+
+    const bootstrap = readFileSync(join(dir, '.codex/hooks/context-bootstrap.sh'), 'utf8')
+    expect(bootstrap).toContain('COMMUNICATION MODE — caveman')
+    expect(bootstrap).toContain('question means answer only')
   })
 
   it('settings.json hooks reference real script paths', async () => {

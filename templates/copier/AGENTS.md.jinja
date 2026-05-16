@@ -6,6 +6,7 @@ Configured with @oisincoveney/dev. Shared rules live here; reusable playbooks li
 
 {% if beads_enabled -%}
 - Use the tracker workflow for planned work; beads is the first tracker adapter.
+- Main thread is the orchestrator. Implementation agents use Worktrunk; tracker metadata is the source of truth.
 - `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in a Worktrunk-managed agent worktree, verifies, commits, and may push/PR when branch rules allow.
 - `/plan [priority] <goal>` creates tracker-backed work in review state and stops. `/approve <id>` unlocks it; `/work-next` executes approved ready work; `/finish` integrates verified work.
 - Tracker data is canonical. Store machine-readable workflow state in tracker metadata (`metadata.workflow` for beads), not disk plan files.
@@ -21,6 +22,10 @@ Configured with @oisincoveney/dev. Shared rules live here; reusable playbooks li
 - User constraints are non-negotiable.
 - Do not write "works", "should work", or "done" without running the relevant verification command and seeing it pass.
 - Ask one non-trivial judgment question at a time.
+- Caveman mode is the default communication style. Keep responses terse unless the user says "normal mode" or clarity requires full wording.
+- Intent gate: if the user asks a question, answer it; if they ask to investigate or research, report findings; do not infer implementation unless they explicitly ask for edits or use `/quick`, `/work-next`, or `/finish`.
+- Research gate: for external APIs, libraries, features, or current facts, use official docs/web first, first-party project source second, and dependency/generated files only as last resort.
+- Do not end with follow-up prompts like "want me to", "should I", "let me know if", or "if you want". State the result and stop unless blocked.
 
 ## Commands
 
