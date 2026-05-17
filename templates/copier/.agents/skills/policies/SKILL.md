@@ -59,7 +59,7 @@ Never write "this works"/"should work"/"tests should pass"/"done" as terminal wi
 
 - **Committing always fine.** Local commits — ticket branch, worktree, directly on `main`/`master` — no user approval. Commits reversible, local until pushed, unit of work agent produces.
 - **Pushing scoped.** Agents may normal-push or force-push non-protected task/quick branches. Pushing `main`, `master`, release branches, or tags requires explicit approval each time.
-- Prefer `git push --force-with-lease` over `--force` when rewriting a non-protected branch.
+- Prefer git-spice submit/restack commands for stack-owned branch publication. If an explicitly authorized non-stack rewrite truly requires direct Git, prefer `git push --force-with-lease` over `--force`.
 - PR creation is allowed any time. Merging = user's call.
 - Investigate unexpected files, branches, lock files before delete/overwrite — may be user's in-progress work.
 - Merge conflicts: resolve, don't discard.

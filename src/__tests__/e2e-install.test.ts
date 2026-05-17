@@ -341,6 +341,7 @@ just rules, no session completion
     // TS dispatcher in 0t6 — its `.sh` file is no longer shipped.
     const hooks = [
       'destructive-command-guard.sh',
+      'git-spice-command-guard.sh',
       'block-todowrite.sh',
       'import-validator.sh',
       'post-edit-check.sh',
@@ -368,7 +369,9 @@ just rules, no session completion
     const plugin = readFileSync(join(dir, '.opencode/plugins/dev-enforcer.ts'), 'utf8')
     expect(plugin).toContain("import { spawnSync } from 'node:child_process'")
     expect(plugin).toContain('destructive-command-guard.sh')
+    expect(plugin).toContain('git-spice-command-guard.sh')
     expect(plugin).toContain('block-todowrite.sh')
+    expect(plugin).toContain('STACK_POLICY')
     expect(plugin).toContain('WORKTREE_POLICY')
 
     // Lefthook YAML is valid structure
@@ -383,6 +386,7 @@ just rules, no session completion
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks.typecheck]')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('run = "cargo check"')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:max-sixty/worktrunk"')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:abhinav/git-spice"')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:setup"]')
     expect(readFileSync(join(dir, '.config/wt.toml'), 'utf8')).toContain('.agents/worktrees')
     expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.agents/worktrees/')
@@ -390,6 +394,7 @@ just rules, no session completion
     expect(readFileSync(join(dir, '.opencode/commands/quick.md'), 'utf8')).toContain('Worktrunk-managed quick task')
     expect(readFileSync(join(dir, '.agents/skills/quick/SKILL.md'), 'utf8')).toContain('Do not edit in the current checkout')
     expect(readFileSync(join(dir, '.agents/skills/tracker-workflow/SKILL.md'), 'utf8')).toContain('including `/quick`')
+    expect(readFileSync(join(dir, '.agents/skills/tracker-workflow/SKILL.md'), 'utf8')).toContain('git-spice owns stack-aware')
     expect(readFileSync(join(dir, '.agents/skills/tracker-workflow/SKILL.md'), 'utf8')).not.toContain('No Worktrunk setup')
     expect(readFileSync(join(dir, '.agents/skills/work-next/SKILL.md'), 'utf8')).toContain('Worktrunk-managed')
     expect(existsSync(join(dir, '.codex/skills/quick'))).toBe(true)

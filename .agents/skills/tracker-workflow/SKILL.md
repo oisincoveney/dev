@@ -13,11 +13,11 @@ Use `wt` for agent worktree lifecycle. Do not create full clones, scratch direct
 
 ## Commands
 
-- `/quick [P2|P3] <task>` — low-ceremony path. Defaults to P3; explicit P2 allowed. Never P0/P1. Dispatch a quick implementation agent in a Worktrunk worktree for `quick/p3/<slug>` or `quick/p2/<slug>`. Run normal verification, commit, merge back after verification, resolve conflicts if still quick, then push/PR by branch rules.
+- `/quick [P2|P3] <task>` — low-ceremony path. Defaults to P3; explicit P2 allowed. Never P0/P1. Dispatch a quick implementation agent in a Worktrunk worktree for `quick/p3/<slug>` or `quick/p2/<slug>`. Run normal verification, commit with git-spice, merge back after verification, resolve conflicts if still quick, then submit with git-spice when branch rules allow.
 - `/plan [priority] <goal>` — create tracker item in `review` state and stop. Single-task and multi-ticket plans both require review.
 - `/approve <id>` — hash current title, description, priority, type, and `metadata.workflow.plan`; store approval and move item to `ready`.
 - `/work-next` — execute approved ready tracker work through implementation agents.
-- `/finish` — verify integrated work, group PRs per approved PR plan, push/open PRs by branch rules.
+- `/finish` — verify integrated work, group PRs per approved PR plan, submit stacked PRs with git-spice by branch rules.
 
 Natural language handles rejection, regrill, reprioritize, split, merge, defer, and verifier reruns.
 
@@ -101,11 +101,13 @@ Mechanical broad edits must be explicit in `pr_groups` with rationale and verifi
 
 ## Branch and Push Rules
 
+Worktrunk owns worktree lifecycle. git-spice owns stack-aware branch creation, checkout, tracking, restacking, commit creation/amendment, branch publication, and PR creation/update. Direct `git`/`gh` commands for git-spice-owned operations are blocked by hooks.
+
 Branches:
 - `/quick`: `quick/p3/<slug>` or `quick/p2/<slug>`
 - tracked task/child: `task/<id>-<slug>`
 - collisions append `-2`, `-3`, etc.
 
-Implementation agents commit before returning. Worktrees end clean. Canonical path is `.agents/worktrees/<branch-sanitized>`; `.claude/worktrees/` and `.codex/worktrees/` are compatibility roots only.
+Implementation agents commit with `git-spice commit create` or `git-spice commit amend` before returning. Worktrees end clean. Canonical path is `.agents/worktrees/<branch-sanitized>`; `.claude/worktrees/` and `.codex/worktrees/` are compatibility roots only.
 
-Allow normal and force pushes on non-protected branches. Allow PR creation any time. Block pushes to `main`, `master`, release branches, and tags unless explicitly authorized.
+Use `git-spice branch submit` or `git-spice stack submit` for non-protected task/quick branch PRs. Serialize `git-spice stack restack` and `git-spice stack submit` per stack. Block pushes to `main`, `master`, release branches, and tags unless explicitly authorized.

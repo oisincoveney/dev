@@ -38,6 +38,7 @@ case "$TOOL_KEY" in
   bash|shell|exec|exec_command|*_bash|*_shell|*_exec|*_exec_command)
     SCRIPTS+=(
       "$HOOK_DIR/destructive-command-guard.sh"
+      "$HOOK_DIR/git-spice-command-guard.sh"
     )
     if [[ "${OISIN_DEV_BEADS:-}" == "1" ]]; then
       SCRIPTS+=(
