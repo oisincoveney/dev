@@ -429,6 +429,7 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   writeGeneratedFile(cwd, 'CLAUDE.md', claudeMd())
   writeGeneratedFile(cwd, 'agents.toml', agentsToml(data))
   writeGeneratedFile(cwd, '.config/wt.toml', worktrunkToml())
+  ensureGeneratedGitignoreEntries(cwd)
   ensureMiseToml(cwd, data)
   ensureLefthookYml(cwd, data)
 
@@ -462,6 +463,16 @@ function writeGeneratedFile(cwd: string, relPath: string, content: string): void
   const absPath = join(cwd, relPath)
   mkdirSync(dirname(absPath), { recursive: true })
   writeFileSync(absPath, content)
+}
+
+function ensureGeneratedGitignoreEntries(cwd: string): void {
+  const path = join(cwd, '.gitignore')
+  const existing = existsSync(path) ? readFileSync(path, 'utf8') : ''
+  const lines = existing.split(/\r?\n/)
+  const additions = ['.agents/worktrees/'].filter((pattern) => !lines.includes(pattern))
+  if (additions.length === 0) return
+  const prefix = existing.length === 0 || existing.endsWith('\n') ? '' : '\n'
+  writeFileSync(path, `${existing}${prefix}${additions.join('\n')}\n`)
 }
 
 export function ensureMiseToml(cwd: string, data?: TemplateData): void {
@@ -727,8 +738,8 @@ export function agentsMd(data: TemplateData): string {
   ]
   if (data.beads_enabled) {
     lines.push('- Use the tracker workflow for planned work; beads is the first tracker adapter.')
-    lines.push('- Main thread is the orchestrator. Implementation agents use Worktrunk for planned/tracker-backed execution; tracker metadata is the source of truth.')
-    lines.push('- `/quick [P2|P3] <task>` is the explicit inline current-branch tiny-edit lane. It defaults P3; explicit P2 is allowed; P0/P1 are blocked. It requires read-before-edit, relevant docs-first research, focused verification, and a commit. No Worktrunk setup for `/quick`.')
+    lines.push('- Main thread is the orchestrator. All implementation, including `/quick`, runs in Worktrunk-managed agent worktrees; tracker metadata is the source of truth.')
+    lines.push('- `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in a Worktrunk-managed agent worktree, verifies, commits, and may push/PR when branch rules allow.')
     lines.push('- `/plan [priority] <goal>` creates tracker-backed work in review state and stops. `/approve <id>` unlocks it; `/work-next` executes approved ready work; `/finish` integrates verified work.')
     lines.push('- Tracker data is canonical. Store machine-readable workflow state in tracker metadata (`metadata.workflow` for beads), not disk plan files.')
     lines.push('- Run `bd prime` for workflow context when starting or after compaction.')
@@ -736,7 +747,7 @@ export function agentsMd(data: TemplateData): string {
     lines.push('- Do not commit `.beads/issues.jsonl`; shared ticket state lives in repo-backed Dolt refs.')
   }
   lines.push('- Never run destructive commands without explicit user approval.')
-  lines.push('- Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>` are required for `/work-next`, approved tracker work, multi-ticket work, delegated agents, and normal implementation tasks. Current checkout is allowed for answer-only, investigation-only, and explicit `/quick` inline edits. Full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.')
+  lines.push('- Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>`; full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.')
   lines.push('- Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.')
   lines.push('- Read before editing; verify before claiming done.')
   lines.push('- Say "I need to verify" when uncertain, then check.')
@@ -744,7 +755,7 @@ export function agentsMd(data: TemplateData): string {
   lines.push('- Do not write "works", "should work", or "done" without running the relevant verification command and seeing it pass.')
   lines.push('- Ask one non-trivial judgment question at a time.')
   lines.push('- Caveman mode is the default communication style. Keep responses terse unless the user says "normal mode" or clarity requires full wording.')
-  lines.push('- Intent gate: question means answer only; investigate/research means report only; `/quick` means inline tiny edit; `/work-next` or approved tracker work means Worktrunk implementation.')
+  lines.push('- Intent gate: question means answer only; investigate/research means report only; `/quick` means Worktrunk quick worktree; `/work-next` or approved tracker work means Worktrunk implementation.')
   lines.push('- Research gate: for external APIs, libraries, features, or current facts, use official docs/web first, first-party project source second, and dependency/generated files only as last resort.')
   lines.push('- Do not end with follow-up prompts like "want me to", "should I", "let me know if", or "if you want". State the result and stop unless blocked.')
   lines.push('', '## Commands', '', 'Use `mise run <task>` for canonical project commands.', '')
@@ -968,7 +979,7 @@ globs: ["**/*"]
 
 Use \`AGENTS.md\` as the canonical project instruction file. Skills live in \`.agents/skills/\` and are linked into tool-specific locations by @oisincoveney/dev.
 
-Worktrunk (\`wt\`) worktrees under \`.agents/worktrees/<task-or-branch>\` are required for \`/work-next\`, approved tracker work, multi-ticket work, delegated agents, and normal implementation tasks. Current checkout is allowed for answer-only, investigation-only, and explicit \`/quick\` inline edits. Full clones, scratch directories, \`/tmp\`, \`/private/tmp\`, and \`TMPDIR\` overrides are forbidden. Run setup, verification, and teardown through \`mise run worktree:setup\`, \`mise run worktree:verify\`, and \`mise run worktree:teardown\`.
+Agent implementation work must use Worktrunk (\`wt\`) worktrees under \`.agents/worktrees/<task-or-branch>\`. Full clones, scratch directories, \`/tmp\`, \`/private/tmp\`, and \`TMPDIR\` overrides are forbidden. Run setup, verification, and teardown through \`mise run worktree:setup\`, \`mise run worktree:verify\`, and \`mise run worktree:teardown\`.
 `
 }
 
@@ -988,7 +999,7 @@ interface ToolEvent {
 const HOOKS_DIR = '.claude/hooks'
 const HAS_TYPESCRIPT = ${JSON.stringify(data.has_typescript)}
 const BEADS_ENABLED = ${JSON.stringify(data.beads_enabled)}
-const WORKTREE_POLICY = 'Use Worktrunk worktrees for /work-next, approved tracker work, multi-ticket work, delegated agents, and normal implementation tasks. /quick stays inline on the current branch. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
+const WORKTREE_POLICY = 'Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
 
 function toolKey(tool: string): string {
   return tool.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')

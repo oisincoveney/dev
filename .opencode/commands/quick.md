@@ -1,18 +1,18 @@
 ---
-description: Explicit inline current-branch tiny edit.
+description: Low-ceremony Worktrunk-managed quick task.
 ---
 
 Follow the project `/quick` skill exactly.
 
 Use only for explicit `/quick [P2|P3] <task>`.
 
-- Stay in the current checkout and current branch.
-- Do not create a Worktrunk worktree.
+- Create and use a Worktrunk-managed quick worktree.
+- Do not edit in the current checkout.
 - Default P3; allow explicit P2; reject P0/P1.
 - Read before editing.
 - Use relevant official docs/web first when external APIs, libraries, features, or current facts are involved.
 - Reject migrations, auth/security/billing/data-risk, broad refactors, generated files, new dependencies, releases, or ambiguous work.
-- Run focused verification.
-- Commit the verified change.
+- Run normal verification.
+- Commit the verified change in the quick branch.
 
 Task: $ARGUMENTS

@@ -13,7 +13,7 @@ interface ToolEvent {
 const HOOKS_DIR = '.claude/hooks'
 const HAS_TYPESCRIPT = true
 const BEADS_ENABLED = true
-const WORKTREE_POLICY = 'Use Worktrunk worktrees for /work-next, approved tracker work, multi-ticket work, delegated agents, and normal implementation tasks. /quick stays inline on the current branch. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
+const WORKTREE_POLICY = 'Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
 
 function toolKey(tool: string): string {
   return tool.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
