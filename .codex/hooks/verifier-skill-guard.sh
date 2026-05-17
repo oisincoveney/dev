@@ -3,7 +3,7 @@
 #
 # `pre-stop-verification.sh` checks that the test command was run.
 # This hook checks that *review skills* were applied. When the agent
-# claims completion (or runs `bd close`) after editing files in this
+# claims completion (or marks a Backlog task Done) after editing files in this
 # session, it must have either:
 #
 #   (a) Spawned a fresh-context verifier — Skill spec-verifier OR
@@ -51,7 +51,7 @@ if [[ -n "$LAST_MSG" ]] && echo "$LAST_MSG" | grep -qiE \
   CLAIMS_DONE=true
 fi
 
-# ── Detect `bd close` Bash invocation anywhere in the session ───────────────
+# ── Detect Backlog completion Bash invocation anywhere in the session ───────
 BASH_COMMANDS=$(jq -r '
   (
     if .type == "tool_use" and .name == "Bash" then .input.command // empty
@@ -67,13 +67,13 @@ BASH_COMMANDS=$(jq -r '
   ) | select(. != null and . != "")
 ' "$TRANSCRIPT" 2>/dev/null || true)
 
-BD_CLOSE_RAN=false
-if [[ -n "$BASH_COMMANDS" ]] && echo "$BASH_COMMANDS" | grep -qE '(^|[^a-zA-Z0-9_-])bd[[:space:]]+close([[:space:]]|$)'; then
-  BD_CLOSE_RAN=true
+BACKLOG_DONE_RAN=false
+if [[ -n "$BASH_COMMANDS" ]] && echo "$BASH_COMMANDS" | grep -qE '(^|[^a-zA-Z0-9_-])backlog[[:space:]]+task[[:space:]]+edit([^|;&]*)(-s|--status)[[:space:]]+("?Done"?)'; then
+  BACKLOG_DONE_RAN=true
 fi
 
 # Neither claim nor close → nothing to gate.
-if [[ "$CLAIMS_DONE" == "false" && "$BD_CLOSE_RAN" == "false" ]]; then
+if [[ "$CLAIMS_DONE" == "false" && "$BACKLOG_DONE_RAN" == "false" ]]; then
   exit 0
 fi
 
@@ -172,7 +172,7 @@ done
 echo "" >&2
 echo "⛔ Verification skill(s) not invoked." >&2
 echo "" >&2
-echo "   You claimed completion (or ran 'bd close') after editing files," >&2
+echo "   You claimed completion (or marked a Backlog task Done) after editing files," >&2
 echo "   but didn't apply review skills. Either:" >&2
 echo "" >&2
 echo "   • Invoke the 'spec-verifier' skill, OR spawn an Agent whose" >&2

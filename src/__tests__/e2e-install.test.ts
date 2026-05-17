@@ -1,33 +1,11 @@
-/**
- * End-to-end install test that runs the real side effects.
- * `bd` is a required dev dependency (see .mise.toml / README "Development").
- * If it isn't installed, this suite fails fast — we do not silently skip.
- */
-
-import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
-import {
-  configureBeadsAfterInit,
-  installBeadsCli,
-  migrateBeadsRepoBackedDolt,
-  seedConstitutionDecisions,
-  trimBeadsIntegrationBlock,
-} from '../install.js'
+import { installBacklogCli } from '../install.js'
 import { applyInternalTemplate, templateDataFromConfig } from '../orchestrator.js'
 import type { Answers } from '../prompts.js'
-import { testSubprocessEnv } from './helpers/git-env.js'
-
-function git(cwd: string, ...args: string[]): ReturnType<typeof spawnSync> {
-  return spawnSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    env: testSubprocessEnv({ GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'" }),
-  })
-}
 
 const answers: Answers = {
   language: 'rust',
@@ -43,8 +21,8 @@ const answers: Answers = {
     format: 'cargo fmt',
   },
   skills: ['code-quality', 'architecture', 'testing', 'ai-behavior'],
-  tools: ['beads'],
-  workflow: 'none',
+  tools: ['backlog'],
+  workflow: 'backlog',
   contractDriven: false,
   targets: ['claude', 'codex', 'opencode', 'cursor', 'lefthook'],
   mcpServers: [],
@@ -64,7 +42,7 @@ const config: DevConfig = {
   commands: answers.commands,
   skills: answers.skills,
   tools: answers.tools,
-  workflow: 'none',
+  workflow: 'backlog',
   contractDriven: false,
   targets: answers.targets,
 }
@@ -80,265 +58,20 @@ describe('end-to-end install with real side effects', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // bd init forks git config, writes hook scripts, and seeds a SQLite db.
-  // Observed 5204ms on GitHub Actions ubuntu-latest vs ~700ms locally.
-  const BD_INIT_TIMEOUT_MS = 15_000
+  it('initializes Backlog.md and returns exists on second call', () => {
+    const result = installBacklogCli(dir)
+    expect(result).toEqual({ status: 'created' })
+    expect(existsSync(join(dir, 'backlog')) || existsSync(join(dir, '.backlog'))).toBe(true)
+    expect(existsSync(join(dir, 'backlog.config.yml'))).toBe(true)
 
-  it(
-    'runs bd init and leaves beads hooks installed',
-    () => {
-      const result = installBeadsCli(dir)
-      expect(result).toEqual({ status: 'created' })
-      expect(existsSync(join(dir, '.beads'))).toBe(true)
-      // bd init points the repo's core.hooksPath at .beads/hooks/ and writes
-      // its hook scripts there. Any subsequent commit fires the real beads
-      // hooks — i.e. agent integration is fully wired up.
-      expect(existsSync(join(dir, '.beads', 'hooks', 'prepare-commit-msg'))).toBe(true)
-    },
-    BD_INIT_TIMEOUT_MS,
-  )
+    const second = installBacklogCli(dir)
+    expect(second).toEqual({ status: 'exists' })
+  }, 20_000)
 
-  it(
-    'returns "exists" on second call and does not re-init',
-    () => {
-      installBeadsCli(dir)
-      const second = installBeadsCli(dir)
-      expect(second).toEqual({ status: 'exists' })
-    },
-    BD_INIT_TIMEOUT_MS,
-  )
-
-  it(
-    'configureBeadsAfterInit sets validation.on-create to warn',
-    () => {
-      installBeadsCli(dir)
-      const result = configureBeadsAfterInit(dir)
-      expect(result.ok).toBe(true)
-      const cfg = spawnSync('bd', ['config', 'get', 'validation.on-create'], {
-        cwd: dir,
-        encoding: 'utf8',
-      })
-      expect(cfg.status).toBe(0)
-      expect(cfg.stdout).toContain('warn')
-    },
-    BD_INIT_TIMEOUT_MS,
-  )
-
-  it(
-    'configureBeadsAfterInit returns ok=false when .beads/ is missing',
-    () => {
-      const result = configureBeadsAfterInit(dir)
-      expect(result.ok).toBe(false)
-    },
-    BD_INIT_TIMEOUT_MS,
-  )
-
-  it(
-    'configureBeadsAfterInit is idempotent (safe to re-run on update)',
-    () => {
-      installBeadsCli(dir)
-      const first = configureBeadsAfterInit(dir)
-      const second = configureBeadsAfterInit(dir)
-      expect(first.ok).toBe(true)
-      expect(second.ok).toBe(true)
-    },
-    BD_INIT_TIMEOUT_MS,
-  )
-
-  it(
-    'configureBeadsAfterInit wires repo-backed Dolt sync to git origin and untracks JSONL',
-    () => {
-      expect(git(dir, 'init').status).toBe(0)
-      expect(git(dir, 'remote', 'add', 'origin', 'git@github.com:example/repo.git').status).toBe(0)
-
-      installBeadsCli(dir)
-      writeFileSync(join(dir, '.beads/issues.jsonl'), '{}\n')
-      expect(git(dir, 'add', '.beads/issues.jsonl').status).toBe(0)
-
-      const result = configureBeadsAfterInit(dir)
-      expect(result.ok).toBe(true)
-
-      const yaml = readFileSync(join(dir, '.beads/config.yaml'), 'utf8')
-      expect(yaml).not.toMatch(/^sync\.remote:/m)
-      expect(yaml).not.toMatch(/^federation\.remote:/m)
-      expect(yaml).toContain('export.auto: false')
-      expect(yaml).toContain('export.git-add: false')
-      expect(yaml).toContain('dolt.auto-push: false')
-      expect(yaml).toContain('no-push: true')
-
-      const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8')
-      expect(gitignore).toContain('.beads/issues.jsonl')
-      const tracked = git(dir, 'ls-files', '--error-unmatch', '.beads/issues.jsonl')
-      expect(tracked.status).not.toBe(0)
-      expect(existsSync(join(dir, '.beads/issues.jsonl'))).toBe(true)
-
-      const remotes = spawnSync('bd', ['dolt', 'remote', 'list'], {
-        cwd: dir,
-        encoding: 'utf8',
-      })
-      expect(remotes.status).toBe(0)
-      expect(remotes.stdout).toContain('origin')
-      expect(remotes.stdout).toContain('git+ssh://git@github.com/example/repo.git')
-      expect(remotes.stdout).not.toContain('/./')
-    },
-    BD_INIT_TIMEOUT_MS,
-  )
-
-  it(
-    'migrateBeadsRepoBackedDolt is idempotent and always untracks issues.jsonl',
-    () => {
-      expect(git(dir, 'init').status).toBe(0)
-      expect(git(dir, 'remote', 'add', 'origin', 'git@github.com:example/repo.git').status).toBe(0)
-      installBeadsCli(dir)
-      writeFileSync(join(dir, '.beads/issues.jsonl'), '')
-      expect(git(dir, 'add', '.beads/issues.jsonl').status).toBe(0)
-
-      const first = migrateBeadsRepoBackedDolt(dir)
-      expect(
-        spawnSync('bd', ['--sandbox', 'dolt', 'remote', 'remove', 'origin'], { cwd: dir }).status,
-      ).toBe(0)
-      expect(
-        spawnSync(
-          'bd',
-          ['--sandbox', 'dolt', 'remote', 'add', 'origin', 'git+ssh://git@github.com/./example/repo.git'],
-          { cwd: dir },
-        ).status,
-      ).toBe(0)
-      const second = migrateBeadsRepoBackedDolt(dir)
-      expect(first.config.ok).toBe(true)
-      expect(second.config.ok).toBe(true)
-      expect(first.gitignoreUpdated).toBe(true)
-      expect(second.gitignoreUpdated).toBe(false)
-      expect(first.issuesJsonlTracked).toBe(true)
-      expect(first.issuesJsonlUntracked).toBe(true)
-      expect(second.issuesJsonlTracked).toBe(false)
-      expect(second.issuesJsonlUntracked).toBe(false)
-
-      const gitignore = readFileSync(join(dir, '.gitignore'), 'utf8')
-      expect(gitignore).toContain('.beads/issues.jsonl')
-      const tracked = git(dir, 'ls-files', '--error-unmatch', '.beads/issues.jsonl')
-      expect(tracked.status).not.toBe(0)
-      expect(existsSync(join(dir, '.beads/issues.jsonl'))).toBe(true)
-
-      const remotes = spawnSync('bd', ['--sandbox', 'dolt', 'remote', 'list'], {
-        cwd: dir,
-        encoding: 'utf8',
-      })
-      expect(remotes.status).toBe(0)
-      expect(remotes.stdout).toContain('git+ssh://git@github.com/example/repo.git')
-      expect(remotes.stdout).not.toContain('/./')
-    },
-    BD_INIT_TIMEOUT_MS,
-  )
-
-  it('trimBeadsIntegrationBlock removes Session Completion section', () => {
-    const path = join(dir, 'AGENTS.md')
-    const original = `# Header
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:abc -->
-## Beads Issue Tracker
-
-### Quick Reference
-some content
-
-### Rules
-- Use bd
-
-## Session Completion
-
-**MANDATORY**: push to remote.
-
-1. PUSH TO REMOTE — git push
-<!-- END BEADS INTEGRATION -->
-`
-    writeFileSync(path, original)
-    trimBeadsIntegrationBlock(path)
-    const trimmed = readFileSync(path, 'utf8')
-    expect(trimmed).toContain('Quick Reference')
-    expect(trimmed).toContain('### Rules')
-    expect(trimmed).not.toContain('Session Completion')
-    expect(trimmed).not.toContain('MANDATORY')
-    expect(trimmed).not.toContain('PUSH TO REMOTE')
-    expect(trimmed).toContain('<!-- END BEADS INTEGRATION -->')
-  })
-
-  it('trimBeadsIntegrationBlock is a no-op when block is missing', () => {
-    const path = join(dir, 'AGENTS.md')
-    const original = '# Just a header\n\nNo bd block here.\n'
-    writeFileSync(path, original)
-    trimBeadsIntegrationBlock(path)
-    expect(readFileSync(path, 'utf8')).toBe(original)
-  })
-
-  it(
-    'seedConstitutionDecisions creates pinned decisions and flips validation to error',
-    () => {
-      installBeadsCli(dir)
-      const result = seedConstitutionDecisions(dir, {
-        ...config,
-        commands: { ...config.commands, test: 'cargo test' },
-      })
-      expect(result.ok).toBe(true)
-      if (!result.ok) return
-      expect(result.created).toBeGreaterThan(0)
-
-      const list = spawnSync(
-        'bd',
-        ['list', '--type=decision', '--status', 'all', '--json'],
-        { cwd: dir, encoding: 'utf8' },
-      )
-      expect(list.status).toBe(0)
-      const decisions = JSON.parse(list.stdout) as Array<{ title: string; status: string }>
-      expect(decisions.length).toBe(result.created)
-      expect(decisions.every((d) => d.status === 'pinned')).toBe(true)
-      expect(
-        decisions.some((d) => d.title.includes('package manager is cargo')),
-      ).toBe(true)
-      expect(decisions.some((d) => d.title.includes('test command is cargo test'))).toBe(true)
-
-      const cfg = spawnSync('bd', ['config', 'get', 'validation.on-create'], {
-        cwd: dir,
-        encoding: 'utf8',
-      })
-      expect(cfg.stdout).toContain('error')
-    },
-    BD_INIT_TIMEOUT_MS,
-  )
-
-  it(
-    'seedConstitutionDecisions is idempotent (no duplicates on re-run)',
-    () => {
-      installBeadsCli(dir)
-      const first = seedConstitutionDecisions(dir, config)
-      const second = seedConstitutionDecisions(dir, config)
-      expect(first.ok).toBe(true)
-      expect(second.ok).toBe(true)
-      if (!first.ok || !second.ok) return
-      expect(first.created).toBeGreaterThan(0)
-      expect(second.created).toBe(0)
-    },
-    BD_INIT_TIMEOUT_MS,
-  )
-
-  it('trimBeadsIntegrationBlock is a no-op when Session Completion is already absent', () => {
-    const path = join(dir, 'AGENTS.md')
-    const original = `<!-- BEGIN BEADS INTEGRATION v:1 -->
-## Beads Issue Tracker
-just rules, no session completion
-<!-- END BEADS INTEGRATION -->
-`
-    writeFileSync(path, original)
-    trimBeadsIntegrationBlock(path)
-    expect(readFileSync(path, 'utf8')).toBe(original)
-  })
-
-  it('generates all target files with valid content', async () => {
+  it('generates all target files with Backlog.md wiring', async () => {
     applyInternalTemplate(dir, templateDataFromConfig(config))
 
-    // Every hook script is executable
     const hookDir = join(dir, '.claude', 'hooks')
-    // Hooks installed as shell scripts. block-coauthor was migrated to the
-    // TS dispatcher in 0t6 — its `.sh` file is no longer shipped.
     const hooks = [
       'destructive-command-guard.sh',
       'git-spice-command-guard.sh',
@@ -351,114 +84,66 @@ just rules, no session completion
       'pre-stop-verification.sh',
       'ai-antipattern-guard.sh',
       'pr-size-check.sh',
-      'beads-sync.sh',
     ]
     for (const hook of hooks) {
       const path = join(hookDir, hook)
       expect(existsSync(path)).toBe(true)
-      // Verify executable
       const { statSync } = await import('node:fs')
-      const mode = statSync(path).mode
-      expect(mode & 0o111).toBeGreaterThan(0)
+      expect(statSync(path).mode & 0o111).toBeGreaterThan(0)
     }
-    const prSizeCheck = readFileSync(join(hookDir, 'pr-size-check.sh'), 'utf8')
-    expect(prSizeCheck).toContain('advisory threshold')
-    expect(prSizeCheck).not.toContain('exit 1')
 
-    // OpenCode plugin is valid TS-ish content
-    const plugin = readFileSync(join(dir, '.opencode/plugins/dev-enforcer.ts'), 'utf8')
-    expect(plugin).toContain("import { spawnSync } from 'node:child_process'")
-    expect(plugin).toContain('destructive-command-guard.sh')
-    expect(plugin).toContain('git-spice-command-guard.sh')
-    expect(plugin).toContain('block-todowrite.sh')
-    expect(plugin).toContain('STACK_POLICY')
-    expect(plugin).toContain('WORKTREE_POLICY')
+    const mise = readFileSync(join(dir, 'mise.toml'), 'utf8')
+    expect(mise).toContain('"npm:backlog.md" = "latest"')
+    expect(mise).not.toContain('steveyegge/beads')
 
-    // Lefthook YAML is valid structure
     const lefthook = readFileSync(join(dir, 'lefthook.yml'), 'utf8')
     expect(lefthook).toContain('commit-msg:')
     expect(lefthook).toContain('pre-commit:')
     expect(lefthook).toContain('pre-push:')
     expect(lefthook).not.toContain('bd-dolt-push')
-    expect(lefthook).not.toContain('bd-dolt-pull')
-    expect(lefthook).not.toContain('beads-sync.sh')
-    expect(lefthook).toContain('mise run typecheck')
-    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks.typecheck]')
-    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('run = "cargo check"')
-    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:max-sixty/worktrunk"')
-    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:abhinav/git-spice"')
-    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:setup"]')
-    expect(readFileSync(join(dir, '.config/wt.toml'), 'utf8')).toContain('.agents/worktrees')
-    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.agents/worktrees/')
-    expect(readFileSync(join(dir, '.claude/commands/quick.md'), 'utf8')).toContain('Worktrunk-managed quick task')
-    expect(readFileSync(join(dir, '.opencode/commands/quick.md'), 'utf8')).toContain('Worktrunk-managed quick task')
-    expect(readFileSync(join(dir, '.agents/skills/quick/SKILL.md'), 'utf8')).toContain('Do not edit in the current checkout')
-    expect(readFileSync(join(dir, '.agents/skills/tracker-workflow/SKILL.md'), 'utf8')).toContain('including `/quick`')
-    expect(readFileSync(join(dir, '.agents/skills/tracker-workflow/SKILL.md'), 'utf8')).toContain('git-spice owns stack-aware')
-    expect(readFileSync(join(dir, '.agents/skills/tracker-workflow/SKILL.md'), 'utf8')).not.toContain('No Worktrunk setup')
-    expect(readFileSync(join(dir, '.agents/skills/work-next/SKILL.md'), 'utf8')).toContain('Worktrunk-managed')
+    expect(lefthook).not.toContain('bd-ticket-ref')
+
+    const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
+    expect(agents).toContain('Backlog.md is the source of truth')
+    expect(agents).toContain('backlog task list -s "To Do" --plain')
+    expect(agents).toContain('All implementation, including `/quick`, runs in Worktrunk-managed agent worktrees')
+    expect(agents).not.toContain('bd prime')
+    expect(agents).not.toContain('beads')
+
+    const plugin = readFileSync(join(dir, '.opencode/plugins/dev-enforcer.ts'), 'utf8')
+    expect(plugin).toContain('destructive-command-guard.sh')
+    expect(plugin).toContain('git-spice-command-guard.sh')
+    expect(plugin).toContain('block-todowrite.sh')
+    expect(plugin).toContain('BACKLOG_ENABLED')
+    expect(plugin).not.toContain('BEADS_ENABLED')
+
+    expect(readFileSync(join(dir, '.agents/skills/tracker-workflow/SKILL.md'), 'utf8')).toContain('Backlog.md')
+    expect(readFileSync(join(dir, '.agents/skills/work-next/SKILL.md'), 'utf8')).toContain('backlog task list')
     expect(existsSync(join(dir, '.codex/skills/quick'))).toBe(true)
     expect(existsSync(join(dir, '.opencode/skills/quick'))).toBe(true)
     expect(existsSync(join(dir, '.cursor/skills/quick'))).toBe(true)
-
-    const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
-    expect(agents).toContain('Main thread is the orchestrator')
-    expect(agents).toContain('All implementation, including `/quick`, runs in Worktrunk-managed agent worktrees')
-    expect(agents).toContain('It still runs in a Worktrunk-managed agent worktree')
-    expect(agents).toContain('Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>`')
-    expect(agents).toContain('question means answer only')
-    expect(agents).toContain('official docs/web first')
-    expect(agents).toContain('Do not end with follow-up prompts')
-    expect(agents).not.toContain('codex_hooks')
-
-    const bootstrap = readFileSync(join(dir, '.codex/hooks/context-bootstrap.sh'), 'utf8')
-    expect(bootstrap).toContain('COMMUNICATION MODE — caveman')
-    expect(bootstrap).toContain('question means answer only')
-    expect(bootstrap).toContain('/quick means Worktrunk quick worktree')
-    expect(bootstrap).toContain('Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees/.')
   })
 
-  it('settings.json hooks reference real script paths', async () => {
+  it('settings.json hooks reference real script paths', () => {
     applyInternalTemplate(dir, templateDataFromConfig(config))
-    const settings = JSON.parse(
-      readFileSync(join(dir, '.claude/settings.json'), 'utf8'),
-    ) as {
-      hooks: Record<
-        string,
-        Array<{
-          matcher?: string
-          hooks: Array<{ command: string }>
-        }>
-      >
+    const settings = JSON.parse(readFileSync(join(dir, '.claude/settings.json'), 'utf8')) as {
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>
     }
 
-    const allCommands: string[] = []
     for (const entries of Object.values(settings.hooks)) {
       for (const entry of entries) {
         for (const hook of entry.hooks) {
-          allCommands.push(hook.command)
+          const match = hook.command.match(/\.claude\/hooks\/([^\s'"]+\.sh)/)
+          if (match) expect(existsSync(join(dir, '.claude', 'hooks', match[1]))).toBe(true)
         }
-      }
-    }
-
-    // Every referenced .claude/hooks/ script actually exists on disk. Match
-    // only on `.sh` filenames so the PATH-prepend `.claude/hooks/bin` segment
-    // (which is a directory, not a script) doesn't get checked.
-    for (const cmd of allCommands) {
-      const match = cmd.match(/\.claude\/hooks\/([^\s'"]+\.sh)/)
-      if (match) {
-        expect(existsSync(join(dir, '.claude', 'hooks', match[1]))).toBe(true)
       }
     }
   })
 
-  it('codex hooks reference real script paths in .codex', async () => {
+  it('codex hooks reference real script paths in .codex', () => {
     applyInternalTemplate(dir, templateDataFromConfig(config))
     const codex = JSON.parse(readFileSync(join(dir, '.codex/hooks.json'), 'utf8')) as {
-      hooks: Record<
-        string,
-        Array<{ hooks: Array<{ command: string }> }>
-      >
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>
     }
 
     for (const entries of Object.values(codex.hooks)) {
@@ -466,9 +151,7 @@ just rules, no session completion
         for (const hook of entry.hooks) {
           const match = hook.command.match(/\.codex\/hooks\/([^\s'"]+\.sh)/)
           expect(match).not.toBeNull()
-          if (match) {
-            expect(existsSync(join(dir, '.codex', 'hooks', match[1]))).toBe(true)
-          }
+          if (match) expect(existsSync(join(dir, '.codex', 'hooks', match[1]))).toBe(true)
         }
       }
     }

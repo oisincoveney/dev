@@ -1,6 +1,6 @@
 # Changes here will be overwritten by Copier
 _src_path: /Users/oisin/dev/oisin-dev/templates/copier
-beads_enabled: true
+backlog_enabled: true
 commands:
     build: bun run build
     dev: bun run test:watch
@@ -35,8 +35,8 @@ targets:
 - cursor
 - lefthook
 tools:
-- beads
+- backlog
 variant: ts-library
 variants:
 - ts-library
-workflow: bd
+workflow: backlog

@@ -127,7 +127,7 @@ describe('pruneGroundedCodexHooks', () => {
 
   it('removes grounded hooks from every event while preserving project hooks', () => {
     const projectHook = {
-      hooks: [{ type: 'command', command: '.codex/hooks/bd-context-inject.sh' }],
+      hooks: [{ type: 'command', command: '.codex/hooks/context-injector.sh' }],
     }
     writeFileSync(
       path,

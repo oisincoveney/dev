@@ -60,4 +60,4 @@ If no slice answers yes, the epic is bundled — split before fan-out.
 ## See also
 
 - `tracker-workflow.md` — graph/tracer approval and execution rules
-- `metadata.workflow.plan.graph` — canonical tracker JSON location for tracer metadata
+- Backlog.md task dependencies and notes — canonical tracker location for tracer metadata

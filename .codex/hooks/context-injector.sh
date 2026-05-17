@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook — emits branch-only context for non-beads projects.
+# UserPromptSubmit hook — emits branch context.
 #
 # Static payload (commands, deps, workflow, variant) lives in the
 # SessionStart hook instead (context-bootstrap.sh). This hook fires on

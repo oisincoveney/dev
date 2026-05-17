@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # PreCompact hook — re-primes harness-specific context after /compact.
 #
-# CLAUDE.md re-injects automatically post-compact. The beads marketplace
-# plugin's own PreCompact hook re-runs `bd prime`, so this hook only needs
-# to re-emit the harness-managed metadata that does not survive compaction
+# Re-emit harness-managed metadata that does not survive compaction
 # (project type, workflow, communication mode reminder).
 set -euo pipefail
 

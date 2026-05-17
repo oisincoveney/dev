@@ -32,8 +32,8 @@ const answers: Answers = {
     format: 'biome format --write .',
   },
   skills: ['code-quality', 'architecture'],
-  tools: ['beads'],
-  workflow: 'bd',
+  tools: ['backlog'],
+  workflow: 'backlog',
   contractDriven: false,
   targets: ['claude', 'codex', 'opencode', 'cursor', 'lefthook'],
   mcpServers: [],
@@ -58,7 +58,7 @@ describe('thin orchestrator', () => {
       test: 'bun test',
       typecheck: 'tsc --noEmit',
     })
-    expect(data.beads_enabled).toBe(true)
+    expect(data.backlog_enabled).toBe(true)
     expect(data.has_typescript).toBe(true)
     expect(data.targets).toContain('opencode')
   })
@@ -104,6 +104,8 @@ describe('thin orchestrator', () => {
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"npm:@sentry/dotagents"')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:max-sixty/worktrunk"')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:abhinav/git-spice"')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"npm:backlog.md"')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).not.toContain('steveyegge/beads')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:setup"]')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:verify"]')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks."worktree:teardown"]')
@@ -149,7 +151,10 @@ describe('thin orchestrator', () => {
     expect(claudeSettings).toContain('pre-tool-dispatch.sh')
     expect(claudeSettings).toContain('pre-stop-verification.sh')
     expect(claudeSettings).toContain('verifier-skill-guard.sh')
-    expect(claudeSettings).toContain('swarm-digest.sh')
+    expect(claudeSettings).toContain('OISIN_DEV_BACKLOG=1')
+    expect(claudeSettings).toContain('context-injector.sh')
+    expect(claudeSettings).not.toContain('swarm-digest.sh')
+    expect(claudeSettings).not.toContain('bd-context-inject.sh')
 
     const bootstrap = readFileSync(join(dir, '.claude/hooks/context-bootstrap.sh'), 'utf8')
     expect(bootstrap).toContain('COMMUNICATION MODE — caveman')
@@ -188,7 +193,8 @@ describe('thin orchestrator', () => {
     expect(mise).toContain('"aqua:evilmartians/lefthook" = "latest"')
     expect(mise).toContain('"github:max-sixty/worktrunk" = "latest"')
     expect(mise).toContain('"github:abhinav/git-spice" = "latest"')
-    expect(mise).toContain('"aqua:steveyegge/beads" = "1.0.2"')
+    expect(mise).toContain('"npm:backlog.md" = "latest"')
+    expect(mise).not.toContain('steveyegge/beads')
     expect(mise).toContain('[tasks.typecheck]')
     expect(mise).toContain('run = "tsc --noEmit"')
     expect(mise).toContain('[tasks."worktree:verify"]')
@@ -219,24 +225,15 @@ describe('thin orchestrator', () => {
         '    repo-lint:',
         '      run: npm run lint',
         '',
-        'post-commit:',
-        '  commands:',
-        '    bd-dolt-push:',
-        '      run: .claude/hooks/beads-sync.sh push-best-effort',
-        '',
         'post-merge:',
         '  commands:',
         '    repo-sync:',
         '      run: npm run sync',
-        '    bd-dolt-pull:',
-        '      run: .claude/hooks/beads-sync.sh pull-best-effort',
         '',
         'pre-push:',
         '  commands:',
         '    repo-test:',
         '      run: npm test',
-        '    bd-dolt-push:',
-        '      run: .claude/hooks/beads-sync.sh push-best-effort',
         '',
       ].join('\n'),
     )
@@ -251,7 +248,7 @@ describe('thin orchestrator', () => {
     expect(lefthook).toContain('repo-sync:')
     expect(lefthook).toContain('run: npm run sync')
     expect(lefthook).toContain('conventional-commits:')
-    expect(lefthook).toContain('bd-ticket-ref:')
+    expect(lefthook).not.toContain('bd-ticket-ref:')
     expect(lefthook).toContain('typecheck:')
     expect(lefthook).toContain('run: mise run typecheck')
     expect(lefthook).not.toContain('bd-dolt-push:')
@@ -308,15 +305,15 @@ describe('thin orchestrator', () => {
         'skills:',
         '  - code-quality',
         'tools:',
-        '  - beads',
-        'workflow: bd',
+        '  - backlog',
+        'workflow: backlog',
         'contract_driven: false',
         'targets:',
         '  - claude',
         '  - codex',
         'mcp_servers: []',
         'models: {}',
-        'beads_enabled: true',
+        'backlog_enabled: true',
         'has_typescript: true',
         'has_frontend: false',
         '',
@@ -326,8 +323,9 @@ describe('thin orchestrator', () => {
     expect(runUpdateOrchestration(dir, { skipExternalTools: true })).toEqual({ ok: true })
 
     const claudeSettings = readFileSync(join(dir, '.claude/settings.json'), 'utf8')
-    expect(claudeSettings).toContain('OISIN_DEV_BEADS=1')
-    expect(claudeSettings).toContain('bd-context-inject.sh')
+    expect(claudeSettings).toContain('OISIN_DEV_BACKLOG=1')
+    expect(claudeSettings).toContain('context-injector.sh')
+    expect(claudeSettings).not.toContain('bd-context-inject.sh')
     expect(existsSync(join(dir, '.codex/skills/caveman'))).toBe(true)
   })
 

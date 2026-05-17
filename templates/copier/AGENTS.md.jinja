@@ -4,15 +4,13 @@ Configured with @oisincoveney/dev. Shared rules live here; reusable playbooks li
 
 ## Critical Rules
 
-{% if beads_enabled -%}
-- Use the tracker workflow for planned work; beads is the first tracker adapter.
+{% if backlog_enabled -%}
+- Use the tracker workflow for planned work; Backlog.md is the source of truth.
 - Main thread is the orchestrator. All implementation, including `/quick`, runs in Worktrunk-managed agent worktrees; tracker metadata is the source of truth.
 - `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in a Worktrunk-managed agent worktree, verifies, commits, and may push/PR when branch rules allow.
 - `/plan [priority] <goal>` creates tracker-backed work in review state and stops. `/approve <id>` unlocks it; `/work-next` executes approved ready work; `/finish` integrates verified work.
-- Tracker data is canonical. Store machine-readable workflow state in tracker metadata (`metadata.workflow` for beads), not disk plan files.
-- Run `bd prime` for workflow context when starting or after compaction.
-- Use `bd remember` for persistent knowledge. Do not create MEMORY.md files.
-- Do not commit `.beads/issues.jsonl`; shared ticket state lives in repo-backed Dolt refs.
+- Tracker data is canonical. Store workflow state in Backlog task fields: status, priority, dependencies, plan, notes, acceptance criteria, Definition of Done, and final summary.
+- Use `backlog task ...` directly for tracker operations; use `backlog board` or `backlog browser --no-open` for local visibility.
 {% endif -%}
 - Never run destructive commands without explicit user approval.
 - Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>`; full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.
@@ -46,17 +44,18 @@ Use `mise run <task>` for canonical project commands.
 - Stack lifecycle: git-spice tracks branch relationships and submits stacked PRs; serialize stack mutation commands per stack.
 - Runtime overlays: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`.
 
-{% if beads_enabled -%}
-## Beads Quick Reference
+{% if backlog_enabled -%}
+## Backlog Quick Reference
 
 ```bash
-oisin-dev tracker show <id>
-oisin-dev tracker approve <id>
-bd ready
-bd show <id>
-bd update <id> --claim
-bd close <id> --reason "<why>"
-bd dolt pull
-bd dolt push
+backlog task list -s "To Do" --plain
+backlog task list -s "In Progress" --plain
+backlog task view <id> --plain
+backlog task create "Title" --description "Why this exists" --priority medium --ac "Acceptance criterion"
+backlog task edit <id> -s "In Progress" --plan "Implementation plan"
+backlog task edit <id> --append-notes "Progress note"
+backlog task edit <id> -s Done --final-summary "What changed and how it was verified"
+backlog board
+backlog browser --no-open
 ```
 {% endif -%}

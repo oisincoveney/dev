@@ -1,6 +1,6 @@
 ---
 name: spec-verifier
-description: Fresh-context verifier for tracker-backed work. Use before closing any tracked ticket; reads tracker JSON via `oisin-dev tracker`, checks acceptance criteria, runs verification commands, and reports PASS/PARTIAL/FAIL without editing source.
+description: Fresh-context verifier for tracker-backed work. Use before marking any tracked task Done; reads Backlog.md task details, checks acceptance criteria, runs verification commands, and reports PASS/PARTIAL/FAIL without editing source.
 ---
 
 # Spec Verifier
@@ -11,8 +11,8 @@ Input: tracker item id.
 
 ## Steps
 
-1. Run `oisin-dev tracker show <id>`.
-2. Read `workflow.plan.acceptance`, `workflow.plan.verify`, `workflow.plan.files`, priority, and description.
+1. Run `backlog task view <id> --plain`.
+2. Read acceptance criteria, Definition of Done, plan, notes, priority, dependencies, modified files, and description.
 3. Inspect the implementation diff and relevant files.
 4. Run every command in `workflow.plan.verify`.
 5. Mark each acceptance criterion PASS / PARTIAL / FAIL with file:line evidence.
@@ -21,7 +21,7 @@ Input: tracker item id.
    - P3 simple/safe: return as inline-fix candidate for implementer; do not edit it yourself.
    - P3 not simple/safe: create or request tracker ticket.
 
-Verifier is read-only: no source edits, no commits, no close.
+Verifier is read-only: no source edits, no commits, no status changes.
 
 ## Output
 

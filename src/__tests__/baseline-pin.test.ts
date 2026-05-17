@@ -42,11 +42,7 @@ function runHook(
 
 function git(cwd: string, ...args: string[]): { status: number; stdout: string; stderr: string } {
   // Neutralise the user's global core.hooksPath for this invocation.
-  // bd installs a global pre-commit hook (~/.git-hooks/pre-commit -> bd hooks run)
-  // that grabs the dolt DB lock. With the suite running many tests in parallel,
-  // contention on that lock pushes individual git commits past vitest's 5s
-  // per-test timeout. The hook adds no value here — these are throwaway tmp
-  // repos with no .beads/ — so we just disable global hooks for the subprocess.
+  // These are throwaway tmp repos, so user-level Git hooks add no value here.
   const r = spawnSync('git', args, {
     cwd,
     encoding: 'utf8',

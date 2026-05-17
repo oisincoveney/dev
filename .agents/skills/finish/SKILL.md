@@ -16,6 +16,6 @@ Rules:
 - Use `git-spice branch submit` or `git-spice stack submit` for non-protected task/quick branch PRs.
 - Serialize `git-spice stack restack` and `git-spice stack submit` per stack; git-spice skips or avoids related branches that are checked out in other worktrees.
 - Block pushes to `main`, `master`, release branches, and tags unless explicitly authorized.
-- Close tracker items only after verification evidence is recorded.
+- Mark Backlog tasks Done only after verification evidence is recorded in final summary or notes.
 
 Arguments: `$ARGUMENTS`

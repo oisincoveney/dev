@@ -53,7 +53,7 @@ export interface TemplateData {
   targets: string[]
   mcp_servers: string[]
   models: Record<string, string>
-  beads_enabled: boolean
+  backlog_enabled: boolean
   has_typescript: boolean
   has_frontend: boolean
 }
@@ -76,7 +76,7 @@ export function templateDataFromAnswers(answers: Answers): TemplateData {
     targets: [...answers.targets],
     mcp_servers: [...answers.mcpServers],
     models: answers.models ?? {},
-    beads_enabled: answers.tools.includes('beads'),
+    backlog_enabled: answers.tools.includes('backlog') || answers.workflow === 'backlog',
     has_typescript: languages.includes('typescript'),
     has_frontend: variants.some((variant) => variant === 'ts-frontend' || variant === 'ts-fullstack'),
   }
@@ -100,7 +100,7 @@ export function templateDataFromConfig(config: DevConfig): TemplateData {
     targets: [...config.targets],
     mcp_servers: [],
     models: config.models ?? {},
-    beads_enabled: config.tools.includes('beads'),
+    backlog_enabled: config.tools.includes('backlog') || config.workflow === 'backlog',
     has_typescript: languages.includes('typescript'),
     has_frontend: variants.some((variant) => variant === 'ts-frontend' || variant === 'ts-fullstack'),
   }
@@ -244,10 +244,12 @@ function legacyConfigToTemplateData(cwd: string, value: unknown): TemplateData {
   const variant = stringValue(config.variant, 'other-app') as ProjectVariant
   const commands = objectRecord(config.commands ?? {})
   const configuredTools = stringArray(config.tools, [])
-  const configuredWorkflow = stringValue(config.workflow, 'none') as WorkflowFramework
+  const configuredWorkflow = stringValue(config.workflow, 'none')
   const inferredTools = inferLegacyTools(cwd, configuredTools, configuredWorkflow)
   const inferredWorkflow =
-    inferredTools.includes('beads') && configuredWorkflow === 'none' ? 'bd' : configuredWorkflow
+    configuredWorkflow === 'bd' || (inferredTools.includes('backlog') && configuredWorkflow === 'none')
+      ? 'backlog'
+      : configuredWorkflow
   const legacy: DevConfig = {
     language,
     variant,
@@ -274,26 +276,19 @@ function legacyConfigToTemplateData(cwd: string, value: unknown): TemplateData {
   return templateDataFromConfig(legacy)
 }
 
-function inferLegacyTools(
-  cwd: string,
-  configuredTools: ReadonlyArray<string>,
-  configuredWorkflow: WorkflowFramework,
-): string[] {
+function inferLegacyTools(cwd: string, configuredTools: ReadonlyArray<string>, configuredWorkflow: string): string[] {
   const tools = new Set(configuredTools)
   if (
+    configuredWorkflow === 'backlog' ||
     configuredWorkflow === 'bd' ||
-    existsSync(join(cwd, '.beads')) ||
-    fileContains(join(cwd, 'AGENTS.md'), 'BEGIN BEADS INTEGRATION') ||
-    fileContains(join(cwd, 'CLAUDE.md'), 'BEGIN BEADS INTEGRATION') ||
-    fileContains(join(cwd, 'mise.toml'), 'steveyegge/beads')
+    existsSync(join(cwd, 'backlog')) ||
+    existsSync(join(cwd, '.backlog')) ||
+    existsSync(join(cwd, 'backlog.config.yml'))
   ) {
-    tools.add('beads')
+    tools.add('backlog')
   }
+  tools.delete('beads')
   return [...tools]
-}
-
-function fileContains(path: string, needle: string): boolean {
-  return existsSync(path) && readFileSync(path, 'utf8').includes(needle)
 }
 
 function normalizeTemplateData(value: unknown): TemplateData | null {
@@ -305,13 +300,15 @@ function normalizeTemplateData(value: unknown): TemplateData | null {
   const variants = stringArray(data.variants, [variant])
   const tools = stringArray(data.tools, [])
   const commands = objectRecord(data.commands ?? {})
-  const workflow = stringValue(data.workflow, tools.includes('beads') ? 'bd' : 'none')
-  const beadsEnabled =
-    data.beads_enabled === true ||
-    tools.includes('beads') ||
-    workflow === 'bd'
+  const workflowRaw = stringValue(data.workflow, tools.includes('backlog') ? 'backlog' : 'none')
+  const workflow = workflowRaw === 'bd' ? 'backlog' : workflowRaw
+  const backlogEnabled =
+    data.backlog_enabled === true ||
+    tools.includes('backlog') ||
+    workflow === 'backlog'
   const normalizedTools = new Set(tools)
-  if (beadsEnabled) normalizedTools.add('beads')
+  normalizedTools.delete('beads')
+  if (backlogEnabled) normalizedTools.add('backlog')
 
   return {
     language,
@@ -332,7 +329,7 @@ function normalizeTemplateData(value: unknown): TemplateData | null {
     targets: stringArray(data.targets, []),
     mcp_servers: stringArray(data.mcp_servers ?? data.mcpServers, []),
     models: objectRecord(data.models ?? {}) as Record<string, string>,
-    beads_enabled: beadsEnabled,
+    backlog_enabled: backlogEnabled,
     has_typescript: data.has_typescript === true || languages.includes('typescript'),
     has_frontend:
       data.has_frontend === true ||
@@ -596,20 +593,6 @@ function requiredLefthookCommandBlocks(data: TemplateData): Record<string, Lefth
       ].join('\n'),
     },
   }
-  if (data.beads_enabled) {
-    commitMsg['bd-ticket-ref'] = {
-      run: [
-        'subject=$(head -1 {1})',
-        "type=$(echo \"$subject\" | grep -oE '^(feat|fix|chore|refactor|test|docs|style|perf|ci|build|revert)' | head -1)",
-        'case "$type" in docs|chore|style) exit 0 ;; esac',
-        "if echo \"$subject\" | grep -qE '\\([a-z0-9._-]*[a-z0-9-]+-[a-z0-9._-]+\\)'; then exit 0; fi",
-        "if grep -qE '^\\s*Refs:\\s+[a-z0-9_-]+-[a-z0-9._-]+' {1}; then exit 0; fi",
-        'echo "Commit references no bd ticket."',
-        'exit 1',
-      ].join('\n'),
-    }
-  }
-
   const preCommit: LefthookCommands = {}
   if (data.commands.typecheck) preCommit.typecheck = { run: 'mise run typecheck' }
   if (data.commands.lint) preCommit.lint = { run: 'mise run lint' }
@@ -657,7 +640,7 @@ function requiredMiseToolLines(data?: TemplateData): string[] {
     '"github:max-sixty/worktrunk" = "latest"',
     '"github:abhinav/git-spice" = "latest"',
   ]
-  if (data?.beads_enabled === true) lines.push('"aqua:steveyegge/beads" = "1.0.2"')
+  if (data?.backlog_enabled === true) lines.push('"npm:backlog.md" = "latest"')
   return lines
 }
 
@@ -682,7 +665,7 @@ function defaultMiseTemplateData(): TemplateData {
     targets: [],
     mcp_servers: [],
     models: {},
-    beads_enabled: false,
+    backlog_enabled: false,
     has_typescript: false,
     has_frontend: false,
   }
@@ -737,15 +720,13 @@ export function agentsMd(data: TemplateData): string {
     '## Critical Rules',
     '',
   ]
-  if (data.beads_enabled) {
-    lines.push('- Use the tracker workflow for planned work; beads is the first tracker adapter.')
+  if (data.backlog_enabled) {
+    lines.push('- Use the tracker workflow for planned work; Backlog.md is the source of truth.')
     lines.push('- Main thread is the orchestrator. All implementation, including `/quick`, runs in Worktrunk-managed agent worktrees; tracker metadata is the source of truth.')
     lines.push('- `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in a Worktrunk-managed agent worktree, verifies, commits, and may push/PR when branch rules allow.')
     lines.push('- `/plan [priority] <goal>` creates tracker-backed work in review state and stops. `/approve <id>` unlocks it; `/work-next` executes approved ready work; `/finish` integrates verified work.')
-    lines.push('- Tracker data is canonical. Store machine-readable workflow state in tracker metadata (`metadata.workflow` for beads), not disk plan files.')
-    lines.push('- Run `bd prime` for workflow context when starting or after compaction.')
-    lines.push('- Use `bd remember` for persistent knowledge. Do not create MEMORY.md files.')
-    lines.push('- Do not commit `.beads/issues.jsonl`; shared ticket state lives in repo-backed Dolt refs.')
+    lines.push('- Tracker data is canonical. Store workflow state in Backlog task fields: status, priority, dependencies, plan, notes, acceptance criteria, Definition of Done, and final summary.')
+    lines.push('- Use `backlog task ...` directly for tracker operations; use `backlog board` or `backlog browser --no-open` for local visibility.')
   }
   lines.push('- Never run destructive commands without explicit user approval.')
   lines.push('- Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>`; full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.')
@@ -772,17 +753,18 @@ export function agentsMd(data: TemplateData): string {
   lines.push('- Worktree lifecycle: Worktrunk project hooks in `.config/wt.toml`; canonical agent root is `.agents/worktrees/`.')
   lines.push('- Stack lifecycle: git-spice tracks branch relationships and submits stacked PRs; serialize stack mutation commands per stack.')
   lines.push('- Runtime overlays: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`.')
-  if (data.beads_enabled) {
-    lines.push('', '## Beads Quick Reference', '')
+  if (data.backlog_enabled) {
+    lines.push('', '## Backlog Quick Reference', '')
     lines.push('```bash')
-    lines.push('oisin-dev tracker show <id>')
-    lines.push('oisin-dev tracker approve <id>')
-    lines.push('bd ready')
-    lines.push('bd show <id>')
-    lines.push('bd update <id> --claim')
-    lines.push('bd close <id> --reason "<why>"')
-    lines.push('bd dolt pull')
-    lines.push('bd dolt push')
+    lines.push('backlog task list -s "To Do" --plain')
+    lines.push('backlog task list -s "In Progress" --plain')
+    lines.push('backlog task view <id> --plain')
+    lines.push('backlog task create "Title" --description "Why this exists" --priority medium --ac "Acceptance criterion"')
+    lines.push('backlog task edit <id> -s "In Progress" --plan "Implementation plan"')
+    lines.push('backlog task edit <id> --append-notes "Progress note"')
+    lines.push('backlog task edit <id> -s Done --final-summary "What changed and how it was verified"')
+    lines.push('backlog board')
+    lines.push('backlog browser --no-open')
     lines.push('```')
   }
   lines.push('')
@@ -816,7 +798,7 @@ function miseToml(data: TemplateData): string {
   lines.push('"aqua:evilmartians/lefthook" = "latest"')
   lines.push('"github:max-sixty/worktrunk" = "latest"')
   lines.push('"github:abhinav/git-spice" = "latest"')
-  if (data.beads_enabled) lines.push('"aqua:steveyegge/beads" = "1.0.2"')
+  if (data.backlog_enabled) lines.push('"npm:backlog.md" = "latest"')
   for (const [name, command] of Object.entries(data.commands)) {
     lines.push('', `[tasks.${name}]`)
     lines.push(`run = ${JSON.stringify(command)}`)
@@ -905,13 +887,12 @@ function hookCommand(scripts: string[], timeout?: number): { type: 'command'; co
 
 function claudeSettings(data: TemplateData): Record<string, unknown> {
   const preToolEnv = [
-    data.beads_enabled ? 'OISIN_DEV_BEADS=1' : '',
+    data.backlog_enabled ? 'OISIN_DEV_BACKLOG=1' : '',
     data.has_typescript ? 'OISIN_DEV_TYPESCRIPT=1' : '',
   ].filter(Boolean).join(' ')
   const preToolPrefix = preToolEnv.length > 0 ? `${preToolEnv} ` : ''
   const stopScripts = [
     'worktree-stop-guard.sh',
-    ...(data.beads_enabled ? ['swarm-digest.sh'] : []),
     'post-edit-await.sh',
     'pre-stop-verification.sh',
     'verifier-skill-guard.sh',
@@ -927,12 +908,12 @@ function claudeSettings(data: TemplateData): Record<string, unknown> {
     'git diff',
     'git log',
     'git-spice *',
-    'bd *',
+    data.backlog_enabled ? 'backlog *' : '',
   ].filter((cmd): cmd is string => typeof cmd === 'string' && cmd.length > 0).join('|')
   return {
     hooks: {
       SessionStart: [{ hooks: [hookCommand(['context-bootstrap.sh', 'baseline-pin.sh'], 120)] }],
-      UserPromptSubmit: [{ hooks: [hookCommand([data.beads_enabled ? 'bd-context-inject.sh' : 'context-injector.sh'], 5)] }],
+      UserPromptSubmit: [{ hooks: [hookCommand(['context-injector.sh'], 5)] }],
       PreToolUse: [{
         hooks: [{
           type: 'command',
@@ -1006,7 +987,7 @@ interface ToolEvent {
 
 const HOOKS_DIR = '.claude/hooks'
 const HAS_TYPESCRIPT = ${JSON.stringify(data.has_typescript)}
-const BEADS_ENABLED = ${JSON.stringify(data.beads_enabled)}
+const BACKLOG_ENABLED = ${JSON.stringify(data.backlog_enabled)}
 const WORKTREE_POLICY = 'Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
 const STACK_POLICY = 'git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct git/gh commands for those operations are blocked.'
 
@@ -1063,7 +1044,7 @@ export default {
     if (key.includes('write') || key.includes('edit') || key.includes('patch')) {
       const worktree = runHook('worktree-write-guard.sh', toolInput)
       if (!worktree.allowed) throw new Error(worktree.message)
-      void BEADS_ENABLED
+      void BACKLOG_ENABLED
       if (HAS_TYPESCRIPT) {
         const style = runHook('ts-style-guard.sh', toolInput)
         if (!style.allowed) throw new Error(style.message)

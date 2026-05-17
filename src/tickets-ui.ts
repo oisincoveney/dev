@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 
-const BEADS_UI_PACKAGE = 'beads-ui'
-const BEADS_UI_BIN = 'bdui'
+const BACKLOG_PACKAGE = 'backlog.md'
+const BACKLOG_BIN = 'backlog'
 
 export interface TicketsUiCommand {
   command: string
@@ -9,31 +9,23 @@ export interface TicketsUiCommand {
 }
 
 export function buildTicketsUiCommand(argv: ReadonlyArray<string>): TicketsUiCommand {
-  const args = ['--package', BEADS_UI_PACKAGE, BEADS_UI_BIN]
-  const hasCommand = argv.some((arg) => arg === 'start' || arg === 'stop' || arg === 'restart')
-  if (!hasCommand) {
-    args.push('start')
-  }
+  const args = ['--package', BACKLOG_PACKAGE, BACKLOG_BIN, 'browser']
   args.push(...argv)
   return { command: 'bunx', args }
 }
 
 export function printTicketsUiHelp(): void {
   process.stdout.write(`
-@oisincoveney/dev tickets — Local Beads UI
+@oisincoveney/dev tickets — Local Backlog.md UI
 
 Usage:
   bunx @oisincoveney/dev tickets [flags]
-  bunx @oisincoveney/dev tickets stop
-  bunx @oisincoveney/dev tickets restart [flags]
 
-This delegates to beads-ui, a local web UI for the bd CLI.
+This delegates to Backlog.md's built-in local browser UI.
 
 Common flags:
-  --open             Open the browser after starting
-  --host <host>      Bind address passed to beads-ui
-  --port <port>      Port passed to beads-ui
-  --debug            Enable beads-ui debug logging
+  --no-open          Do not open the browser automatically
+  --port <port>      Port passed to Backlog.md
 
 `)
 }
@@ -48,7 +40,7 @@ export function runTicketsUi(argv: ReadonlyArray<string>): void {
   const result = spawnSync(command, args, { stdio: 'inherit' })
 
   if (result.error !== undefined) {
-    process.stderr.write(`Failed to launch beads-ui via bunx: ${result.error.message}\n`)
+    process.stderr.write(`Failed to launch Backlog.md browser via bunx: ${result.error.message}\n`)
     process.exit(1)
   }
 

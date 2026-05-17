@@ -1,7 +1,7 @@
 /**
  * `oisin-dev init`
  *
- * Configures AI agents, coding standards, Beads, and dev tooling in the
+ * Configures AI agents, coding standards, Backlog.md, and dev tooling in the
  * current directory. Copier renders files, dotagents syncs skills, and mise
  * installs/runs those tools so users do not need global binaries.
  */
@@ -11,10 +11,8 @@ import * as p from '@clack/prompts'
 import type { DevConfig } from './config.js'
 import { detectProject } from './detect.js'
 import {
-  configureBeadsAfterInit,
-  installBeadsCli,
-  installBeadsPlugin,
-  seedConstitutionDecisions,
+  installBacklogCli,
+  seedBacklogConstitutionDecisions,
 } from './install.js'
 import { runInitOrchestration } from './orchestrator.js'
 import { type Answers, runPrompts } from './prompts.js'
@@ -44,42 +42,33 @@ export async function runInit(): Promise<void> {
   }
   spinner.stop('Template rendered')
 
-  await configureBeadsIfEnabled(cwd, configFromAnswers(answers))
+  await configureBacklogIfEnabled(cwd, configFromAnswers(answers))
   p.outro('Done.')
 }
 
-async function configureBeadsIfEnabled(dir: string, config: DevConfig): Promise<void> {
-  if (!config.tools.includes('beads')) return
+async function configureBacklogIfEnabled(dir: string, config: DevConfig): Promise<void> {
+  if (!config.tools.includes('backlog')) return
 
-  const cliResult = installBeadsCli(dir)
+  const cliResult = installBacklogCli(dir)
   switch (cliResult.status) {
     case 'created':
-      p.log.success('beads: bd init')
+      p.log.success('backlog: initialized')
       break
     case 'exists':
-      p.log.info('beads: .beads/ already exists, skipping bd init')
+      p.log.info('backlog: existing tracker found, skipping init')
       break
-    case 'no-bd':
-      p.log.warn('beads: `bd` not found in PATH. Install bd and rerun Beads setup.')
+    case 'no-backlog':
+      p.log.warn('backlog: `backlog` not found. Run `mise install`, then rerun update.')
       break
     case 'failed':
-      p.log.warn(`beads: bd init failed (${cliResult.error})`)
+      p.log.warn(`backlog: init failed (${cliResult.error})`)
       break
   }
 
   if (cliResult.status === 'created' || cliResult.status === 'exists') {
-    const configure = configureBeadsAfterInit(dir)
-    if (configure.ok) p.log.success('beads: configured repo-backed workflow')
-    else p.log.warn(`beads: post-init configuration failed (${configure.error})`)
-
-    if (config.workflow === 'bd') {
-      const seed = seedConstitutionDecisions(dir, config)
-      if (seed.ok && seed.created > 0) p.log.info(`seeded ${seed.created} constitution decision(s)`)
-    }
+    const seed = seedBacklogConstitutionDecisions(dir, config)
+    if (seed.ok && seed.created > 0) p.log.info(`seeded ${seed.created} constitution decision(s)`)
   }
-
-  const plugin = installBeadsPlugin(dir)
-  if (plugin.status === 'failed') p.log.warn(`beads plugin install failed (${plugin.error})`)
 }
 
 function configFromAnswers(answers: Answers): DevConfig {

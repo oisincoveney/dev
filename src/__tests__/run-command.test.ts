@@ -1,6 +1,6 @@
 /**
  * Behavioral tests for runCommand — the spawnSync wrapper used to invoke
- * `bd init` and `claude plugin install`. The whole point of this helper
+ * tool initialization and plugin installation. The whole point of this helper
  * is to guarantee:
  *   1. A misbehaving child that ignores SIGTERM is still killed at the
  *      timeout boundary (via SIGKILL, which is uncatchable).
@@ -26,7 +26,7 @@ describe('runCommand', () => {
   })
 
   it('reports spawn-error when the binary does not exist', () => {
-    const r = runCommand('bd-this-binary-does-not-exist-anywhere', [], {
+    const r = runCommand('backlog-this-binary-does-not-exist-anywhere', [], {
       cwd: '/tmp',
       timeoutMs: 5_000,
     })

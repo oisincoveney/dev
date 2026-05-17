@@ -3,7 +3,7 @@ import { existsSync, lstatSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { gitSubprocessEnv } from './git-env.js'
 import * as p from '@clack/prompts'
-import { configureBeadsAfterInit } from './install.js'
+import { installBacklogCli } from './install.js'
 import { readInternalState, runResetOrchestration } from './orchestrator.js'
 
 export const RESET_PATHS = [
@@ -63,10 +63,10 @@ export async function runReset(argv: ReadonlyArray<string> = process.argv.slice(
   }
 
   const state = readInternalState(cwd)
-  if (state?.beads_enabled === true || existsSync(join(cwd, '.beads'))) {
-    const configure = configureBeadsAfterInit(cwd)
-    if (configure.ok) p.log.success('beads: configured repo-backed workflow')
-    else p.log.warn(`beads: post-reset configuration failed (${configure.error})`)
+  if (state?.backlog_enabled === true) {
+    const backlog = installBacklogCli(cwd)
+    if (backlog.status === 'created') p.log.success('backlog: initialized')
+    else if (backlog.status === 'failed') p.log.warn(`backlog: post-reset initialization failed (${backlog.error})`)
   }
 
   p.outro('Reset generated agent configuration.')

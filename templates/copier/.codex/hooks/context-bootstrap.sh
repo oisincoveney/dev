@@ -3,7 +3,6 @@
 #
 # Static-per-session: communication mode, project metadata, commands, deps.
 # Dynamic per-turn state (branch) lives in UserPromptSubmit hook.
-# bd ready queue handled by beads marketplace plugin's own SessionStart hook.
 #
 # Layout: cache-friendly static content first (caveman + project), mutable
 # content (deps) last. Maximizes Anthropic prompt-cache hit across sessions.
@@ -22,7 +21,7 @@ Pattern: [thing] [action] [reason]. [next step].
 Drop caveman temporarily for: security warnings, irreversible action confirmations, multi-step sequences where order is ambiguous, user clarification requests. Resume after clear part done.
 
 Code/commits/PRs: write normal. Caveman applies to user-facing text only.
-Tracker workflow: tracker metadata is canonical. For beads, machine-readable workflow state lives in metadata.workflow JSON; description is human-readable only.
+Tracker workflow: Backlog.md task files are canonical. Store state in task status, priority, dependencies, plan, notes, AC, DoD, and final summary fields.
 Intent gate: question means answer only; investigate/research means report only; /quick means Worktrunk quick worktree; /work-next or approved tracker work means Worktrunk implementation.
 Research gate: official docs/web first; project source second; node_modules, vendored deps, generated/build files only last resort.
 No terminal follow-up prompts. State result and stop unless blocked.

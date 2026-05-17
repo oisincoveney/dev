@@ -6,9 +6,7 @@
  */
 
 import * as p from '@clack/prompts'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
-import { configureBeadsAfterInit } from './install.js'
+import { installBacklogCli } from './install.js'
 import { readInternalState, runUpdateOrchestration, STATE_FILE } from './orchestrator.js'
 import { gitWorktreeClean } from './reset.js'
 
@@ -32,10 +30,10 @@ export async function runUpdate(): Promise<void> {
   spinner.stop('Updated')
 
   const state = readInternalState(cwd)
-  if (state?.beads_enabled === true || existsSync(join(cwd, '.beads'))) {
-    const configure = configureBeadsAfterInit(cwd)
-    if (configure.ok) p.log.success('beads: configured repo-backed workflow')
-    else p.log.warn(`beads: post-update configuration failed (${configure.error})`)
+  if (state?.backlog_enabled === true) {
+    const backlog = installBacklogCli(cwd)
+    if (backlog.status === 'created') p.log.success('backlog: initialized')
+    else if (backlog.status === 'failed') p.log.warn(`backlog: post-update initialization failed (${backlog.error})`)
   }
 
   p.outro('Commit the updated files.')

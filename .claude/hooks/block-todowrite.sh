@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook for TodoWrite — blocks it and redirects to beads.
+# PreToolUse hook for TodoWrite — blocks it and redirects to Backlog.md.
 set -euo pipefail
 
 INPUT=$(cat)
@@ -19,13 +19,13 @@ case "$TOOL_KEY" in
   *) exit 0 ;;
 esac
 
-echo "⛔ TodoWrite is blocked. Use beads instead:" >&2
+echo "⛔ TodoWrite is blocked. Use Backlog.md instead:" >&2
 echo "" >&2
-echo "   bd create <title>     — create an issue" >&2
-echo "   bd update <id>        — update an issue" >&2
-echo "   bd ready              — find available work" >&2
-echo "   bd show <id>          — view issue details" >&2
-echo "   bd close <id>         — complete work" >&2
+echo "   backlog task create \"<title>\" --description \"<why>\" --ac \"<criterion>\"" >&2
+echo "   backlog task list -s \"To Do\" --plain" >&2
+echo "   backlog task view <id> --plain" >&2
+echo "   backlog task edit <id> -s \"In Progress\"" >&2
+echo "   backlog task edit <id> -s Done --final-summary \"<summary>\"" >&2
 echo "" >&2
-echo "Run 'bd prime' for the full workflow reference." >&2
+echo "Run 'backlog board' or 'backlog browser --no-open' for local visibility." >&2
 exit 2
