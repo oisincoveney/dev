@@ -48,22 +48,8 @@ pre-commit:
       run: mise run typecheck
     lint:
       run: mise run lint
-post-commit:
-  commands:
-    bd-dolt-push:
-      run: .claude/hooks/beads-sync.sh push-best-effort
-post-merge:
-  commands:
-    bd-dolt-pull:
-      run: .claude/hooks/beads-sync.sh pull-best-effort
-post-checkout:
-  commands:
-    bd-dolt-pull:
-      run: .claude/hooks/beads-sync.sh pull-best-effort
 pre-push:
   commands:
-    bd-dolt-push:
-      run: .claude/hooks/beads-sync.sh push-best-effort
     test:
       run: mise run test
     pr-size-check:

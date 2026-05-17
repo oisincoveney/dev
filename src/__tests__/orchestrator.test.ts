@@ -211,10 +211,24 @@ describe('thin orchestrator', () => {
         '    repo-lint:',
         '      run: npm run lint',
         '',
+        'post-commit:',
+        '  commands:',
+        '    bd-dolt-push:',
+        '      run: .claude/hooks/beads-sync.sh push-best-effort',
+        '',
+        'post-merge:',
+        '  commands:',
+        '    repo-sync:',
+        '      run: npm run sync',
+        '    bd-dolt-pull:',
+        '      run: .claude/hooks/beads-sync.sh pull-best-effort',
+        '',
         'pre-push:',
         '  commands:',
         '    repo-test:',
         '      run: npm test',
+        '    bd-dolt-push:',
+        '      run: .claude/hooks/beads-sync.sh push-best-effort',
         '',
       ].join('\n'),
     )
@@ -226,15 +240,15 @@ describe('thin orchestrator', () => {
     expect(lefthook).toContain('run: npm run lint')
     expect(lefthook).toContain('repo-test:')
     expect(lefthook).toContain('run: npm test')
+    expect(lefthook).toContain('repo-sync:')
+    expect(lefthook).toContain('run: npm run sync')
     expect(lefthook).toContain('conventional-commits:')
     expect(lefthook).toContain('bd-ticket-ref:')
     expect(lefthook).toContain('typecheck:')
     expect(lefthook).toContain('run: mise run typecheck')
-    expect(lefthook).toContain('post-commit:')
-    expect(lefthook).toContain('post-merge:')
-    expect(lefthook).toContain('post-checkout:')
-    expect(lefthook).toContain('bd-dolt-push:')
-    expect(lefthook).toContain('run: .claude/hooks/beads-sync.sh push-best-effort')
+    expect(lefthook).not.toContain('bd-dolt-push:')
+    expect(lefthook).not.toContain('bd-dolt-pull:')
+    expect(lefthook).not.toContain('beads-sync.sh')
     expect(lefthook).toContain('pr-size-check:')
   })
 
