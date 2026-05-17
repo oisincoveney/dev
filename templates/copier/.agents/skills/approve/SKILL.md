@@ -12,8 +12,8 @@ Approve the current reviewed tracker plan and move it to `ready`.
 
 Rules:
 - Re-read the tracker item before changing it.
-- Hash the current title, description, priority, type, and `metadata.workflow.plan`.
-- Store approval metadata in `metadata.workflow.approval`.
+- Verify the plan, acceptance criteria, dependencies, and priority still match the user's intent.
+- Promote the Backlog task from draft/review into ready work by setting status to `To Do` and appending an approval note.
 - Do not implement. Execution happens through `/work-next`.
 
 Arguments: `$ARGUMENTS`

@@ -6,8 +6,8 @@ Follow the project `/work-next` skill exactly.
 
 Execute approved ready tracker work through Worktrunk-managed implementation worktrees.
 
-- Run `bd prime` after a fresh session or compaction.
-- Select only approved ready tracker work.
+- Re-read ready work with `backlog task list -s "To Do" --plain` and `backlog task view <id> --plain`.
+- Select only approved ready Backlog work.
 - Use Worktrunk lifecycle under `.agents/worktrees/`.
 - Run setup, verification, and teardown through the `mise run worktree:*` tasks.
 - Implementation agents commit before returning.

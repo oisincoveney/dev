@@ -5,7 +5,7 @@ description: Tracker-first development workflow for @oisincoveney/dev. Use for /
 
 # Tracker Workflow
 
-The tracker is the single source of truth. Beads is the first-class tracker adapter. Machine-readable workflow state lives in `metadata.workflow` JSON and is accessed through `oisin-dev tracker`.
+The tracker is the single source of truth. Backlog.md is the first-class tracker. Use `backlog task ...` directly; do not use adapter shims for normal workflow work. Workflow state lives in Backlog task fields: status, priority, dependencies, plan, notes, acceptance criteria, Definition of Done, refs, modified files, and final summary.
 
 Main thread is always orchestrator. All implementation happens in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>`, including `/quick`.
 
@@ -15,46 +15,19 @@ Use `wt` for agent worktree lifecycle. Do not create full clones, scratch direct
 
 - `/quick [P2|P3] <task>` — low-ceremony path. Defaults to P3; explicit P2 allowed. Never P0/P1. Dispatch a quick implementation agent in a Worktrunk worktree for `quick/p3/<slug>` or `quick/p2/<slug>`. Run normal verification, commit with git-spice, merge back after verification, resolve conflicts if still quick, then submit with git-spice when branch rules allow.
 - `/plan [priority] <goal>` — create tracker item in `review` state and stop. Single-task and multi-ticket plans both require review.
-- `/approve <id>` — hash current title, description, priority, type, and `metadata.workflow.plan`; store approval and move item to `ready`.
+- `/approve <id>` — re-read the task, verify the reviewed plan still matches user intent, append approval notes, and move item to `To Do`.
 - `/work-next` — execute approved ready tracker work through implementation agents.
 - `/finish` — verify integrated work, group PRs per approved PR plan, submit stacked PRs with git-spice by branch rules.
 
 Natural language handles rejection, regrill, reprioritize, split, merge, defer, and verifier reruns.
 
-## Tracker Metadata
+## Tracker State
 
-Use `metadata.workflow`:
-
-```json
-{
-  "schema": 1,
-  "kind": "quick|task|plan|child",
-  "state": "draft|review|ready|in_progress|blocked|closed",
-  "plan": {
-    "summary": "",
-    "priority_rationale": "",
-    "files": [],
-    "acceptance": [],
-    "verify": [],
-    "graph": null,
-    "pr_groups": []
-  },
-  "approval": {
-    "hash": null,
-    "approved_at": null,
-    "approved_by": null
-  },
-  "runtime": {
-    "branch": null,
-    "worktree": null,
-    "agent": null,
-    "commits": [],
-    "prs": []
-  }
-}
-```
-
-`plan` is approved scope. `runtime` is mutable execution/audit state. Notes/comments hold verifier output, P3 inline fixes, priority changes, and PR grouping divergence.
+Use Backlog task fields directly:
+- Status: `Draft` or draft file for review, `To Do` for approved ready work, `In Progress` when claimed, `Done` after verification.
+- Priority: map P0/P1 to high, P2 to medium, P3/P4 to low; preserve explicit P labels in labels or notes when needed.
+- Plan, acceptance criteria, Definition of Done, dependencies, refs/docs, and modified files are approved scope.
+- Notes and final summary hold verifier output, P3 inline fixes, priority changes, branch/worktree/commit/PR references, and PR grouping divergence.
 
 ## Priority Rubric
 
@@ -75,15 +48,15 @@ False-positive reducers: one file plus test is never multi-ticket; one bug with 
 
 ## Multi-Ticket Rules
 
-Every graph has exactly one real tracer/proof ticket. Parent approval creates children immediately. Children that faithfully instantiate the approved plan start `ready`; children adding decisions/scope start `review`.
+Every graph has exactly one real tracer/proof task. Parent approval creates children immediately. Children that faithfully instantiate the approved plan start `To Do`; children adding decisions/scope stay draft/review.
 
-`/work-next` computes the ready wave and dispatches one agent per mechanically independent child: unblocked in graph, no overlapping declared file sets, no shared exclusive resource. No hard three-agent cap. Platform/resource limits may reduce the wave.
+`/work-next` computes the ready wave and dispatches one agent per mechanically independent child: unblocked in the Backlog dependency graph, no overlapping declared file sets, no shared exclusive resource. No hard three-agent cap. Platform/resource limits may reduce the wave.
 
 Serial graph work still uses one focused agent per task in dependency order.
 
 ## Verification
 
-`/quick` uses normal verification only. Every tracked ticket close requires fresh-context verification.
+`/quick` uses normal verification only. Every tracked task completion requires fresh-context verification.
 
 Verifier is read-only:
 - Original AC failure blocks close.

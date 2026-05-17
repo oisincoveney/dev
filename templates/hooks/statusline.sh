@@ -14,19 +14,18 @@ fi
 branch=$(git branch --show-current 2>/dev/null || true)
 [[ -n "$branch" ]] && parts+=("⎇ $branch")
 
-bd_ready_count() {
+backlog_ready_count() {
   local out_file
   local pid
-  out_file=$(mktemp "${TMPDIR:-/tmp}/bd-ready.XXXXXX") || return 0
-  bd ready >"$out_file" 2>/dev/null &
+  out_file=$(mktemp "${TMPDIR:-/tmp}/backlog-ready.XXXXXX") || return 0
+  backlog task list -s "To Do" --plain >"$out_file" 2>/dev/null &
   pid=$!
 
-  # Keep statusline cheap and non-blocking. bd can wait on Dolt locks held by
-  # other processes, and statusLine runs frequently in the UI.
+  # Keep statusline cheap and non-blocking. statusLine runs frequently in the UI.
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     if ! kill -0 "$pid" 2>/dev/null; then
       wait "$pid" 2>/dev/null || true
-      grep -c '^' "$out_file" 2>/dev/null || true
+      grep -Ec '^[[:alpha:]][[:alnum:]_-]*-[0-9]+' "$out_file" 2>/dev/null || true
       rm -f "$out_file"
       return 0
     fi
@@ -41,8 +40,8 @@ bd_ready_count() {
   return 0
 }
 
-if command -v bd >/dev/null 2>&1; then
-  ready_count=$(bd_ready_count)
+if command -v backlog >/dev/null 2>&1; then
+  ready_count=$(backlog_ready_count)
   if [[ -n "$ready_count" && "$ready_count" != "0" ]]; then
     parts+=("ready:$ready_count")
   fi

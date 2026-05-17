@@ -12,7 +12,7 @@ interface ToolEvent {
 
 const HOOKS_DIR = '.claude/hooks'
 const HAS_TYPESCRIPT = true
-const BEADS_ENABLED = true
+const BACKLOG_ENABLED = true
 const WORKTREE_POLICY = 'Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
 const STACK_POLICY = 'git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct git/gh commands for those operations are blocked.'
 
@@ -69,7 +69,7 @@ export default {
     if (key.includes('write') || key.includes('edit') || key.includes('patch')) {
       const worktree = runHook('worktree-write-guard.sh', toolInput)
       if (!worktree.allowed) throw new Error(worktree.message)
-      void BEADS_ENABLED
+      void BACKLOG_ENABLED
       if (HAS_TYPESCRIPT) {
         const style = runHook('ts-style-guard.sh', toolInput)
         if (!style.allowed) throw new Error(style.message)

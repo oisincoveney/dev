@@ -40,11 +40,6 @@ case "$TOOL_KEY" in
       "$HOOK_DIR/destructive-command-guard.sh"
       "$HOOK_DIR/git-spice-command-guard.sh"
     )
-    if [[ "${OISIN_DEV_BEADS:-}" == "1" ]]; then
-      SCRIPTS+=(
-        "$HOOK_DIR/bd-remember-protect.sh"
-      )
-    fi
     SCRIPTS+=("$HOOK_DIR/block-coauthor.sh")
     ;;
 esac

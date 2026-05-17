@@ -16,10 +16,10 @@ If a question can be answered by exploring the codebase, explore the codebase in
 
 ## Pre-grill: load prior rejection context
 
-If this grill follows a `/regrill <id>` or `/reject <id>`, prior rejection cause may be recorded in beads memory. Check:
+If this grill follows a `/regrill <id>` or `/reject <id>`, prior rejection cause may be recorded in Backlog task notes. Check:
 
 ```bash
-bd memories "plan-rejected:" 2>/dev/null
+backlog search "plan-rejected:" --plain 2>/dev/null
 ```
 
 If matches present, read the most recent. Use as seed: don't repeat the question that already got a "no" answer; lead with the rejected angle ("you said X is out — should we revise around X, or restart?").

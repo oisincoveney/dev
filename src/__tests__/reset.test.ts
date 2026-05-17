@@ -51,7 +51,7 @@ describe('reset command helpers', () => {
     })
   })
 
-  it('removes only generated agent paths and preserves .beads', () => {
+  it('removes only generated agent paths and preserves tracker state', () => {
     for (const relPath of RESET_PATHS) {
       const abs = join(dir, relPath)
       if (relPath.endsWith('.md')) writeFileSync(abs, relPath)
@@ -59,7 +59,7 @@ describe('reset command helpers', () => {
       else mkdirSync(abs, { recursive: true })
     }
     mkdirSync(join(dir, '.agents/skills/stale-generated-skill'), { recursive: true })
-    mkdirSync(join(dir, '.beads'), { recursive: true })
+    mkdirSync(join(dir, 'backlog'), { recursive: true })
 
     expect(existingResetPaths(dir)).toEqual([...RESET_PATHS])
     removeResetPaths(dir)
@@ -68,7 +68,7 @@ describe('reset command helpers', () => {
       expect(existsSync(join(dir, relPath))).toBe(false)
     }
     expect(existsSync(join(dir, '.agents/skills/stale-generated-skill'))).toBe(false)
-    expect(existsSync(join(dir, '.beads'))).toBe(true)
+    expect(existsSync(join(dir, 'backlog'))).toBe(true)
   })
 
   it('bootstraps reset from legacy .dev.config.json when copier answers are missing', () => {
@@ -85,8 +85,8 @@ describe('reset command helpers', () => {
             typecheck: 'tsc --noEmit',
           },
           skills: ['code-quality', 'tracker-workflow'],
-          tools: ['beads'],
-          workflow: 'bd',
+          tools: ['backlog'],
+          workflow: 'backlog',
           contractDriven: false,
           targets: ['claude', 'codex'],
         },
@@ -105,8 +105,7 @@ describe('reset command helpers', () => {
     expect(existsSync(join(dir, '.codex/hooks/pre-tool-dispatch.sh'))).toBe(true)
   })
 
-  it('infers beads workflow when resetting an older beads repo with stale legacy config', () => {
-    mkdirSync(join(dir, '.beads'), { recursive: true })
+  it('migrates older bd workflow config to Backlog workflow when resetting', () => {
     writeFileSync(
       join(dir, '.dev.config.json'),
       `${JSON.stringify(
@@ -121,7 +120,7 @@ describe('reset command helpers', () => {
           },
           skills: ['code-quality'],
           tools: [],
-          workflow: 'none',
+          workflow: 'bd',
           contractDriven: false,
           targets: ['claude', 'codex'],
         },
@@ -136,16 +135,18 @@ describe('reset command helpers', () => {
     const state = JSON.parse(readFileSync(join(dir, STATE_FILE), 'utf8')) as {
       tools?: string[]
       workflow?: string
-      beads_enabled?: boolean
+      backlog_enabled?: boolean
     }
-    expect(state.tools).toContain('beads')
-    expect(state.workflow).toBe('bd')
-    expect(state.beads_enabled).toBe(true)
+    expect(state.tools).toContain('backlog')
+    expect(state.tools).not.toContain('beads')
+    expect(state.workflow).toBe('backlog')
+    expect(state.backlog_enabled).toBe(true)
 
     const claudeSettings = readFileSync(join(dir, '.claude/settings.json'), 'utf8')
-    expect(claudeSettings).toContain('OISIN_DEV_BEADS=1')
-    expect(claudeSettings).toContain('bd-context-inject.sh')
-    expect(claudeSettings).toContain('swarm-digest.sh')
+    expect(claudeSettings).toContain('OISIN_DEV_BACKLOG=1')
+    expect(claudeSettings).toContain('context-injector.sh')
+    expect(claudeSettings).not.toContain('bd-context-inject.sh')
+    expect(claudeSettings).not.toContain('swarm-digest.sh')
     expect(existsSync(join(dir, '.agents/skills/caveman/SKILL.md'))).toBe(true)
     expect(existsSync(join(dir, '.codex/skills/tracker-workflow'))).toBe(true)
   })

@@ -2,7 +2,7 @@
 # Stop hook — when running inside an implementation-agent worktree (cwd under
 # .agents/worktrees/<name>/, .claude/worktrees/<name>/, or
 # .codex/worktrees/<name>/), block stop if the worker hasn't completed
-# its lifecycle: uncommitted changes, unpushed commits, or a bd ticket
+# its lifecycle: uncommitted changes, unpushed commits, or a Backlog task
 # still in_progress on its branch.
 #
 # Background: workers can terminate after spec-verifier returns, treating
@@ -65,12 +65,12 @@ if [[ "$UPSTREAM_OK" -eq 0 ]]; then
   fi
 fi
 
-# Any in_progress bd ticket? If bd or a beads repo is unavailable, skip this check.
-if [[ -d "$WORKTREE_ROOT/.beads" ]] && command -v bd >/dev/null 2>&1; then
-  IN_PROGRESS=$(cd "$WORKTREE_ROOT" && bd list --status in_progress --json 2>/dev/null | jq -r '.[].id // empty' 2>/dev/null || true)
+# Any in-progress Backlog task? If Backlog.md is unavailable, skip this check.
+if command -v backlog >/dev/null 2>&1 && [[ -d "$WORKTREE_ROOT/backlog" || -d "$WORKTREE_ROOT/.backlog" || -f "$WORKTREE_ROOT/backlog.config.yml" ]]; then
+  IN_PROGRESS=$(cd "$WORKTREE_ROOT" && backlog task list -s "In Progress" --plain 2>/dev/null | sed -nE 's/^([[:alpha:]][[:alnum:]_-]*-[0-9]+).*/\1/p' || true)
   if [[ -n "$IN_PROGRESS" ]]; then
     while IFS= read -r tid; do
-      [[ -n "$tid" ]] && REASONS+=("bd ticket $tid still in_progress — close it or report FAIL")
+      [[ -n "$tid" ]] && REASONS+=("Backlog task $tid still In Progress — mark Done or report FAIL")
     done <<< "$IN_PROGRESS"
   fi
 fi
@@ -90,7 +90,7 @@ done
 echo "" >&2
 echo "   Steps 6-10 of the worker prompt MUST run before you stop:" >&2
 echo "     6. spec-verifier (already done if you got here)" >&2
-echo "     7. branch on result (PASS → bd close; FAIL → report)" >&2
+echo "     7. branch on result (PASS → backlog task edit <id> -s Done; FAIL → report)" >&2
 echo "     8. git-spice commit create/amend" >&2
 echo "     9. git-spice branch submit or git-spice stack submit" >&2
 echo "    10. return one-line status to caller" >&2

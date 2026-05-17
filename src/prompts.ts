@@ -125,9 +125,10 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
     await p.select<WorkflowFramework>({
       message: 'Workflow framework?',
       options: [
-        { value: 'bd', label: 'bd-native — beads is the source of truth (recommended when beads is selected)' },
+        { value: 'backlog', label: 'Backlog.md — Markdown-native tracker in this repo' },
         { value: 'none', label: 'None — lightweight, no opinionated workflow' },
       ],
+      initialValue: 'backlog',
     }),
   )
 
@@ -136,15 +137,15 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
       message: 'Tools',
       options: [
         {
-          value: 'beads',
-          label: 'Beads (bd) — issue tracking (blocks TodoWrite)',
+          value: 'backlog',
+          label: 'Backlog.md — issue tracking, board, local browser UI, MCP-ready',
         },
         {
           value: 'contract-driven',
           label: 'Contract-driven modules (module/index.ts + contract.ts pattern)',
         },
       ],
-      initialValues: ['beads', 'contract-driven'],
+      initialValues: ['backlog', 'contract-driven'],
       required: false,
     }),
   )

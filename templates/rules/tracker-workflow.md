@@ -5,7 +5,7 @@ description: Tracker-first workflow rules: quick lane, planning approval, worktr
 
 # Tracker Workflow
 
-Tracker is the single source of truth. Beads is the first adapter. Workflow state is JSON in `metadata.workflow`, accessed through `oisin-dev tracker`.
+Tracker is the single source of truth. Backlog.md is the first-class tracker. Use `backlog task ...` directly; workflow state lives in Backlog task fields.
 
 Main thread is always orchestrator. All implementation runs in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>`, including `/quick`.
 
@@ -17,15 +17,13 @@ Worktrunk owns worktree lifecycle. git-spice owns stack-aware branch creation, c
 
 - `/quick [P2|P3] <task>` — no tracker approval, normal verification only, implementation agent in Worktrunk quick worktree, commit with git-spice, merge back when verified.
 - `/plan [priority] <goal>` — create tracker item in `review`; stop.
-- `/approve <id>` — store approval hash; move item to `ready`.
+- `/approve <id>` — append approval notes; move item to `To Do`.
 - `/work-next` — execute approved ready tracker work.
 - `/finish` — verify integration, group PRs, submit stacked PRs with git-spice by branch rules.
 
 ## Approval
 
-Approval hash covers normalized title, description, priority, issue type, and `metadata.workflow.plan`. It excludes runtime state, notes, comments, timestamps, assignee, branches, worktrees, commits, and PRs.
-
-Any plan change after approval invalidates approval. Runtime and notes do not.
+Approval covers the reviewed Backlog task title, description, priority, plan, AC, DoD, dependencies, refs, modified files, and PR grouping. Any plan change after approval invalidates approval. Runtime notes do not.
 
 ## Quick Gate
 
@@ -41,7 +39,7 @@ Multi-ticket plans require exactly one real tracer/proof ticket. Parent approval
 
 ## Verification
 
-Every tracked ticket close requires fresh-context verification. `/quick` uses normal verification only.
+Every tracked task completion requires fresh-context verification. `/quick` uses normal verification only.
 
 Verifier is read-only. P0-P2 findings become tracker tickets; simple/safe P3 findings are returned for implementer inline fix and recorded in notes.
 

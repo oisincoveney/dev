@@ -39,32 +39,31 @@ Worker FAIL/PARTIAL never auto-aborts siblings. Each worker independent worktree
 Fan-out summary (N tickets):
   ✓ <id>: PASS — <subject>
   ✓ <id>: PASS-WITH-FOLLOWUPS (filed M discovered-from)
-  ⚑ <id>: PARTIAL — bd human filed
+  ⚑ <id>: PARTIAL — human decision needed
   ✗ <id>: FAIL — <reason>
 ```
 
-## Stop digest surfaces flags
+## Stop Summary Surfaces Flags
 
-`swarm-digest.sh` Stop hook emits one block per active swarm:
+Verifier and finish summaries include one block per active graph:
 ```
 SWARM DIGEST — <epic-id> · <title>
   N closed  ·  M in_progress  ·  K blocked  ·  total T
   D discovered-from filed
-  ⚑ H human-flagged — review with: bd human list
+  ⚑ H human-flagged — review the linked Backlog task notes
 ```
 
-User sees flags at next Stop, not mid-flight. Resolves at own pace via `bd human list` + `bd human respond <id>` / `bd human dismiss <id>`.
+User sees flags in tracker notes and final summaries, not mid-flight. Resolve by appending a Backlog task note and updating task status.
 
 ## Forbidden
 
 - DON'T page user mid-flight for non-tracer failures.
 - DON'T silently absorb scope (use `discovered-from` ticket).
-- DON'T close a `bd human`-flagged ticket without user response/dismiss.
+- DON'T close a human-flagged task without user response/dismiss.
 - DON'T let tracer-fail proceed silently — it invalidates the swarm.
 
 ## See also
 
 - `tracker-workflow.md` — orchestrator, worktree agent, graph, and verifier policy
 - `spec-verifier/SKILL.md` — tracker-backed verifier output shape
-- `swarm-digest.sh` — Stop hook
 - `scope-discipline.md` — discovered-from ticket flow

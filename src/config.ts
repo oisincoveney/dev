@@ -1,7 +1,7 @@
 import type { ProjectVariant } from './skills.js'
 
 export type Language = 'typescript' | 'rust' | 'go' | 'swift' | 'other'
-export type WorkflowFramework = 'bd' | 'none'
+export type WorkflowFramework = 'backlog' | 'none'
 export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm' | 'cargo' | 'go' | 'swift' | 'other'
 export type Target = 'claude' | 'codex' | 'opencode' | 'cursor' | 'lefthook'
 

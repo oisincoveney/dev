@@ -92,10 +92,6 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
       { cwd: dir, tool_input: { command: 'git status --short' } },
     ],
     [
-      'bd-remember-protect.sh',
-      { cwd: dir, tool_input: { command: 'git status --short' } },
-    ],
-    [
       'block-coauthor.sh',
       { cwd: dir, tool_input: { command: 'git status --short' } },
     ],

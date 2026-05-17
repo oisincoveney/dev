@@ -19,6 +19,6 @@ contract_driven: false
 targets: []
 mcp_servers: []
 models: {}
-beads_enabled: false
+backlog_enabled: false
 has_typescript: false
 has_frontend: false

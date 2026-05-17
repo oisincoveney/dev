@@ -61,21 +61,21 @@ fi
 if echo "$CONTENT" | grep -qE 'throw new Error\("Not implemented"\)|throw new Error\("TODO'; then
   if ! is_test_file; then
     block "Stub 'Not implemented' in production code" \
-          "Either implement it or file a bd issue: bd create '<description>'"
+          "Either implement it or file a Backlog task: backlog task create '<description>'"
   fi
 fi
 
 if echo "$CONTENT" | grep -qE 'todo!\(\)|unimplemented!\(\)'; then
   if ! is_test_file; then
     block "Rust todo macro or unimplemented macro in production code" \
-          "Either implement it or file a bd issue: bd create '<description>'"
+          "Either implement it or file a Backlog task: backlog task create '<description>'"
   fi
 fi
 
 if echo "$CONTENT" | grep -qE 'panic\("TODO"\)|panic\("not implemented"\)|errors\.New\("not implemented"\)'; then
   if ! is_test_file; then
     block "Go stub panic or sentinel error in production code" \
-          "Either implement it or file a bd issue: bd create '<description>'"
+          "Either implement it or file a Backlog task: backlog task create '<description>'"
   fi
 fi
 
@@ -91,7 +91,7 @@ fi
 if ! is_test_file; then
   if echo "$CONTENT" | grep -qiE '//[[:space:]]*(TODO|FIXME)[[:space:]]*:?[[:space:]]*implement\b'; then
     block "// TODO: implement comment in production code" \
-          "Either implement it or file a bd issue: bd create '<description>'"
+          "Either implement it or file a Backlog task: backlog task create '<description>'"
   fi
 fi
 

@@ -74,7 +74,7 @@ describe.skipIf(!canRun)('verifier-skill-guard.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('exits 0 when no completion claim and no bd close', () => {
+  it('exits 0 when no completion claim and no Backlog completion', () => {
     const transcript = writeTranscript(dir, {
       finalText: 'Looking into the bug now',
       toolUses: [{ name: 'Edit', input: { file_path: '/tmp/foo.ts' } }],
@@ -103,12 +103,12 @@ describe.skipIf(!canRun)('verifier-skill-guard.sh', () => {
     expect(stderr).toContain('typescript-advanced-types')
   })
 
-  it('blocks on bd close after editing Go without invoking required skills', () => {
+  it('blocks on Backlog Done after editing Go without invoking required skills', () => {
     const transcript = writeTranscript(dir, {
       finalText: 'closing the ticket',
       toolUses: [
         { name: 'Edit', input: { file_path: '/tmp/foo.go' } },
-        { name: 'Bash', input: { command: 'bd close beads-123' } },
+        { name: 'Bash', input: { command: 'backlog task edit task-123 -s Done' } },
       ],
     })
     const { status, stderr } = runHook(dir, transcript)
@@ -152,7 +152,7 @@ describe.skipIf(!canRun)('verifier-skill-guard.sh', () => {
           name: 'Agent',
           input: {
             subagent_type: 'general-purpose',
-            prompt: 'Run the spec-verifier protocol against bd-123 — re-read the issue, load skills...',
+            prompt: 'Run the spec-verifier protocol against task-123 — re-read the issue, load skills...',
           },
         },
       ],
@@ -187,12 +187,12 @@ describe.skipIf(!canRun)('verifier-skill-guard.sh', () => {
     expect(status).toBe(0)
   })
 
-  it("does not match `bd closer` or other near-miss commands as `bd close`", () => {
+  it("does not match non-Done Backlog edits as completion", () => {
     const transcript = writeTranscript(dir, {
       finalText: 'looking at it',
       toolUses: [
         { name: 'Edit', input: { file_path: '/tmp/foo.ts' } },
-        { name: 'Bash', input: { command: 'bd closely-related-thing' } },
+        { name: 'Bash', input: { command: 'backlog task edit task-123 -s "In Progress"' } },
       ],
     })
     const { status } = runHook(dir, transcript)
