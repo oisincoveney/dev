@@ -99,14 +99,14 @@
       {
         "tool": "Bash",
         "decision": "allow",
-        "if": "Bash(mise run *|git status|git diff|git log|bd *)",
+        "if": "Bash(mise run *|git status|git diff|git log|git-spice *|bd *)",
         "reason": "Safe verification and task tracking"
       },
       {
         "tool": "Bash",
-        "decision": "allow",
+        "decision": "ask",
         "if": "Bash(git commit*|git push*)",
-        "reason": "Git operations are allowed; protected branch/tag pushes are blocked by hook"
+        "reason": "Stack-aware Git operations must use git-spice; hooks block direct owned operations"
       },
       {
         "tool": "Edit",

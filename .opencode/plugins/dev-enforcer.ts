@@ -14,6 +14,7 @@ const HOOKS_DIR = '.claude/hooks'
 const HAS_TYPESCRIPT = true
 const BEADS_ENABLED = true
 const WORKTREE_POLICY = 'Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
+const STACK_POLICY = 'git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct git/gh commands for those operations are blocked.'
 
 function toolKey(tool: string): string {
   return tool.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
@@ -57,6 +58,9 @@ export default {
       const destructive = runHook('destructive-command-guard.sh', toolInput)
       if (!destructive.allowed) throw new Error(destructive.message)
       void WORKTREE_POLICY
+      const stack = runHook('git-spice-command-guard.sh', toolInput)
+      if (!stack.allowed) throw new Error(stack.message)
+      void STACK_POLICY
       const coauthor = runDispatchedHook('block-coauthor', toolInput)
       if (!coauthor.allowed) throw new Error(coauthor.message)
       return

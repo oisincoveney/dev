@@ -11,13 +11,15 @@ Main thread is always orchestrator. All implementation runs in Worktrunk-managed
 
 Use `wt` for worktree lifecycle. Do not use full repo clones, scratch directories, `/tmp`, `/private/tmp`, or `TMPDIR` overrides for agent implementation work. Worktree setup, verification, and teardown run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
 
+Worktrunk owns worktree lifecycle. git-spice owns stack-aware branch creation, checkout, tracking, restacking, commit creation/amendment, branch publication, and PR creation/update. Direct `git`/`gh` commands for git-spice-owned operations are blocked. git-spice is worktree-aware, so serialize stack mutation commands per stack when other Worktrunk worktrees may have related branches checked out.
+
 ## Commands
 
-- `/quick [P2|P3] <task>` — no tracker approval, normal verification only, implementation agent in Worktrunk quick worktree, commit, merge back when verified.
+- `/quick [P2|P3] <task>` — no tracker approval, normal verification only, implementation agent in Worktrunk quick worktree, commit with git-spice, merge back when verified.
 - `/plan [priority] <goal>` — create tracker item in `review`; stop.
 - `/approve <id>` — store approval hash; move item to `ready`.
 - `/work-next` — execute approved ready tracker work.
-- `/finish` — verify integration, group PRs, push/open PRs by branch rules.
+- `/finish` — verify integration, group PRs, submit stacked PRs with git-spice by branch rules.
 
 ## Approval
 

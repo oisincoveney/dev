@@ -8,3 +8,5 @@ globs: ["**/*"]
 Use `AGENTS.md` as the canonical project instruction file. Skills live in `.agents/skills/` and are linked into tool-specific locations by dotagents.
 
 Agent implementation work must use Worktrunk (`wt`) worktrees under `.agents/worktrees/<task-or-branch>`. Full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden. Run setup, verification, and teardown through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
+
+Worktrunk owns worktree lifecycle. git-spice owns stack-aware branch, commit, restack, push, and PR operations; direct `git`/`gh` commands for those operations are blocked.

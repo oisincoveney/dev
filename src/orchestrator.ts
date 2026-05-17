@@ -655,6 +655,7 @@ function requiredMiseToolLines(data?: TemplateData): string[] {
     '"npm:@sentry/dotagents" = "latest"',
     '"aqua:evilmartians/lefthook" = "latest"',
     '"github:max-sixty/worktrunk" = "latest"',
+    '"github:abhinav/git-spice" = "latest"',
   ]
   if (data?.beads_enabled === true) lines.push('"aqua:steveyegge/beads" = "1.0.2"')
   return lines
@@ -749,6 +750,8 @@ export function agentsMd(data: TemplateData): string {
   lines.push('- Never run destructive commands without explicit user approval.')
   lines.push('- Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>`; full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.')
   lines.push('- Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.')
+  lines.push('- Worktrunk owns worktree lifecycle; git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct `git`/`gh` commands for git-spice-owned operations are blocked.')
+  lines.push('- Use `git-spice` in project automation; local aliases like `gs` are fine for humans.')
   lines.push('- Read before editing; verify before claiming done.')
   lines.push('- Say "I need to verify" when uncertain, then check.')
   lines.push('- User constraints are non-negotiable.')
@@ -767,6 +770,7 @@ export function agentsMd(data: TemplateData): string {
   lines.push('- Git hooks: `lefthook.yml`.')
   lines.push('- Commands/tool versions: `mise.toml`.')
   lines.push('- Worktree lifecycle: Worktrunk project hooks in `.config/wt.toml`; canonical agent root is `.agents/worktrees/`.')
+  lines.push('- Stack lifecycle: git-spice tracks branch relationships and submits stacked PRs; serialize stack mutation commands per stack.')
   lines.push('- Runtime overlays: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`.')
   if (data.beads_enabled) {
     lines.push('', '## Beads Quick Reference', '')
@@ -811,6 +815,7 @@ function miseToml(data: TemplateData): string {
   lines.push('"npm:@sentry/dotagents" = "latest"')
   lines.push('"aqua:evilmartians/lefthook" = "latest"')
   lines.push('"github:max-sixty/worktrunk" = "latest"')
+  lines.push('"github:abhinav/git-spice" = "latest"')
   if (data.beads_enabled) lines.push('"aqua:steveyegge/beads" = "1.0.2"')
   for (const [name, command] of Object.entries(data.commands)) {
     lines.push('', `[tasks.${name}]`)
@@ -921,6 +926,7 @@ function claudeSettings(data: TemplateData): Record<string, unknown> {
     'git status',
     'git diff',
     'git log',
+    'git-spice *',
     'bd *',
   ].filter((cmd): cmd is string => typeof cmd === 'string' && cmd.length > 0).join('|')
   return {
@@ -980,6 +986,8 @@ globs: ["**/*"]
 Use \`AGENTS.md\` as the canonical project instruction file. Skills live in \`.agents/skills/\` and are linked into tool-specific locations by @oisincoveney/dev.
 
 Agent implementation work must use Worktrunk (\`wt\`) worktrees under \`.agents/worktrees/<task-or-branch>\`. Full clones, scratch directories, \`/tmp\`, \`/private/tmp\`, and \`TMPDIR\` overrides are forbidden. Run setup, verification, and teardown through \`mise run worktree:setup\`, \`mise run worktree:verify\`, and \`mise run worktree:teardown\`.
+
+Worktrunk owns worktree lifecycle. git-spice owns stack-aware branch, commit, restack, push, and PR operations; direct \`git\`/\`gh\` commands for those operations are blocked.
 `
 }
 
@@ -1000,6 +1008,7 @@ const HOOKS_DIR = '.claude/hooks'
 const HAS_TYPESCRIPT = ${JSON.stringify(data.has_typescript)}
 const BEADS_ENABLED = ${JSON.stringify(data.beads_enabled)}
 const WORKTREE_POLICY = 'Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
+const STACK_POLICY = 'git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct git/gh commands for those operations are blocked.'
 
 function toolKey(tool: string): string {
   return tool.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
@@ -1043,6 +1052,9 @@ export default {
       const destructive = runHook('destructive-command-guard.sh', toolInput)
       if (!destructive.allowed) throw new Error(destructive.message)
       void WORKTREE_POLICY
+      const stack = runHook('git-spice-command-guard.sh', toolInput)
+      if (!stack.allowed) throw new Error(stack.message)
+      void STACK_POLICY
       const coauthor = runDispatchedHook('block-coauthor', toolInput)
       if (!coauthor.allowed) throw new Error(coauthor.message)
       return

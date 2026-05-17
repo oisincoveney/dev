@@ -51,7 +51,7 @@ if $GIT rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1; then
 fi
 
 # If there are any commits at all but no upstream is set, the worker
-# never ran `git push -u origin HEAD`.
+# never submitted the branch with git-spice.
 if [[ "$UPSTREAM_OK" -eq 0 ]]; then
   if [[ -n "$($GIT log --oneline -1 2>/dev/null || true)" ]]; then
     # Distinguish a fresh worktree (HEAD == origin/HEAD) from one with
@@ -60,7 +60,7 @@ if [[ "$UPSTREAM_OK" -eq 0 ]]; then
     HEAD_SHA=$($GIT rev-parse HEAD 2>/dev/null || true)
     REMOTE_HEAD=$($GIT rev-parse origin/HEAD 2>/dev/null || true)
     if [[ -n "$HEAD_SHA" && "$HEAD_SHA" != "$REMOTE_HEAD" ]]; then
-      REASONS+=("branch has commits but no upstream — run: git push -u origin HEAD")
+      REASONS+=("branch has commits but no upstream — run: git-spice branch submit or git-spice stack submit")
     fi
   fi
 fi
@@ -91,8 +91,8 @@ echo "" >&2
 echo "   Steps 6-10 of the worker prompt MUST run before you stop:" >&2
 echo "     6. spec-verifier (already done if you got here)" >&2
 echo "     7. branch on result (PASS → bd close; FAIL → report)" >&2
-echo "     8. git commit" >&2
-echo "     9. git push -u origin HEAD" >&2
+echo "     8. git-spice commit create/amend" >&2
+echo "     9. git-spice branch submit or git-spice stack submit" >&2
 echo "    10. return one-line status to caller" >&2
 echo "" >&2
 echo "   The verifier's \"## Result:\" markdown is NOT your return value." >&2

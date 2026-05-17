@@ -17,6 +17,8 @@ Configured with @oisincoveney/dev. Shared rules live here; reusable playbooks li
 - Never run destructive commands without explicit user approval.
 - Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>`; full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.
 - Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
+- Worktrunk owns worktree lifecycle; git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct `git`/`gh` commands for git-spice-owned operations are blocked.
+- Use `git-spice` in project automation; local aliases like `gs` are fine for humans.
 - Read before editing; verify before claiming done.
 - Say "I need to verify" when uncertain, then check.
 - User constraints are non-negotiable.
@@ -41,6 +43,7 @@ Use `mise run <task>` for canonical project commands.
 - Git hooks: `lefthook.yml`.
 - Commands/tool versions: `mise.toml`.
 - Worktree lifecycle: Worktrunk project hooks in `.config/wt.toml`; canonical agent root is `.agents/worktrees/`.
+- Stack lifecycle: git-spice tracks branch relationships and submits stacked PRs; serialize stack mutation commands per stack.
 - Runtime overlays: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`.
 
 {% if beads_enabled -%}

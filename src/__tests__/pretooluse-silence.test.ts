@@ -88,6 +88,10 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
       { cwd: dir, tool_input: { command: 'git status --short' } },
     ],
     [
+      'git-spice-command-guard.sh',
+      { cwd: dir, tool_input: { command: 'git status --short' } },
+    ],
+    [
       'bd-remember-protect.sh',
       { cwd: dir, tool_input: { command: 'git status --short' } },
     ],
@@ -209,6 +213,19 @@ describe.skipIf(!canRun)('PreToolUse hook allow paths', () => {
 
       expect(result.status).toBe(2)
       expect(result.stderr).toContain('BLOCKED')
+    },
+  )
+
+  it.each(['Bash', 'bash', 'functions.exec_command'])(
+    'dispatcher routes %s through git-spice stack guards',
+    (toolName) => {
+      const result = runDispatch(dir, {
+        tool_name: toolName,
+        tool_input: { command: 'git commit -m "feat: direct"' },
+      })
+
+      expect(result.status).toBe(2)
+      expect(result.stderr).toContain('git-spice owns stack-aware commit creation')
     },
   )
 
