@@ -111,6 +111,7 @@ export interface PrSignal {
   createdAt: string
 }
 
+export type FixAgent = 'auto' | 'codex' | 'claude' | 'none'
 export type LandingDecisionAction = 'merge' | 'fix' | 'review' | 'defer' | 'skip'
 
 export interface LandingDecision {
@@ -148,6 +149,7 @@ interface DaemonOptions {
   dryRun: boolean
   spawn: boolean
   spawnCommand?: string
+  agent: FixAgent
   intervalSeconds: number
   limit: number
   stateFile: string
@@ -406,6 +408,7 @@ export function buildFixSpawnInvocation(
   signal: PrSignal,
   taskId: string | undefined,
   commandTemplate: string | undefined,
+  agent: FixAgent = 'auto',
 ): { command: string; args: string[] } {
   const branch = branchNameForSignal(signal, taskId)
   if (commandTemplate !== undefined) {
@@ -415,12 +418,42 @@ export function buildFixSpawnInvocation(
     }
   }
   const worktreePath = branch.replaceAll('/', '-')
+  const worktreeDir = `$repo_root/.agents/worktrees/${worktreePath}`
+  const prompt = buildAgentPrompt(signal, taskId, branch)
   const script = [
     'repo_root="$(git rev-parse --show-toplevel)"',
     'case "$repo_root" in */.agents/worktrees/*) repo_root="${repo_root%%/.agents/worktrees/*}" ;; esac',
-    `WORKTRUNK_WORKTREE_PATH="$repo_root/.agents/worktrees/${worktreePath}" wt switch --create ${shellSingleQuote(branch)} --yes`,
+    `worktree_dir="${worktreeDir}"`,
+    `WORKTRUNK_WORKTREE_PATH="$worktree_dir" wt switch --create ${shellSingleQuote(branch)} --yes`,
+    ...(agent === 'none' ? [] : [`cd "$worktree_dir"`, agentLaunchScript(agent, prompt)]),
   ].join('; ')
   return { command: 'sh', args: ['-lc', script] }
+}
+
+export function buildAgentPrompt(signal: PrSignal, taskId: string | undefined, branch: string): string {
+  return [
+    'You are an implementation agent spawned by pr-daemon to fix PR feedback.',
+    '',
+    `Backlog task: ${taskId ?? '(not created)'}`,
+    `Work branch: ${branch}`,
+    `PR: #${signal.prNumber} ${signal.prTitle}`,
+    `URL: ${signal.prUrl}`,
+    `Signal: ${signal.kind}`,
+    `Author: ${signal.author}`,
+    `Created: ${signal.createdAt}`,
+    '',
+    'Feedback:',
+    signal.body.trim().length > 0 ? signal.body.trim() : '(no body)',
+    '',
+    'Instructions:',
+    '- Inspect the PR, comments, reviews, checks, and diff before editing.',
+    '- Implement the requested fix in this Worktrunk worktree.',
+    '- Follow AGENTS.md and the tracker workflow.',
+    '- Run relevant verification.',
+    '- Commit with git-spice when the fix is complete.',
+    '- Do not merge the PR.',
+    '- If blocked, append a Backlog note or leave a clear final status.',
+  ].join('\n')
 }
 
 export function mergeBlockers(packet: PullRequestPacket): string[] {
@@ -550,20 +583,20 @@ function enqueueBacklogTask(signal: PrSignal, runner: CommandRunner): string {
 function spawnFixWork(
   signal: PrSignal,
   taskId: string | undefined,
-  options: Pick<DaemonOptions, 'spawnCommand'>,
+  options: Pick<DaemonOptions, 'spawnCommand' | 'agent'>,
   runner: CommandRunner,
 ): void {
-  const invocation = buildFixSpawnInvocation(signal, taskId, options.spawnCommand)
+  const invocation = buildFixSpawnInvocation(signal, taskId, options.spawnCommand, options.agent)
   const result = runner(invocation.command, invocation.args)
   if (result.error !== undefined) throw new Error(`spawn failed to start: ${result.error.message}`)
   if (result.status !== 0) throw new Error(result.stderr.trim() || `spawn exited ${result.status}`)
 }
 
-function processFreshSignal(signal: PrSignal, options: Pick<DaemonOptions, 'dryRun' | 'spawn' | 'spawnCommand'>, runner: CommandRunner): void {
+function processFreshSignal(signal: PrSignal, options: Pick<DaemonOptions, 'dryRun' | 'spawn' | 'spawnCommand' | 'agent'>, runner: CommandRunner): void {
   if (options.dryRun) {
     process.stdout.write(`DRY-RUN enqueue ${signal.kind} for PR #${signal.prNumber}: ${signal.prTitle}\n`)
     if (options.spawn) {
-      const invocation = buildFixSpawnInvocation(signal, undefined, options.spawnCommand)
+      const invocation = buildFixSpawnInvocation(signal, undefined, options.spawnCommand, options.agent)
       process.stdout.write(`DRY-RUN spawn ${invocation.command} ${invocation.args.join(' ')}\n`)
     }
     return
@@ -648,6 +681,7 @@ function parseDaemonOptions(argv: ReadonlyArray<string>): DaemonOptions {
     dryRun: argv.includes('--dry-run'),
     spawn: argv.includes('--spawn'),
     spawnCommand: stringFlag(argv, '--spawn-command'),
+    agent: agentFlag(stringFlag(argv, '--agent')),
     intervalSeconds: numberFlag(argv, '--interval', 60),
     limit: numberFlag(argv, '--limit', 30),
     stateFile: stringFlag(argv, '--state-file') ?? DEFAULT_DAEMON_STATE,
@@ -656,6 +690,11 @@ function parseDaemonOptions(argv: ReadonlyArray<string>): DaemonOptions {
     webhookPath: stringFlag(argv, '--webhook-path') ?? '/github',
     webhookSecretEnv: stringFlag(argv, '--webhook-secret-env') ?? 'GITHUB_WEBHOOK_SECRET',
   }
+}
+
+function agentFlag(value: string | undefined): FixAgent {
+  if (value === 'codex' || value === 'claude' || value === 'none') return value
+  return 'auto'
 }
 
 async function runInteractiveLanding(
@@ -956,6 +995,26 @@ function renderSpawnTemplate(template: string, signal: PrSignal, taskId: string 
     .replaceAll('{title}', signal.prTitle)
 }
 
+function agentLaunchScript(agent: FixAgent, prompt: string): string {
+  const quotedPrompt = shellSingleQuote(prompt)
+  if (agent === 'codex') {
+    return `codex exec --cd "$worktree_dir" --sandbox workspace-write ${quotedPrompt}`
+  }
+  if (agent === 'claude') {
+    return `claude -p --permission-mode acceptEdits ${quotedPrompt}`
+  }
+  return [
+    'if command -v codex >/dev/null 2>&1; then',
+    `codex exec --cd "$worktree_dir" --sandbox workspace-write ${quotedPrompt}`,
+    'elif command -v claude >/dev/null 2>&1; then',
+    `claude -p --permission-mode acceptEdits ${quotedPrompt}`,
+    'else',
+    'echo "No supported agent CLI found. Install codex or claude, or pass --spawn-command." >&2',
+    'exit 127',
+    'fi',
+  ].join(' ')
+}
+
 function shellSingleQuote(value: string): string {
   return `'${value.replaceAll("'", "'\"'\"'")}'`
 }
@@ -996,7 +1055,8 @@ function printPrDaemonHelp(): void {
 Usage:
   oisin-dev pr-daemon [--once] [--dry-run] [--interval 60] [--limit 30]
                       [--repo owner/name] [--state-file .agents/pr-daemon-state.json]
-                      [--spawn] [--spawn-command 'command with {task} {pr} {url} {branch}']
+                      [--spawn] [--agent auto|codex|claude|none]
+                      [--spawn-command 'command with {task} {pr} {url} {branch}']
                       [--webhook-port 7777] [--webhook-path /github]
                       [--webhook-secret-env GITHUB_WEBHOOK_SECRET]
 

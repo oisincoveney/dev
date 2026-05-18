@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildBacklogTaskArgs,
   buildBacklogTaskInvocations,
+  buildAgentPrompt,
   buildFixSpawnInvocation,
   buildGhPrListArgs,
   buildGhPrMergeArgs,
@@ -13,6 +14,7 @@ import {
   mergeBlockers,
   newSignals,
   packetizePullRequests,
+  runPrDaemon,
   signalFromWebhook,
   signalsFromPackets,
   type PrSignal,
@@ -233,9 +235,51 @@ describe('PR landing workflow', () => {
     expect(invocation.command).toBe('sh')
     expect(invocation.args[1]).toContain('wt switch --create')
     expect(invocation.args[1]).toContain('task/dev-7-42-feedback')
+    expect(invocation.args[1]).toContain('codex exec')
+    expect(invocation.args[1]).toContain('claude -p')
+    expect(invocation.args[1]).toContain('Please use the tracker workflow.')
 
     const custom = buildFixSpawnInvocation(signal, 'DEV-7', 'agent --task {task} --pr {pr} --branch {branch}')
     expect(custom.args[1]).toBe('agent --task DEV-7 --pr 42 --branch task/dev-7-42-feedback')
+
+    const codex = buildFixSpawnInvocation(signal, 'DEV-7', undefined, 'codex')
+    expect(codex.args[1]).toContain('codex exec --cd "$worktree_dir" --sandbox workspace-write')
+    expect(codex.args[1]).not.toContain('claude -p')
+
+    const none = buildFixSpawnInvocation(signal, 'DEV-7', undefined, 'none')
+    expect(none.args[1]).toContain('wt switch --create')
+    expect(none.args[1]).not.toContain('codex exec')
+  })
+
+  it('builds concrete agent prompts for PR feedback', () => {
+    const prompt = buildAgentPrompt(signal, 'DEV-7', 'task/dev-7-42-feedback')
+
+    expect(prompt).toContain('Backlog task: DEV-7')
+    expect(prompt).toContain('PR: #42 Fix review workflow')
+    expect(prompt).toContain('Please use the tracker workflow.')
+    expect(prompt).toContain('Commit with git-spice')
+  })
+
+  it('prints the real agent spawn command during dry-run', async () => {
+    let output = ''
+    const originalWrite = process.stdout.write
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      output += chunk.toString()
+      return true
+    }) as typeof process.stdout.write
+    try {
+      await runPrDaemon(['--once', '--dry-run', '--spawn', '--agent', 'codex'], (command) => {
+        if (command === 'gh') return { status: 0, stdout: JSON.stringify(rawPrs), stderr: '' }
+        return { status: 1, stdout: '', stderr: `unexpected ${command}` }
+      })
+    } finally {
+      process.stdout.write = originalWrite
+    }
+
+    expect(output).toContain('DRY-RUN enqueue changes_requested for PR #42')
+    expect(output).toContain('DRY-RUN spawn sh -lc')
+    expect(output).toContain('codex exec')
+    expect(output).toContain('Please use the tracker workflow.')
   })
 
   it('converts GitHub webhook review and comment events into daemon signals', () => {
