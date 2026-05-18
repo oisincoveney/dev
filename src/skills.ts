@@ -167,11 +167,11 @@ export const RULE_SKILLS: ReadonlyArray<RuleSkill> = [
 ]
 
 // Superpower skills — existing skills in ~/.agents/skills/ to copy into .claude/skills/.
-// Trimmed to ones referenced by the bd workflow (verifier-loop), CLAUDE.md
-// session bootstrap, plus frontend-design (kept per user request). Other
+// Trimmed to ones referenced by the tracker workflow, CLAUDE.md
+// session bootstrap, plus frontend-design. Other
 // skills remain available globally via the user's ~/.claude/skills/ — they
 // just aren't auto-installed per project. The `caveman` skill is vendored
-// directly into templates/skills/caveman/ and ships unconditionally; it does
+// directly into templates/agent-assets/.agents/skills/caveman/ and ships unconditionally; it does
 // not appear here because it isn't sourced from the user's home directory.
 export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
   {

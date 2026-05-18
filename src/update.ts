@@ -1,7 +1,7 @@
 /**
  * `oisin-dev update`
  *
- * Non-destructively reapplies the local Copier template, then refreshes dotagents
+ * Non-destructively reapplies the bundled harness renderer, then refreshes dotagents
  * skill links and lefthook. Use `oisin-dev reset` for the dangerous path.
  */
 
@@ -20,7 +20,7 @@ export async function runUpdate(): Promise<void> {
   }
 
   const spinner = p.spinner()
-  spinner.start(`Applying Copier update from ${STATE_FILE}`)
+  spinner.start(`Applying harness update from ${STATE_FILE}`)
   const result = runUpdateOrchestration(cwd)
   if (!result.ok) {
     spinner.stop('Failed')

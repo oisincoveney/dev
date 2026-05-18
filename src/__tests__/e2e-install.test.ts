@@ -71,7 +71,7 @@ describe('end-to-end install with real side effects', () => {
   it('generates all target files with Backlog.md wiring', async () => {
     applyInternalTemplate(dir, templateDataFromConfig(config))
 
-    const hookDir = join(dir, '.claude', 'hooks')
+    const hookDir = join(dir, '.agents', 'hooks')
     const hooks = [
       'destructive-command-guard.sh',
       'git-spice-command-guard.sh',
@@ -91,6 +91,8 @@ describe('end-to-end install with real side effects', () => {
       const { statSync } = await import('node:fs')
       expect(statSync(path).mode & 0o111).toBeGreaterThan(0)
     }
+    expect(existsSync(join(dir, '.claude', 'hooks'))).toBe(false)
+    expect(existsSync(join(dir, '.codex', 'hooks'))).toBe(false)
 
     const mise = readFileSync(join(dir, 'mise.toml'), 'utf8')
     expect(mise).toContain('"npm:backlog.md" = "latest"')
@@ -124,7 +126,7 @@ describe('end-to-end install with real side effects', () => {
     expect(existsSync(join(dir, '.cursor/skills/quick'))).toBe(true)
   })
 
-  it('settings.json hooks reference real script paths', () => {
+  it('settings.json hooks reference the shared .agents hook runtime', () => {
     applyInternalTemplate(dir, templateDataFromConfig(config))
     const settings = JSON.parse(readFileSync(join(dir, '.claude/settings.json'), 'utf8')) as {
       hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>
@@ -133,14 +135,15 @@ describe('end-to-end install with real side effects', () => {
     for (const entries of Object.values(settings.hooks)) {
       for (const entry of entries) {
         for (const hook of entry.hooks) {
-          const match = hook.command.match(/\.claude\/hooks\/([^\s'"]+\.sh)/)
-          if (match) expect(existsSync(join(dir, '.claude', 'hooks', match[1]))).toBe(true)
+          expect(hook.command).not.toContain('.claude/hooks')
+          const matches = [...hook.command.matchAll(/\.agents\/hooks\/([^\s'"]+\.sh)/g)]
+          for (const match of matches) expect(existsSync(join(dir, '.agents', 'hooks', match[1]))).toBe(true)
         }
       }
     }
   })
 
-  it('codex hooks reference real script paths in .codex', () => {
+  it('codex hooks reference the shared .agents hook runtime', () => {
     applyInternalTemplate(dir, templateDataFromConfig(config))
     const codex = JSON.parse(readFileSync(join(dir, '.codex/hooks.json'), 'utf8')) as {
       hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>
@@ -149,9 +152,10 @@ describe('end-to-end install with real side effects', () => {
     for (const entries of Object.values(codex.hooks)) {
       for (const entry of entries) {
         for (const hook of entry.hooks) {
-          const match = hook.command.match(/\.codex\/hooks\/([^\s'"]+\.sh)/)
-          expect(match).not.toBeNull()
-          if (match) expect(existsSync(join(dir, '.codex', 'hooks', match[1]))).toBe(true)
+          expect(hook.command).not.toContain('.codex/hooks')
+          const matches = [...hook.command.matchAll(/\.agents\/hooks\/([^\s'"]+\.sh)/g)]
+          expect(matches.length).toBeGreaterThan(0)
+          for (const match of matches) expect(existsSync(join(dir, '.agents', 'hooks', match[1]))).toBe(true)
         }
       }
     }

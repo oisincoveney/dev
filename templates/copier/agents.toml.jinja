@@ -1,5 +1,0 @@
-version = 1
-agents = [{% set ns = namespace(first=true) %}{% for target in targets if target != "lefthook" %}{% if not ns.first %}, {% endif %}"{{ target }}"{% set ns.first = false %}{% endfor %}]
-
-# Generated skills live directly in .agents/skills/.
-# dotagents links them into tool-specific locations and repairs broken links.

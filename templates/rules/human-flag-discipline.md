@@ -1,69 +1,42 @@
 ---
 name: human-flag-discipline
-description: When workers break IN_FLIGHT to ping user vs file `bd human <id>` and continue. Goal: keep user out-of-loop during fan-out except for true blockers.
+description: Decide when a worker must stop for user judgment and when to record a Backlog note instead.
 ---
 
 # Human Flag Discipline
 
-User stays out of swarm IN_FLIGHT. Workers don't ping mid-flight except for tracer-fail or destructive-op-needed. Everything else → `bd human <id>`, continue, surface in next Stop digest.
+Workers should not interrupt the user for routine partials. Record state in Backlog and keep independent work moving.
 
-## Rules
+## Stop And Ask Only When
 
-### Worker breaks IN_FLIGHT (chat ping) ONLY when:
+1. A destructive operation needs explicit approval.
+2. A core assumption is invalid and continuing would produce throwaway work.
+3. Two user constraints conflict and the conflict cannot be resolved from repo context.
 
-1. **Tracer child verifier-FAIL.** Tracer fail invalidates DAG — siblings depending on tracer can't proceed. User must decide: re-attempt, redesign, abort.
-2. **Destructive op needed** (already gated by `destructive-command-guard.sh`). Schema migration, data deletion, force-push: requires explicit user OK.
+## Record In Backlog And Continue When
 
-That's it. Two cases.
+- A non-blocking verification check fails.
+- A follow-up is needed outside current scope.
+- A dependency is missing but unrelated work can continue.
+- A task is partial but siblings can still finish.
 
-### Worker files `bd human <id>` + continues when:
+Use:
 
-- Non-tracer child verifier-FAIL.
-- Non-tracer child PARTIAL.
-- Ambiguous EARS criterion needs clarification.
-- Missing dependency / out-of-scope discovery.
-- Test fixture missing or generation needed.
-- Worker's own task hits a blocker (e.g., env var unset).
-
-Worker's `bd human <id>` call:
-```bash
-bd human <id> --reason="<short>" --details="<long, with file:line + verifier output>"
+```sh
+backlog task edit <id> --append-notes "<short blocker or partial result with evidence>"
 ```
 
-Worker reports `<id>: PARTIAL — <reason>` in fan-out summary, lets siblings finish.
+## Summary Format
 
-### Sibling isolation
-
-Worker FAIL/PARTIAL never auto-aborts siblings. Each worker independent worktree, independent ticket. Fan-out summary aggregates at end:
-```
-Fan-out summary (N tickets):
-  ✓ <id>: PASS — <subject>
-  ✓ <id>: PASS-WITH-FOLLOWUPS (filed M discovered-from)
-  ⚑ <id>: PARTIAL — human decision needed
-  ✗ <id>: FAIL — <reason>
+```text
+Fan-out summary:
+  <id>: PASS - <evidence>
+  <id>: PARTIAL - <reason in Backlog notes>
+  <id>: FAIL - <blocking evidence>
 ```
 
-## Stop Summary Surfaces Flags
+## Hard Rules
 
-Verifier and finish summaries include one block per active graph:
-```
-SWARM DIGEST — <epic-id> · <title>
-  N closed  ·  M in_progress  ·  K blocked  ·  total T
-  D discovered-from filed
-  ⚑ H human-flagged — review the linked Backlog task notes
-```
-
-User sees flags in tracker notes and final summaries, not mid-flight. Resolve by appending a Backlog task note and updating task status.
-
-## Forbidden
-
-- DON'T page user mid-flight for non-tracer failures.
-- DON'T silently absorb scope (use `discovered-from` ticket).
-- DON'T close a human-flagged task without user response/dismiss.
-- DON'T let tracer-fail proceed silently — it invalidates the swarm.
-
-## See also
-
-- `tracker-workflow.md` — orchestrator, worktree agent, graph, and verifier policy
-- `spec-verifier/SKILL.md` — tracker-backed verifier output shape
-- `scope-discipline.md` — discovered-from ticket flow
+- Do not page the user mid-flight for routine failures.
+- Do not close a task that is waiting on user judgment.
+- Put blocker evidence in Backlog notes with file paths and command results.

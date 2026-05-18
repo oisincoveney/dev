@@ -1,112 +1,79 @@
 ---
 name: verifier-loop
-description: How the agent verifies its own ticket work via a fresh-context subagent that uses the code-review skill, files new bd tickets for discovered issues, and self-extends the work via PASS-WITH-FOLLOWUPS.
+description: Fresh-context verification for Backlog-backed work before a task is closed.
 ---
 
 # Verifier Loop
 
-Before `bd close`, agent invoke fresh-context **verifier subagent** to confirm work meets ticket AC. Verifier use `code-review` + diff-aware extra skills. Issues outside original AC → **new bd tickets**, not silent inline fixes.
+Before marking a Backlog task Done, invoke a fresh-context verifier subagent to confirm the work meets acceptance criteria. The main agent does not self-certify.
 
-## When
+## Verifier Prompt Must Include
 
-Always, before `bd close`. Not optional. Main agent never self-certify.
+1. Backlog task ID being verified.
+2. Instruction to re-read `backlog task view <id> --plain`.
+3. Diff-aware skill loading rules.
+4. Verification command list.
+5. Forbidden actions: no source edits and no tracker status changes.
 
-## How
-
-Spawn Agent with `subagent_type=general-purpose`, self-contained prompt:
-
-1. bd issue ID being verified.
-2. Re-read `bd show <id>` from scratch.
-3. Skill-loading protocol (below).
-4. Output format (below).
-5. Forbidden: no `bd close`, no `bd update`, no source edits.
-
-## Skill loading (verifier picks per diff)
+## Skill Loading
 
 | Trigger | Skill |
 |---|---|
 | Always | `code-review` |
-| Always | `tech-debt` |
-| `.ts` / `.tsx` / `.js` / `.jsx` / `.mjs` / `.cjs` in diff | `typescript-advanced-types` |
-| `.tsx` under `app/` or `pages/` (Next.js) | `nextjs-app-router-patterns`, `vercel-react-best-practices` |
-| `.go` in diff | `golang-pro`, `golang-error-handling`, `golang-code-style` |
-| `.py` in diff | language reviewer (load `code-review` only — no Python-specific skill ships with the harness yet) |
-| Multi-layer / cross-boundary | `architecture` |
-| Test surfaces touched | `testing-strategy` |
-| Auth, input, secrets, parsing | `security-review` |
-| UI / frontend touched | `accessibility` |
-| Hot-path (renders, request handlers, loops) | `performance` |
+| Cross-boundary or multi-layer change | `architecture` |
+| Test strategy changed | `testing-strategy` |
+| Auth, input, secrets, parsing | security review skill when available |
+| UI or frontend changed | `accessibility` |
+| Hot path changed | `performance` |
 
-Verifier inspect `git diff` to decide. Load via `Skill` tool. **Skill loading is not optional** — every row whose trigger matches the diff MUST be loaded. The `verifier-skill-guard.sh` Stop hook scans the transcript for these invocations and blocks completion claims / `bd close` if they're missing.
+## Output
 
-## Output format
-
-```
+```md
 ## Result: PASS | PASS-WITH-FOLLOWUPS | PARTIAL | FAIL
 
-### Per-criterion (against EARS AC)
-1. <criterion> — PASS — <evidence file:line>
-2. <criterion> — FAIL — <evidence>
-...
+### Per-Criterion
+- <criterion> - PASS|FAIL - <evidence file:line>
 
-### Verification commands
-- `<cmd>` — exit <N> — <one-line>
+### Verification Commands
+- `<cmd>` - exit <N> - <summary>
 
-### Scope check
-- Edits within `Files Likely Touched`: yes | no (list out-of-scope)
+### Scope Check
+- In scope: yes|no
 
-### New tickets filed (issues outside original AC)
-- bd-XXX.YY — <title> — <reason>
-- ...
+### Follow-Up Tasks
+- <id> - <title> - <reason>
 ```
 
-**Aggregate rules:**
+## Result Rules
 
-- **PASS** — every criterion PASS, every cmd exit 0, scope respected, **zero new tickets**.
-- **PASS-WITH-FOLLOWUPS** — every criterion PASS for original AC, verifier filed N new tickets outside scope. Ticket shippable; followups next-up.
-- **PARTIAL** — some criteria PASS but ≥1 FAIL or partial.
-- **FAIL** — ≥1 criterion unsatisfied OR cmd exit ≠0.
+- `PASS`: all criteria pass, all verification commands pass, no out-of-scope issues.
+- `PASS-WITH-FOLLOWUPS`: original criteria pass, but follow-up tasks were filed for separate work.
+- `PARTIAL`: some required criteria are incomplete or unverified.
+- `FAIL`: any required criterion fails or any verification command fails.
 
-## Filing new tickets (self-repeating loop)
+## Follow-Up Tasks
 
-Any issue NOT in original AC:
+Use Backlog for discovered work:
 
-```bash
-bd create --type=task --priority=N --deps "discovered-from:<current-id>" \
-  --title="<concise summary>" --silent --body-file=- <<'EOF'
----
-type: task
-priority: N
-files:
-  - <path>
-verify:
-  - <cmd>
-deps:
-  discovered_from: <current-id>
-ac:
-  - "WHEN ... THE SYSTEM SHALL ..."
----
-Found by verifier. Fix <problem>. Touch <path>. Verify <cmd>.
-EOF
+```sh
+backlog task create "<concise title>" \
+  --description "Found while verifying <current-id>. <problem and expected fix>" \
+  --priority medium \
+  --dep <current-id> \
+  --ac "WHEN ... THE SYSTEM SHALL ..."
 ```
 
-Appear in `bd ready` as next-up.
-
-## Main-agent action on result
+## Main-Agent Action
 
 | Result | Action |
 |---|---|
-| **PASS** | `bd close <id> --reason "verified clean by /verify-spec"`. Then `bd ready` → claim next. |
-| **PASS-WITH-FOLLOWUPS** | `bd close <id> --reason "verified; filed N followups"`. Followups in `bd ready`; agent claims auto or surfaces to user. |
-| **PARTIAL** | DO NOT close. Append verifier output as `bd note <id>`. Fix failing items. Re-invoke verifier. Repeat until PASS / PASS-WITH-FOLLOWUPS. |
-| **FAIL** | Same as PARTIAL — DO NOT close, fix, re-verify. |
+| `PASS` | Set task Done with final summary and verification evidence. |
+| `PASS-WITH-FOLLOWUPS` | Set task Done, include follow-up IDs in final summary. |
+| `PARTIAL` | Keep task open, append verifier output to notes, fix, verify again. |
+| `FAIL` | Keep task open, append failure evidence, fix, verify again. |
 
-## Loop termination
+## Hard Rules
 
-Stops when verifier returns **clean PASS, zero new tickets** AND `bd ready` (or parent epic's queue) empty. Else main agent keeps claiming.
-
-## Hard rules
-
-- **No self-verification.** Main agent NEVER decides ticket done. Verifier subagent only authority for `bd close`.
-- **No silent inline fixes.** Outside-AC issue → file ticket. Don't "just fix it real quick."
-- **No `bd close` until PASS / PASS-WITH-FOLLOWUPS.** PARTIAL/FAIL = more work, not softened close.
+- Main agent never closes a task without verifier PASS or PASS-WITH-FOLLOWUPS.
+- Outside-scope issues become Backlog follow-up tasks.
+- Final summary must name the verification commands that passed.

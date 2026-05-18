@@ -1,18 +1,17 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const ROOT = resolve(__dirname, '..', '..')
 const SOURCE_DIR = join(ROOT, 'templates', 'hooks')
-const GENERATED_DIRS = [
-  join(ROOT, 'templates', 'copier', '.claude', 'hooks'),
-  join(ROOT, 'templates', 'copier', '.codex', 'hooks'),
-  join(ROOT, '.claude', 'hooks'),
-  join(ROOT, '.codex', 'hooks'),
-]
 
-describe('generated hook copies', () => {
-  it('keeps Claude/Codex hook copies byte-for-byte synced to templates/hooks', () => {
+describe('canonical hook runtime', () => {
+  it('does not keep generated Claude/Codex hook template copies', () => {
+    expect(existsSync(join(ROOT, 'templates', 'agent-assets', '.claude', 'hooks'))).toBe(false)
+    expect(existsSync(join(ROOT, 'templates', 'agent-assets', '.codex', 'hooks'))).toBe(false)
+  })
+
+  it('keeps hook source files executable-ready in the canonical template source', () => {
     const hookFiles = readdirSync(SOURCE_DIR).filter((name) => {
       const path = join(SOURCE_DIR, name)
       return statSync(path).isFile() && name.endsWith('.sh')
@@ -22,9 +21,7 @@ describe('generated hook copies', () => {
 
     for (const file of hookFiles) {
       const source = readFileSync(join(SOURCE_DIR, file), 'utf8')
-      for (const dir of GENERATED_DIRS) {
-        expect(readFileSync(join(dir, file), 'utf8'), `${dir}/${file}`).toBe(source)
-      }
+      expect(source.startsWith('#!')).toBe(true)
     }
   })
 })

@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 import { runHookDispatcher } from './hooks/dispatch.js'
+import { runBeadsToBacklog } from './beads-to-backlog.js'
+import { runDoctor } from './doctor.js'
+import { runGenerate } from './generate.js'
 import { runInit } from './init.js'
 import { runReset } from './reset.js'
 import { runTicketsUi } from './tickets-ui.js'
@@ -7,8 +10,11 @@ import { runUpdate } from './update.js'
 
 const COMMANDS: Record<string, string> = {
   init:             'Initialize an opinionated dev environment in the current (or new) project',
-  update:           'Non-destructively refresh generated files through Copier',
+  update:           'Non-destructively refresh generated harness files',
   reset:            'Dangerously delete and recreate generated agent configuration',
+  generate:         'Regenerate harness files from saved project state',
+  doctor:           'Validate generated harness files and workflow wiring',
+  'beads-to-backlog': 'Import existing Beads tickets into Backlog.md task files',
   tickets:           'Launch the local Backlog.md UI for the current workspace',
   hook:             'Run a TS-native hook handler (internal — invoked by Claude Code)',
   help:             'Show this help message',
@@ -20,7 +26,7 @@ function printHelp(): void {
 @oisincoveney/dev — Opinionated AI dev environment
 
 Usage:
-  npx @oisincoveney/dev <command> [flags]
+  bunx @oisincoveney/dev <command> [flags]
 
 Commands:
 ${Object.entries(COMMANDS)
@@ -46,6 +52,15 @@ async function main(): Promise<void> {
       break
     case 'reset':
       await runReset()
+      break
+    case 'generate':
+      runGenerate(process.argv.slice(3))
+      break
+    case 'doctor':
+      runDoctor(process.argv.slice(3))
+      break
+    case 'beads-to-backlog':
+      runBeadsToBacklog(process.argv.slice(3))
       break
     case 'tickets':
       runTicketsUi(process.argv.slice(3))

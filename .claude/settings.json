@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" .claude/hooks/run-quiet.sh .claude/hooks/context-bootstrap.sh .claude/hooks/baseline-pin.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.agents/hooks/bin:$PATH\" OISIN_DEV_HOOK_DIR=\".agents/hooks\" .agents/hooks/run-quiet.sh .agents/hooks/context-bootstrap.sh .agents/hooks/baseline-pin.sh",
             "timeout": 120
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" .claude/hooks/run-quiet.sh .claude/hooks/context-injector.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.agents/hooks/bin:$PATH\" OISIN_DEV_HOOK_DIR=\".agents/hooks\" .agents/hooks/run-quiet.sh .agents/hooks/context-injector.sh",
             "timeout": 5
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" OISIN_DEV_BACKLOG=1 OISIN_DEV_TYPESCRIPT=1 .claude/hooks/pre-tool-dispatch.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.agents/hooks/bin:$PATH\" OISIN_DEV_HOOK_DIR=\".agents/hooks\" OISIN_DEV_BACKLOG=1 OISIN_DEV_TYPESCRIPT=1 .agents/hooks/pre-tool-dispatch.sh",
             "timeout": 30
           }
         ]
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" .claude/hooks/run-quiet.sh .claude/hooks/post-edit-async.sh .claude/hooks/ai-antipattern-guard.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.agents/hooks/bin:$PATH\" OISIN_DEV_HOOK_DIR=\".agents/hooks\" .agents/hooks/run-quiet.sh .agents/hooks/post-edit-async.sh .agents/hooks/ai-antipattern-guard.sh",
             "timeout": 10
           }
         ]
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" .claude/hooks/run-quiet.sh .claude/hooks/worktree-stop-guard.sh .claude/hooks/post-edit-await.sh .claude/hooks/pre-stop-verification.sh .claude/hooks/verifier-skill-guard.sh .claude/hooks/baseline-compare.sh .claude/hooks/citation-check.sh .claude/hooks/ai-antipattern-guard.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.agents/hooks/bin:$PATH\" OISIN_DEV_HOOK_DIR=\".agents/hooks\" .agents/hooks/run-quiet.sh .agents/hooks/worktree-stop-guard.sh .agents/hooks/post-edit-await.sh .agents/hooks/pre-stop-verification.sh .agents/hooks/verifier-skill-guard.sh .agents/hooks/baseline-compare.sh .agents/hooks/citation-check.sh .agents/hooks/ai-antipattern-guard.sh",
             "timeout": 120
           }
         ]
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.claude/hooks/bin:$PATH\" .claude/hooks/run-quiet.sh .claude/hooks/pre-compact-prime.sh",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && PATH=\"$PWD/.agents/hooks/bin:$PATH\" OISIN_DEV_HOOK_DIR=\".agents/hooks\" .agents/hooks/run-quiet.sh .agents/hooks/pre-compact-prime.sh",
             "timeout": 10
           }
         ]
@@ -70,7 +70,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/statusline.sh"
+    "command": "cd \"$(git rev-parse --show-toplevel)\" && .agents/hooks/statusline.sh"
   },
   "permissions": {
     "mode": "default",

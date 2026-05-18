@@ -71,7 +71,7 @@ describe('reset command helpers', () => {
     expect(existsSync(join(dir, 'backlog'))).toBe(true)
   })
 
-  it('bootstraps reset from legacy .dev.config.json when copier answers are missing', () => {
+  it('bootstraps reset from legacy .dev.config.json when harness state is missing', () => {
     writeFileSync(
       join(dir, '.dev.config.json'),
       `${JSON.stringify(
@@ -101,11 +101,12 @@ describe('reset command helpers', () => {
     const state = JSON.parse(readFileSync(join(dir, STATE_FILE), 'utf8')) as { variant?: string }
     expect(state.variant).toBe('ts-library')
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('Use the tracker workflow')
-    expect(existsSync(join(dir, '.claude/hooks/pre-tool-dispatch.sh'))).toBe(true)
-    expect(existsSync(join(dir, '.codex/hooks/pre-tool-dispatch.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.agents/hooks/pre-tool-dispatch.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks'))).toBe(false)
+    expect(existsSync(join(dir, '.codex/hooks'))).toBe(false)
   })
 
-  it('migrates older bd workflow config to Backlog workflow when resetting', () => {
+  it('converts older bd workflow config to Backlog workflow when resetting', () => {
     writeFileSync(
       join(dir, '.dev.config.json'),
       `${JSON.stringify(

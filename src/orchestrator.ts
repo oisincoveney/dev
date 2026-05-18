@@ -21,13 +21,16 @@ import type { ProjectVariant } from './skills.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-export const COPIER_TEMPLATE_DIR = resolve(__dirname, '..', 'templates', 'copier')
-export const STATE_FILE = '.copier-answers.yml'
+export const AGENT_ASSET_DIR = resolve(__dirname, '..', 'templates', 'agent-assets')
+const HOOK_TEMPLATE_DIR = resolve(__dirname, '..', 'templates', 'hooks')
+export const STATE_FILE = '.agents-harness.json'
+export const LEGACY_STATE_FILE = '.copier-answers.yml'
 export const LEGACY_CONFIG_FILE = '.dev.config.json'
-export const COPIER_TOOL_SPEC = 'pipx:copier@9.14.0'
 const RETIRED_GENERATED_PATHS = [
   '.claude/hooks/tdd-guard.sh',
   '.codex/hooks/tdd-guard.sh',
+  '.claude/hooks',
+  '.codex/hooks',
 ] as const
 
 export type OrchestratorResult =
@@ -124,7 +127,7 @@ export function readInternalState(cwd: string): TemplateData | null {
 }
 
 export function writeInternalState(cwd: string, data: TemplateData): void {
-  writeFileSync(join(cwd, STATE_FILE), `${JSON.stringify({ _src_path: COPIER_TEMPLATE_DIR, ...data })}\n`)
+  writeFileSync(join(cwd, STATE_FILE), `${JSON.stringify(data)}\n`)
 }
 
 export function runInitOrchestration(
@@ -133,37 +136,10 @@ export function runInitOrchestration(
   options: OrchestratorOptions = {},
 ): OrchestratorResult {
   const data = templateDataFromAnswers(answers)
-  if (options.skipExternalTools) {
-    applyInternalTemplate(cwd, data)
-    writeInternalState(cwd, data)
-    return { ok: true }
-  }
-
-  const dataFile = join(cwd, '.copier-data.tmp.json')
-  writeFileSync(dataFile, `${JSON.stringify(data, null, 2)}\n`)
-  try {
-    const copy = runMise(cwd, [
-      ...copierMiseArgs(
-        'copy',
-        '--trust',
-        '--defaults',
-        '--overwrite',
-        '--data-file',
-        dataFile,
-        COPIER_TEMPLATE_DIR,
-        cwd,
-      ),
-    ])
-    if (!copy.ok) return copy
-  } finally {
-    rmSync(dataFile, { force: true })
-  }
-
+  applyInternalTemplate(cwd, data)
+  writeInternalState(cwd, data)
+  if (options.skipExternalTools) return { ok: true }
   return runPostTemplateTools(cwd, data)
-}
-
-export function copierMiseArgs(...copierArgs: string[]): string[] {
-  return ['exec', COPIER_TOOL_SPEC, '--', 'copier', ...copierArgs]
 }
 
 export function runUpdateOrchestration(
@@ -184,14 +160,7 @@ export function runUpdateOrchestration(
   if (!existsSync(join(cwd, STATE_FILE))) {
     return { ok: false, message: `No ${STATE_FILE} found. Run \`oisin-dev init\` first.` }
   }
-  refreshCopierSourcePath(cwd)
-  ensureMiseToml(cwd, data ?? undefined)
-  const trust = runMise(cwd, ['trust', '-y'])
-  if (!trust.ok) return trust
-  const install = runMise(cwd, ['install'])
-  if (!install.ok) return install
-  const update = runMise(cwd, copierMiseArgs('recopy', '--trust', '--force'))
-  if (!update.ok) return update
+  if (data !== null) applyInternalTemplate(cwd, data)
   return runPostTemplateTools(cwd, data ?? undefined)
 }
 
@@ -208,20 +177,33 @@ export function runResetOrchestration(
       message: `No ${STATE_FILE} or ${LEGACY_CONFIG_FILE} found. Run \`oisin-dev init\` first.`,
     }
   }
-  refreshCopierSourcePath(cwd)
   const data = readInternalState(cwd)
-  ensureMiseToml(cwd, data ?? undefined)
-  const trust = runMise(cwd, ['trust', '-y'])
-  if (!trust.ok) return trust
-  const install = runMise(cwd, ['install'])
-  if (!install.ok) return install
-  const recopy = runMise(cwd, copierMiseArgs('recopy', '--trust', '--force'))
-  if (!recopy.ok) return recopy
+  if (data !== null) applyInternalTemplate(cwd, data)
   return runPostTemplateTools(cwd, data ?? undefined)
 }
 
 export function bootstrapInternalStateFromLegacyConfig(cwd: string): OrchestratorResult {
   if (existsSync(join(cwd, STATE_FILE))) return { ok: true }
+
+  const legacyStatePath = join(cwd, LEGACY_STATE_FILE)
+  if (existsSync(legacyStatePath)) {
+    try {
+      const raw = readFileSync(legacyStatePath, 'utf8')
+      const parsed = raw.trimStart().startsWith('{') ? JSON.parse(raw) : parse(raw)
+      const data = normalizeTemplateData(parsed)
+      if (data === null) {
+        return { ok: false, message: `Could not read ${LEGACY_STATE_FILE}: empty state` }
+      }
+      writeInternalState(cwd, data)
+      rmSync(legacyStatePath, { force: true })
+      return { ok: true }
+    } catch (err) {
+      return {
+        ok: false,
+        message: `Could not read ${LEGACY_STATE_FILE}: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+  }
 
   const legacyPath = join(cwd, LEGACY_CONFIG_FILE)
   if (!existsSync(legacyPath)) return { ok: true }
@@ -233,7 +215,7 @@ export function bootstrapInternalStateFromLegacyConfig(cwd: string): Orchestrato
   } catch (err) {
     return {
       ok: false,
-      message: `Could not migrate ${LEGACY_CONFIG_FILE} to ${STATE_FILE}: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Could not convert ${LEGACY_CONFIG_FILE} to ${STATE_FILE}: ${err instanceof Error ? err.message : String(err)}`,
     }
   }
 }
@@ -403,25 +385,8 @@ function runMise(cwd: string, args: string[]): OrchestratorResult {
   return { ok: true }
 }
 
-function refreshCopierSourcePath(cwd: string): void {
-  const path = join(cwd, STATE_FILE)
-  if (!existsSync(path)) return
-  const raw = readFileSync(path, 'utf8')
-  if (raw.trimStart().startsWith('{')) {
-    const data = JSON.parse(raw) as Record<string, unknown>
-    data._src_path = COPIER_TEMPLATE_DIR
-    writeFileSync(path, `${JSON.stringify(data)}\n`)
-    return
-  }
-  const srcLine = `_src_path: ${JSON.stringify(COPIER_TEMPLATE_DIR)}`
-  if (/^_src_path:/m.test(raw)) {
-    writeFileSync(path, raw.replace(/^_src_path:.*$/m, srcLine))
-  } else {
-    writeFileSync(path, `${srcLine}\n${raw}`)
-  }
-}
-
 export function applyInternalTemplate(cwd: string, data: TemplateData): void {
+  pruneRetiredGeneratedPaths(cwd)
   writeGeneratedFile(cwd, 'AGENTS.md', agentsMd(data))
   writeGeneratedFile(cwd, 'CLAUDE.md', claudeMd())
   writeGeneratedFile(cwd, 'agents.toml', agentsToml(data))
@@ -431,20 +396,16 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   ensureLefthookYml(cwd, data)
 
   if (data.targets.includes('claude')) {
-    copyTree(join(COPIER_TEMPLATE_DIR, '.claude', 'hooks'), join(cwd, '.claude', 'hooks'))
-    chmodTree(join(cwd, '.claude', 'hooks'))
-    copyTree(join(COPIER_TEMPLATE_DIR, '.claude', 'commands'), join(cwd, '.claude', 'commands'))
+    copyTree(join(AGENT_ASSET_DIR, '.claude', 'commands'), join(cwd, '.claude', 'commands'))
     writeGeneratedFile(cwd, '.claude/settings.json', JSON.stringify(claudeSettings(data), null, 2) + '\n')
   }
 
   if (data.targets.includes('codex')) {
-    copyTree(join(COPIER_TEMPLATE_DIR, '.codex', 'hooks'), join(cwd, '.codex', 'hooks'))
-    chmodTree(join(cwd, '.codex', 'hooks'))
     writeGeneratedFile(cwd, '.codex/hooks.json', JSON.stringify(codexHooks(data), null, 2) + '\n')
   }
 
   if (data.targets.includes('opencode')) {
-    copyTree(join(COPIER_TEMPLATE_DIR, '.opencode', 'commands'), join(cwd, '.opencode', 'commands'))
+    copyTree(join(AGENT_ASSET_DIR, '.opencode', 'commands'), join(cwd, '.opencode', 'commands'))
     writeGeneratedFile(cwd, '.opencode/plugins/dev-enforcer.ts', opencodePlugin(data))
   }
 
@@ -452,7 +413,9 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
     writeGeneratedFile(cwd, '.cursor/rules/project.mdc', cursorRule())
   }
 
-  copyTree(join(COPIER_TEMPLATE_DIR, '.agents', 'skills'), join(cwd, '.agents', 'skills'))
+  copyTree(join(AGENT_ASSET_DIR, '.agents', 'skills'), join(cwd, '.agents', 'skills'))
+  copyTree(HOOK_TEMPLATE_DIR, join(cwd, '.agents', 'hooks'))
+  chmodTree(join(cwd, '.agents', 'hooks'))
   syncSkillLinks(cwd, data)
 }
 
@@ -479,7 +442,7 @@ export function ensureMiseToml(cwd: string, data?: TemplateData): void {
     return
   }
 
-  const existing = readFileSync(path, 'utf8')
+  const existing = removeObsoleteMiseTaskBlocks(readFileSync(path, 'utf8'))
   const withTools = mergeMiseToolLines(existing, requiredMiseToolLines(data))
   writeFileSync(path, mergeMiseTaskBlocks(withTools, data?.commands ?? {}))
 }
@@ -500,6 +463,16 @@ export function mergeMiseToolLines(existing: string, requiredLines: string[]): s
     }
   }
 
+  let removedObsolete = false
+  for (let index = toolsEnd - 1; index > toolsStart; index -= 1) {
+    const key = miseToolKey(lines[index])
+    if (key !== null && obsoleteMiseToolKeys().has(key)) {
+      lines.splice(index, 1)
+      toolsEnd -= 1
+      removedObsolete = true
+    }
+  }
+
   const existingKeys = new Set<string>()
   for (const line of lines.slice(toolsStart + 1, toolsEnd)) {
     const key = miseToolKey(line)
@@ -510,10 +483,42 @@ export function mergeMiseToolLines(existing: string, requiredLines: string[]): s
     const key = miseToolKey(line)
     return key !== null && !existingKeys.has(key)
   })
-  if (missing.length === 0) return existing
+  if (missing.length === 0) {
+    return removedObsolete ? `${lines.join('\n').replace(/\s+$/, '')}\n` : existing
+  }
 
   lines.splice(toolsStart + 1, 0, ...missing)
   return `${lines.join('\n').replace(/\s+$/, '')}\n`
+}
+
+function obsoleteMiseToolKeys(): Set<string> {
+  return new Set([
+    '"pipx:copier"',
+    '"aqua:steveyegge/beads"',
+    '"github:gastownhall/beads"',
+    '"cargo:beads"',
+    '"npm:beads"',
+  ])
+}
+
+function removeObsoleteMiseTaskBlocks(existing: string): string {
+  const lines = existing.split(/\r?\n/)
+  const out: string[] = []
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index]
+    if (isObsoleteMiseTaskHeader(line)) {
+      index += 1
+      while (index < lines.length && !/^\s*\[/.test(lines[index])) index += 1
+      continue
+    }
+    out.push(line)
+    index += 1
+  }
+  return `${out.join('\n').replace(/\s+$/, '')}\n`
+}
+
+function isObsoleteMiseTaskHeader(line: string): boolean {
+  return /^\s*\[tasks\.(?:"beads:[^"]+"|'beads:[^']+'|beads(?=[\].]))/.test(line)
 }
 
 export function mergeMiseTaskBlocks(existing: string, commands: Record<string, string>): string {
@@ -569,13 +574,23 @@ export function mergeLefthookCommands(existing: string, requiredBlocks: Record<s
 }
 
 function removeObsoleteLefthookCommands(config: Record<string, unknown>): void {
-  const obsolete = new Set(['bd-dolt-push', 'bd-dolt-pull'])
-  for (const hook of ['post-commit', 'post-merge', 'post-checkout', 'pre-push']) {
+  const obsolete = new Set(['bd-dolt-push', 'bd-dolt-pull', 'bd-ticket-ref', 'tdd-guard'])
+  for (const hook of ['commit-msg', 'post-commit', 'post-merge', 'post-checkout', 'pre-commit', 'pre-push']) {
     const hookConfig = yamlMap(config[hook])
     const commands = yamlMap(hookConfig.commands)
     for (const name of obsolete) delete commands[name]
-    if (Object.keys(commands).length === 0) delete config[hook]
-    else hookConfig.commands = commands
+    const prSize = yamlMap(commands['pr-size-check'])
+    if (typeof prSize.run === 'string' && /\.c(?:laude|odex)\/hooks\//.test(prSize.run)) {
+      delete commands['pr-size-check']
+    }
+    if (Object.keys(commands).length === 0) {
+      delete hookConfig.commands
+      if (Object.keys(hookConfig).length === 0) delete config[hook]
+      else config[hook] = hookConfig
+    } else {
+      hookConfig.commands = commands
+      config[hook] = hookConfig
+    }
   }
 }
 
@@ -600,7 +615,7 @@ function requiredLefthookCommandBlocks(data: TemplateData): Record<string, Lefth
   const prePush: LefthookCommands = {}
   if (data.commands.test) prePush.test = { run: 'mise run test' }
   if (data.commands.e2e) prePush.e2e = { run: 'mise run e2e' }
-  prePush['pr-size-check'] = { run: '.claude/hooks/pr-size-check.sh' }
+  prePush['pr-size-check'] = { run: '.agents/hooks/pr-size-check.sh' }
   prePush.semgrep = {
     run: [
       'if command -v semgrep >/dev/null 2>&1; then',
@@ -634,9 +649,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function requiredMiseToolLines(data?: TemplateData): string[] {
   const lines = [
-    '"pipx:copier" = "9.14.0"',
     '"npm:@sentry/dotagents" = "latest"',
     '"aqua:evilmartians/lefthook" = "latest"',
+    '"aqua:jqlang/jq" = "latest"',
     '"github:max-sixty/worktrunk" = "latest"',
     '"github:abhinav/git-spice" = "latest"',
   ]
@@ -793,9 +808,9 @@ agents = [${agentTargets.map((target) => JSON.stringify(target)).join(', ')}]
 function miseToml(data: TemplateData): string {
   const lines = ['[tools]']
   if (data.package_manager === 'bun') lines.push('bun = "1.3"')
-  lines.push('"pipx:copier" = "9.14.0"')
   lines.push('"npm:@sentry/dotagents" = "latest"')
   lines.push('"aqua:evilmartians/lefthook" = "latest"')
+  lines.push('"aqua:jqlang/jq" = "latest"')
   lines.push('"github:max-sixty/worktrunk" = "latest"')
   lines.push('"github:abhinav/git-spice" = "latest"')
   if (data.backlog_enabled) lines.push('"npm:backlog.md" = "latest"')
@@ -873,14 +888,14 @@ function lefthookYml(data: TemplateData): string {
     'pre-commit': { parallel: true, commands: blocks['pre-commit'] },
   }
   config['pre-push'] = { commands: blocks['pre-push'] }
-  return `# lefthook.yml — generated by @oisincoveney/dev\n${stringify(config)}`
+  return stringify(config)
 }
 
 function hookCommand(scripts: string[], timeout?: number): { type: 'command'; command: string; timeout?: number } {
-  const args = scripts.map((script) => `.claude/hooks/${script}`).join(' ')
+  const args = scripts.map((script) => `.agents/hooks/${script}`).join(' ')
   return {
     type: 'command',
-    command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.claude/hooks/bin:$PATH" .claude/hooks/run-quiet.sh ${args}`,
+    command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.agents/hooks/bin:$PATH" OISIN_DEV_HOOK_DIR=".agents/hooks" .agents/hooks/run-quiet.sh ${args}`,
     ...(timeout === undefined ? {} : { timeout }),
   }
 }
@@ -917,7 +932,7 @@ function claudeSettings(data: TemplateData): Record<string, unknown> {
       PreToolUse: [{
         hooks: [{
           type: 'command',
-          command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.claude/hooks/bin:$PATH" ${preToolPrefix}.claude/hooks/pre-tool-dispatch.sh`,
+          command: `cd "$(git rev-parse --show-toplevel)" && PATH="$PWD/.agents/hooks/bin:$PATH" OISIN_DEV_HOOK_DIR=".agents/hooks" ${preToolPrefix}.agents/hooks/pre-tool-dispatch.sh`,
           timeout: 30,
         }],
       }],
@@ -927,7 +942,7 @@ function claudeSettings(data: TemplateData): Record<string, unknown> {
     },
     statusLine: {
       type: 'command',
-      command: 'cd "$(git rev-parse --show-toplevel)" && .claude/hooks/statusline.sh',
+      command: 'cd "$(git rev-parse --show-toplevel)" && .agents/hooks/statusline.sh',
     },
     permissions: {
       mode: 'default',
@@ -947,13 +962,7 @@ function claudeSettings(data: TemplateData): Record<string, unknown> {
 
 function codexHooks(data: TemplateData): Record<string, unknown> {
   const settings = claudeSettings(data) as { hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>> }
-  const hooks = JSON.parse(JSON.stringify(settings.hooks)) as Record<string, Array<{ hooks: Array<{ command: string }> }>>
-  for (const entries of Object.values(hooks)) {
-    for (const entry of entries) {
-      for (const hook of entry.hooks) hook.command = hook.command.replaceAll('.claude/', '.codex/')
-    }
-  }
-  return { hooks }
+  return { hooks: settings.hooks }
 }
 
 function cursorRule(): string {
@@ -974,87 +983,123 @@ Worktrunk owns worktree lifecycle. git-spice owns stack-aware branch, commit, re
 
 function opencodePlugin(data: TemplateData): string {
   return `// dev-enforcer.ts — generated by @oisincoveney/dev
-// OpenCode overlay. Shared policy lives in AGENTS.md; hook behavior delegates to .claude/hooks.
+// OpenCode overlay. Shared policy lives in AGENTS.md; hook behavior delegates to .agents/hooks.
 
-import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 interface ToolEvent {
-  tool: string
-  input: Record<string, unknown>
+  tool: string;
+  input: Record<string, unknown>;
 }
 
-const HOOKS_DIR = '.claude/hooks'
-const HAS_TYPESCRIPT = ${JSON.stringify(data.has_typescript)}
-const BACKLOG_ENABLED = ${JSON.stringify(data.backlog_enabled)}
-const WORKTREE_POLICY = 'Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
-const STACK_POLICY = 'git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct git/gh commands for those operations are blocked.'
+const HOOKS_DIR = ".agents/hooks";
+const HAS_TYPESCRIPT = ${JSON.stringify(data.has_typescript)};
+const BACKLOG_ENABLED = ${JSON.stringify(data.backlog_enabled)};
+const WORKTREE_POLICY =
+  "Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.";
+const STACK_POLICY =
+  "git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct git/gh commands for those operations are blocked.";
 
-function toolKey(tool: string): string {
-  return tool.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
-}
+const toolKey = (tool: string): string =>
+  tool
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9_]+/gu, "_")
+    .replaceAll(/^_+|_+$/gu, "");
 
-function runHook(name: string, input: unknown): { allowed: boolean; message?: string } {
-  const path = join(HOOKS_DIR, name)
-  if (!existsSync(path)) return { allowed: true }
+const runHook = (
+  name: string,
+  input: unknown
+): { allowed: boolean; message?: string } => {
+  const path = join(HOOKS_DIR, name);
+  if (!existsSync(path)) {
+    return { allowed: true };
+  }
   const result = spawnSync(path, [], {
+    encoding: "utf-8",
     input: JSON.stringify(input),
-    encoding: 'utf8',
     timeout: 30_000,
-  })
-  if (result.status === 2) return { allowed: false, message: result.stderr || 'Blocked by hook' }
-  return { allowed: true }
-}
+  });
+  if (result.status === 2) {
+    return { allowed: false, message: result.stderr || "Blocked by hook" };
+  }
+  return { allowed: true };
+};
 
-function runDispatchedHook(name: string, input: unknown): { allowed: boolean; message?: string } {
-  const result = spawnSync('oisin-dev', ['hook', name], {
+const runDispatchedHook = (
+  name: string,
+  input: unknown
+): { allowed: boolean; message?: string } => {
+  const result = spawnSync("oisin-dev", ["hook", name], {
+    encoding: "utf-8",
     input: JSON.stringify(input),
-    encoding: 'utf8',
     timeout: 30_000,
-  })
-  if (result.status === 2) return { allowed: false, message: result.stderr || 'Blocked by hook' }
-  return { allowed: true }
-}
+  });
+  if (result.status === 2) {
+    return { allowed: false, message: result.stderr || "Blocked by hook" };
+  }
+  return { allowed: true };
+};
 
 export default {
-  name: 'dev-enforcer',
-  async 'tool.execute.before'(event: ToolEvent): Promise<void> {
-    const key = toolKey(event.tool)
-    const toolInput = { tool_name: event.tool, tool_input: event.input }
+  name: "dev-enforcer",
+  "tool.execute.before"(event: ToolEvent): void {
+    const key = toolKey(event.tool);
+    const toolInput = { tool_input: event.input, tool_name: event.tool };
 
-    if (key.includes('todo')) {
-      const block = runHook('block-todowrite.sh', toolInput)
-      if (!block.allowed) throw new Error(block.message)
-      return
-    }
-
-    if (key.includes('bash') || key.includes('shell') || key.includes('exec')) {
-      const destructive = runHook('destructive-command-guard.sh', toolInput)
-      if (!destructive.allowed) throw new Error(destructive.message)
-      void WORKTREE_POLICY
-      const stack = runHook('git-spice-command-guard.sh', toolInput)
-      if (!stack.allowed) throw new Error(stack.message)
-      void STACK_POLICY
-      const coauthor = runDispatchedHook('block-coauthor', toolInput)
-      if (!coauthor.allowed) throw new Error(coauthor.message)
-      return
-    }
-
-    if (key.includes('write') || key.includes('edit') || key.includes('patch')) {
-      const worktree = runHook('worktree-write-guard.sh', toolInput)
-      if (!worktree.allowed) throw new Error(worktree.message)
-      void BACKLOG_ENABLED
-      if (HAS_TYPESCRIPT) {
-        const style = runHook('ts-style-guard.sh', toolInput)
-        if (!style.allowed) throw new Error(style.message)
-        const imports = runHook('import-validator.sh', toolInput)
-        if (!imports.allowed) throw new Error(imports.message)
+    if (key.includes("todo")) {
+      const block = runHook("block-todowrite.sh", toolInput);
+      if (!block.allowed) {
+        throw new Error(block.message);
       }
-      const antipattern = runHook('ai-antipattern-guard.sh', toolInput)
-      if (!antipattern.allowed) throw new Error(antipattern.message)
+      return;
+    }
+
+    if (key.includes("bash") || key.includes("shell") || key.includes("exec")) {
+      const destructive = runHook("destructive-command-guard.sh", toolInput);
+      if (!destructive.allowed) {
+        throw new Error(destructive.message);
+      }
+      void WORKTREE_POLICY;
+      const stack = runHook("git-spice-command-guard.sh", toolInput);
+      if (!stack.allowed) {
+        throw new Error(stack.message);
+      }
+      void STACK_POLICY;
+      const coauthor = runDispatchedHook("block-coauthor", toolInput);
+      if (!coauthor.allowed) {
+        throw new Error(coauthor.message);
+      }
+      return;
+    }
+
+    if (
+      key.includes("write") ||
+      key.includes("edit") ||
+      key.includes("patch")
+    ) {
+      const worktree = runHook("worktree-write-guard.sh", toolInput);
+      if (!worktree.allowed) {
+        throw new Error(worktree.message);
+      }
+      void BACKLOG_ENABLED;
+      if (HAS_TYPESCRIPT) {
+        const style = runHook("ts-style-guard.sh", toolInput);
+        if (!style.allowed) {
+          throw new Error(style.message);
+        }
+        const imports = runHook("import-validator.sh", toolInput);
+        if (!imports.allowed) {
+          throw new Error(imports.message);
+        }
+      }
+      const antipattern = runHook("ai-antipattern-guard.sh", toolInput);
+      if (!antipattern.allowed) {
+        throw new Error(antipattern.message);
+      }
     }
   },
-}
+};
 `
 }

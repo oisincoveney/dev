@@ -1,5 +1,5 @@
 version = 1
 agents = ["claude", "codex", "opencode", "cursor"]
 
-# Generated skills live directly in .agents/skills/.
-# dotagents links them into tool-specific locations and repairs broken links.
+# Generated skills live directly in .agents/skills/ and are linked into
+# tool-specific locations by dotagents.

@@ -12,7 +12,7 @@ Use only for explicit `/quick [P2|P3] <task>`.
 - Read before editing.
 - Use relevant official docs/web first when external APIs, libraries, features, or current facts are involved.
 - Reject migrations, auth/security/billing/data-risk, broad refactors, generated files, new dependencies, releases, or ambiguous work.
-- Run normal verification.
+- Run normal verification relevant to the edit.
 - Commit the verified change in the quick branch.
 
 Task: $ARGUMENTS
