@@ -2,8 +2,8 @@
  * `oisin-dev init`
  *
  * Configures AI agents, coding standards, Backlog.md, and dev tooling in the
- * current directory. Copier renders files, dotagents syncs skills, and mise
- * installs/runs those tools so users do not need global binaries.
+ * current directory. The built-in renderer writes files, then dotagents syncs
+ * skills and mise installs/runs required tools.
  */
 
 import { basename } from 'node:path'
@@ -33,7 +33,7 @@ export async function runInit(): Promise<void> {
 
   const answers = await runPrompts(detected)
   const spinner = p.spinner()
-  spinner.start('Rendering Copier template and syncing agent tooling')
+  spinner.start('Rendering agent template and syncing agent tooling')
   const result = runInitOrchestration(cwd, answers)
   if (!result.ok) {
     spinner.stop('Failed')

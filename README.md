@@ -1,12 +1,12 @@
 # @oisincoveney/dev
 
-Opinionated AI development environment harness for multi-language projects. Copier owns template lifecycle, dotagents owns shared skill sync, mise owns tool installation and canonical commands, Worktrunk owns agent worktree lifecycle, lefthook owns Git hooks, and Beads owns task/memory workflow state.
+Opinionated AI development environment harness for multi-language projects. A built-in renderer owns template lifecycle, dotagents owns shared skill sync, mise owns tool installation and canonical commands, Worktrunk owns agent worktree lifecycle, lefthook owns Git hooks, and Backlog.md owns task workflow state.
 
 ## What it does
 
-Running `oisin-dev init` inside an existing project walks you through prompts, then renders the bundled Copier template and syncs tool-native overlays:
+Running `oisin-dev init` inside an existing project walks you through prompts, then renders the bundled template and syncs tool-native overlays:
 
-- **`.copier-answers.yml`** — Copier answer file used by `update` and `reset`
+- **`.oisin-dev.yml`** — harness state used by `update` and `reset`
 - **`AGENTS.md`** — canonical shared project instructions
 - **`CLAUDE.md`** — Claude entrypoint pointing back to `AGENTS.md`
 - **`.agents/skills/` + `agents.toml`** — canonical skills and dotagents metadata
@@ -73,7 +73,7 @@ Interactive setup for an existing project. Run inside a directory with `package.
 
 ### `oisin-dev update`
 
-Runs `copier recopy --force`, then `dotagents install`, then `lefthook install`. It requires a clean Git worktree and does not delete generated agent directories.
+Reapplies the built-in template, then runs `dotagents install` and `lefthook install`. It requires a clean Git worktree and does not delete generated agent directories.
 
 ```sh
 oisin-dev update
@@ -81,9 +81,9 @@ oisin-dev update
 
 ### `oisin-dev reset`
 
-Dangerous reset path for generated agent configuration. It prints the paths it will remove, requires confirmation unless `--yes` is passed, requires a clean Git worktree unless `--force` is passed, deletes generated agent overlays, shared agent skills, agent metadata, and root agent docs, then runs `copier recopy --force`, `dotagents install`, and `lefthook install`.
+Dangerous reset path for generated agent configuration. It prints the paths it will remove, requires confirmation unless `--yes` is passed, requires a clean Git worktree unless `--force` is passed, deletes generated agent overlays, shared agent skills, agent metadata, and root agent docs, then reapplies the built-in template, runs `dotagents install`, and runs `lefthook install`.
 
-If `.copier-answers.yml` is missing but legacy `.dev.config.json` exists, reset first converts `.dev.config.json` into `.copier-answers.yml` so older repos can use the same clean-break reset path. It never deletes `.beads`.
+If `.oisin-dev.yml` is missing but legacy harness state exists, reset migrates it so older repos can use the same clean-break reset path.
 
 ```sh
 oisin-dev reset
@@ -201,7 +201,7 @@ Claude-specific skill locations are symlinked from `.agents/skills/` by `oisin-d
 
 ### Lint and format configs
 
-Generated from the Copier template with sensible defaults for each language. Use Git to review or recover changes after `update` or `reset`.
+Generated from the built-in template with sensible defaults for each language. Use Git to review or recover changes after `update` or `reset`.
 
 | Language | Files |
 |---|---|
@@ -221,12 +221,11 @@ Generated from the Copier template with sensible defaults for each language. Use
 
 ## Configuration
 
-Template answers are stored in `.copier-answers.yml`; shared skill/agent metadata lives in `agents.toml`; commands and required CLI tooling live in `mise.toml`:
+Harness state is stored in `.oisin-dev.yml`; shared skill/agent metadata lives in `agents.toml`; commands and required CLI tooling live in `mise.toml`:
 
 ```toml
 # mise.toml
 [tools]
-"pipx:copier" = "9.14.0"
 "npm:@sentry/dotagents" = "latest"
 "aqua:evilmartians/lefthook" = "latest"
 "github:max-sixty/worktrunk" = "latest"
@@ -277,7 +276,7 @@ Supported language/variant combinations:
 
 ### Required tools
 
-Runtime setup expects `mise`. Project-local `mise.toml` installs Copier, dotagents, lefthook, Worktrunk, and `bd` when Beads is enabled, so users do not need to install those globally.
+Runtime setup expects `mise`. Project-local `mise.toml` installs dotagents, lefthook, Worktrunk, git-spice, and Backlog.md when enabled, so users do not need to install those globally.
 
 If the local mise platform cannot resolve `github:max-sixty/worktrunk`, install Worktrunk with the official fallback:
 

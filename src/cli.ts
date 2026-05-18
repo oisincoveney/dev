@@ -7,7 +7,7 @@ import { runUpdate } from './update.js'
 
 const COMMANDS: Record<string, string> = {
   init:             'Initialize an opinionated dev environment in the current (or new) project',
-  update:           'Non-destructively refresh generated files through Copier',
+  update:           'Non-destructively refresh generated agent files',
   reset:            'Dangerously delete and recreate generated agent configuration',
   tickets:           'Launch the local Backlog.md UI for the current workspace',
   hook:             'Run a TS-native hook handler (internal — invoked by Claude Code)',

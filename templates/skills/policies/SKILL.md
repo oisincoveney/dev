@@ -49,7 +49,7 @@ Before writing code using anything not verified THIS session:
 
 Never write "this works"/"should work"/"tests should pass"/"done" as terminal without:
 
-1. Running configured `test` cmd (see `.claude/rules/commands.md` or `.dev.config.json`).
+1. Running configured `test` cmd (see `.claude/rules/commands.md` or `mise.toml`).
 2. Observing passing output.
 3. Including output in response.
 

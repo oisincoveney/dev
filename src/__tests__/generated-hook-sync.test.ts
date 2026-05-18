@@ -5,8 +5,6 @@ import { describe, expect, it } from 'vitest'
 const ROOT = resolve(__dirname, '..', '..')
 const SOURCE_DIR = join(ROOT, 'templates', 'hooks')
 const GENERATED_DIRS = [
-  join(ROOT, 'templates', 'copier', '.claude', 'hooks'),
-  join(ROOT, 'templates', 'copier', '.codex', 'hooks'),
   join(ROOT, '.claude', 'hooks'),
   join(ROOT, '.codex', 'hooks'),
 ]

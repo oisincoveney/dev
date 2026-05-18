@@ -7,10 +7,12 @@ set -euo pipefail
 
 context="Context restored after /compact. Caveman mode persists from session start (off only with: stop caveman / normal mode)."
 
-if [[ -f ".copier-answers.yml" ]]; then
-  language=$(awk -F': ' '/^language:/ {print $2; exit}' .copier-answers.yml | tr -d '"' || true)
-  variant=$(awk -F': ' '/^variant:/ {print $2; exit}' .copier-answers.yml | tr -d '"' || true)
-  workflow=$(awk -F': ' '/^workflow:/ {print $2; exit}' .copier-answers.yml | tr -d '"' || true)
+state_file=".oisin-dev.yml"
+
+if [[ -f "$state_file" ]]; then
+  language=$(awk -F': ' '/^language:/ {print $2; exit}' "$state_file" | tr -d '"' || true)
+  variant=$(awk -F': ' '/^variant:/ {print $2; exit}' "$state_file" | tr -d '"' || true)
+  workflow=$(awk -F': ' '/^workflow:/ {print $2; exit}' "$state_file" | tr -d '"' || true)
   context="$context
 Project: $variant ($language) | workflow: $workflow"
 fi

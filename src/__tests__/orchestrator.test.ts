@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import {
   applyInternalTemplate,
-  copierMiseArgs,
+  LEGACY_STATE_FILE,
   mergeLefthookCommands,
   mergeMiseToolLines,
   mergeMiseTaskBlocks,
@@ -50,7 +50,7 @@ describe('thin orchestrator', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('maps prompt answers to Copier template data', () => {
+  it('maps prompt answers to template data', () => {
     const data = templateDataFromAnswers(answers)
 
     expect(data.commands).toMatchObject({
@@ -63,19 +63,7 @@ describe('thin orchestrator', () => {
     expect(data.targets).toContain('opencode')
   })
 
-  it('runs copier through the qualified mise pipx tool spec', () => {
-    expect(copierMiseArgs('recopy', '--trust', '--force')).toEqual([
-      'exec',
-      'pipx:copier@9.14.0',
-      '--',
-      'copier',
-      'recopy',
-      '--trust',
-      '--force',
-    ])
-  })
-
-  it('renders the harness fallback with mise-managed tool declarations', () => {
+  it('renders the harness with mise-managed tool declarations', () => {
     const data = templateDataFromAnswers(answers)
     applyInternalTemplate(dir, data)
 
@@ -100,7 +88,7 @@ describe('thin orchestrator', () => {
     expect(agents).not.toContain('codex_hooks')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('[tasks.test]')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('run = "bun test"')
-    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"pipx:copier"')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).not.toContain('pipx:copier')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"npm:@sentry/dotagents"')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:max-sixty/worktrunk"')
     expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('"github:abhinav/git-spice"')
@@ -188,7 +176,7 @@ describe('thin orchestrator', () => {
     const mise = readFileSync(join(dir, 'mise.toml'), 'utf8')
     expect(mise).toContain('node = "22"')
     expect(mise).toContain('[tasks.test]\nrun = "npm test"')
-    expect(mise).toContain('"pipx:copier" = "9.14.0"')
+    expect(mise).not.toContain('pipx:copier')
     expect(mise).toContain('"npm:@sentry/dotagents" = "latest"')
     expect(mise).toContain('"aqua:evilmartians/lefthook" = "latest"')
     expect(mise).toContain('"github:max-sixty/worktrunk" = "latest"')
@@ -201,8 +189,8 @@ describe('thin orchestrator', () => {
   })
 
   it('can add harness tools to a mise file without a tools section', () => {
-    expect(mergeMiseToolLines('[tasks.test]\nrun = "npm test"\n', ['"pipx:copier" = "9.14.0"'])).toBe(
-      '[tools]\n"pipx:copier" = "9.14.0"\n\n[tasks.test]\nrun = "npm test"\n',
+    expect(mergeMiseToolLines('[tasks.test]\nrun = "npm test"\n', ['"npm:@sentry/dotagents" = "latest"'])).toBe(
+      '[tools]\n"npm:@sentry/dotagents" = "latest"\n\n[tasks.test]\nrun = "npm test"\n',
     )
   })
 
@@ -282,13 +270,13 @@ describe('thin orchestrator', () => {
     expect(result).toEqual({ ok: true })
     expect(existsSync(join(dir, STATE_FILE))).toBe(true)
     const state = readFileSync(join(dir, STATE_FILE), 'utf8')
-    expect(state).toContain('"variant":"ts-library"')
-    expect(() => JSON.parse(state)).not.toThrow()
+    expect(state).toContain('variant: ts-library')
+    expect(parse(state)).toMatchObject({ variant: 'ts-library' })
   })
 
-  it('reads YAML Copier answers during update orchestration', () => {
+  it('reads legacy YAML state during update orchestration', () => {
     writeFileSync(
-      join(dir, STATE_FILE),
+      join(dir, LEGACY_STATE_FILE),
       [
         '_src_path: /tmp/template',
         'language: typescript',
@@ -321,6 +309,8 @@ describe('thin orchestrator', () => {
     )
 
     expect(runUpdateOrchestration(dir, { skipExternalTools: true })).toEqual({ ok: true })
+    expect(existsSync(join(dir, LEGACY_STATE_FILE))).toBe(false)
+    expect(parse(readFileSync(join(dir, STATE_FILE), 'utf8'))).toMatchObject({ variant: 'ts-library' })
 
     const claudeSettings = readFileSync(join(dir, '.claude/settings.json'), 'utf8')
     expect(claudeSettings).toContain('OISIN_DEV_BACKLOG=1')

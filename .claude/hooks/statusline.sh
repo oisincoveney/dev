@@ -4,9 +4,11 @@
 set -euo pipefail
 
 parts=()
-if [[ -f ".copier-answers.yml" ]]; then
-  variant=$(awk -F': ' '/^variant:/ {print $2; exit}' .copier-answers.yml | tr -d '"' || true)
-  workflow=$(awk -F': ' '/^workflow:/ {print $2; exit}' .copier-answers.yml | tr -d '"' || true)
+state_file=".oisin-dev.yml"
+
+if [[ -f "$state_file" ]]; then
+  variant=$(awk -F': ' '/^variant:/ {print $2; exit}' "$state_file" | tr -d '"' || true)
+  workflow=$(awk -F': ' '/^workflow:/ {print $2; exit}' "$state_file" | tr -d '"' || true)
   [[ -n "$variant" ]] && parts+=("$variant")
   [[ -n "$workflow" && "$workflow" != "none" ]] && parts+=("$workflow")
 fi

@@ -2,7 +2,6 @@ import {
   chmodSync,
   cpSync,
   existsSync,
-  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -21,10 +20,13 @@ import type { ProjectVariant } from './skills.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-export const COPIER_TEMPLATE_DIR = resolve(__dirname, '..', 'templates', 'copier')
-export const STATE_FILE = '.copier-answers.yml'
+export const TEMPLATE_DIR = resolve(__dirname, '..', 'templates')
+export const HOOKS_TEMPLATE_DIR = join(TEMPLATE_DIR, 'hooks')
+export const COMMANDS_TEMPLATE_DIR = join(TEMPLATE_DIR, 'commands')
+export const SKILLS_TEMPLATE_DIR = join(TEMPLATE_DIR, 'skills')
+export const STATE_FILE = '.oisin-dev.yml'
+export const LEGACY_STATE_FILE = '.copier-answers.yml'
 export const LEGACY_CONFIG_FILE = '.dev.config.json'
-export const COPIER_TOOL_SPEC = 'pipx:copier@9.14.0'
 const RETIRED_GENERATED_PATHS = [
   '.claude/hooks/tdd-guard.sh',
   '.codex/hooks/tdd-guard.sh',
@@ -116,7 +118,7 @@ function compactCommands(commands: Answers['commands']): Record<string, string> 
 }
 
 export function readInternalState(cwd: string): TemplateData | null {
-  const path = join(cwd, STATE_FILE)
+  const path = existingStatePath(cwd)
   if (!existsSync(path)) return null
   const raw = readFileSync(path, 'utf8')
   const parsed = raw.trimStart().startsWith('{') ? JSON.parse(raw) : parse(raw)
@@ -124,7 +126,14 @@ export function readInternalState(cwd: string): TemplateData | null {
 }
 
 export function writeInternalState(cwd: string, data: TemplateData): void {
-  writeFileSync(join(cwd, STATE_FILE), `${JSON.stringify({ _src_path: COPIER_TEMPLATE_DIR, ...data })}\n`)
+  writeFileSync(join(cwd, STATE_FILE), stringify(data))
+  rmSync(join(cwd, LEGACY_STATE_FILE), { force: true })
+}
+
+function existingStatePath(cwd: string): string {
+  const current = join(cwd, STATE_FILE)
+  if (existsSync(current)) return current
+  return join(cwd, LEGACY_STATE_FILE)
 }
 
 export function runInitOrchestration(
@@ -133,37 +142,10 @@ export function runInitOrchestration(
   options: OrchestratorOptions = {},
 ): OrchestratorResult {
   const data = templateDataFromAnswers(answers)
-  if (options.skipExternalTools) {
-    applyInternalTemplate(cwd, data)
-    writeInternalState(cwd, data)
-    return { ok: true }
-  }
-
-  const dataFile = join(cwd, '.copier-data.tmp.json')
-  writeFileSync(dataFile, `${JSON.stringify(data, null, 2)}\n`)
-  try {
-    const copy = runMise(cwd, [
-      ...copierMiseArgs(
-        'copy',
-        '--trust',
-        '--defaults',
-        '--overwrite',
-        '--data-file',
-        dataFile,
-        COPIER_TEMPLATE_DIR,
-        cwd,
-      ),
-    ])
-    if (!copy.ok) return copy
-  } finally {
-    rmSync(dataFile, { force: true })
-  }
-
+  applyInternalTemplate(cwd, data)
+  writeInternalState(cwd, data)
+  if (options.skipExternalTools) return { ok: true }
   return runPostTemplateTools(cwd, data)
-}
-
-export function copierMiseArgs(...copierArgs: string[]): string[] {
-  return ['exec', COPIER_TOOL_SPEC, '--', 'copier', ...copierArgs]
 }
 
 export function runUpdateOrchestration(
@@ -173,26 +155,14 @@ export function runUpdateOrchestration(
   const bootstrap = bootstrapInternalStateFromLegacyConfig(cwd)
   if (!bootstrap.ok) return bootstrap
   const data = readInternalState(cwd)
-  if (options.skipExternalTools) {
-    if (data === null) {
-      return { ok: false, message: `No ${STATE_FILE} found. Run \`oisin-dev init\` first.` }
-    }
-    applyInternalTemplate(cwd, data)
-    pruneRetiredGeneratedPaths(cwd)
-    return { ok: true }
-  }
-  if (!existsSync(join(cwd, STATE_FILE))) {
+  if (data === null) {
     return { ok: false, message: `No ${STATE_FILE} found. Run \`oisin-dev init\` first.` }
   }
-  refreshCopierSourcePath(cwd)
-  ensureMiseToml(cwd, data ?? undefined)
-  const trust = runMise(cwd, ['trust', '-y'])
-  if (!trust.ok) return trust
-  const install = runMise(cwd, ['install'])
-  if (!install.ok) return install
-  const update = runMise(cwd, copierMiseArgs('recopy', '--trust', '--force'))
-  if (!update.ok) return update
-  return runPostTemplateTools(cwd, data ?? undefined)
+  applyInternalTemplate(cwd, data)
+  writeInternalState(cwd, data)
+  pruneRetiredGeneratedPaths(cwd)
+  if (options.skipExternalTools) return { ok: true }
+  return runPostTemplateTools(cwd, data)
 }
 
 export function runResetOrchestration(
@@ -201,27 +171,21 @@ export function runResetOrchestration(
 ): OrchestratorResult {
   const bootstrap = bootstrapInternalStateFromLegacyConfig(cwd)
   if (!bootstrap.ok) return bootstrap
-  if (options.skipExternalTools) return runUpdateOrchestration(cwd, options)
-  if (!existsSync(join(cwd, STATE_FILE))) {
+  const data = readInternalState(cwd)
+  if (data === null) {
     return {
       ok: false,
       message: `No ${STATE_FILE} or ${LEGACY_CONFIG_FILE} found. Run \`oisin-dev init\` first.`,
     }
   }
-  refreshCopierSourcePath(cwd)
-  const data = readInternalState(cwd)
-  ensureMiseToml(cwd, data ?? undefined)
-  const trust = runMise(cwd, ['trust', '-y'])
-  if (!trust.ok) return trust
-  const install = runMise(cwd, ['install'])
-  if (!install.ok) return install
-  const recopy = runMise(cwd, copierMiseArgs('recopy', '--trust', '--force'))
-  if (!recopy.ok) return recopy
-  return runPostTemplateTools(cwd, data ?? undefined)
+  applyInternalTemplate(cwd, data)
+  writeInternalState(cwd, data)
+  if (options.skipExternalTools) return { ok: true }
+  return runPostTemplateTools(cwd, data)
 }
 
 export function bootstrapInternalStateFromLegacyConfig(cwd: string): OrchestratorResult {
-  if (existsSync(join(cwd, STATE_FILE))) return { ok: true }
+  if (existsSync(join(cwd, STATE_FILE)) || existsSync(join(cwd, LEGACY_STATE_FILE))) return { ok: true }
 
   const legacyPath = join(cwd, LEGACY_CONFIG_FILE)
   if (!existsSync(legacyPath)) return { ok: true }
@@ -403,24 +367,6 @@ function runMise(cwd: string, args: string[]): OrchestratorResult {
   return { ok: true }
 }
 
-function refreshCopierSourcePath(cwd: string): void {
-  const path = join(cwd, STATE_FILE)
-  if (!existsSync(path)) return
-  const raw = readFileSync(path, 'utf8')
-  if (raw.trimStart().startsWith('{')) {
-    const data = JSON.parse(raw) as Record<string, unknown>
-    data._src_path = COPIER_TEMPLATE_DIR
-    writeFileSync(path, `${JSON.stringify(data)}\n`)
-    return
-  }
-  const srcLine = `_src_path: ${JSON.stringify(COPIER_TEMPLATE_DIR)}`
-  if (/^_src_path:/m.test(raw)) {
-    writeFileSync(path, raw.replace(/^_src_path:.*$/m, srcLine))
-  } else {
-    writeFileSync(path, `${srcLine}\n${raw}`)
-  }
-}
-
 export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   writeGeneratedFile(cwd, 'AGENTS.md', agentsMd(data))
   writeGeneratedFile(cwd, 'CLAUDE.md', claudeMd())
@@ -431,20 +377,20 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   ensureLefthookYml(cwd, data)
 
   if (data.targets.includes('claude')) {
-    copyTree(join(COPIER_TEMPLATE_DIR, '.claude', 'hooks'), join(cwd, '.claude', 'hooks'))
+    copyTree(HOOKS_TEMPLATE_DIR, join(cwd, '.claude', 'hooks'))
     chmodTree(join(cwd, '.claude', 'hooks'))
-    copyTree(join(COPIER_TEMPLATE_DIR, '.claude', 'commands'), join(cwd, '.claude', 'commands'))
+    copyTree(COMMANDS_TEMPLATE_DIR, join(cwd, '.claude', 'commands'))
     writeGeneratedFile(cwd, '.claude/settings.json', JSON.stringify(claudeSettings(data), null, 2) + '\n')
   }
 
   if (data.targets.includes('codex')) {
-    copyTree(join(COPIER_TEMPLATE_DIR, '.codex', 'hooks'), join(cwd, '.codex', 'hooks'))
+    copyTree(HOOKS_TEMPLATE_DIR, join(cwd, '.codex', 'hooks'))
     chmodTree(join(cwd, '.codex', 'hooks'))
     writeGeneratedFile(cwd, '.codex/hooks.json', JSON.stringify(codexHooks(data), null, 2) + '\n')
   }
 
   if (data.targets.includes('opencode')) {
-    copyTree(join(COPIER_TEMPLATE_DIR, '.opencode', 'commands'), join(cwd, '.opencode', 'commands'))
+    copyTree(COMMANDS_TEMPLATE_DIR, join(cwd, '.opencode', 'commands'))
     writeGeneratedFile(cwd, '.opencode/plugins/dev-enforcer.ts', opencodePlugin(data))
   }
 
@@ -452,7 +398,7 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
     writeGeneratedFile(cwd, '.cursor/rules/project.mdc', cursorRule())
   }
 
-  copyTree(join(COPIER_TEMPLATE_DIR, '.agents', 'skills'), join(cwd, '.agents', 'skills'))
+  copyTree(SKILLS_TEMPLATE_DIR, join(cwd, '.agents', 'skills'))
   syncSkillLinks(cwd, data)
 }
 
@@ -634,7 +580,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function requiredMiseToolLines(data?: TemplateData): string[] {
   const lines = [
-    '"pipx:copier" = "9.14.0"',
     '"npm:@sentry/dotagents" = "latest"',
     '"aqua:evilmartians/lefthook" = "latest"',
     '"github:max-sixty/worktrunk" = "latest"',
@@ -793,7 +738,6 @@ agents = [${agentTargets.map((target) => JSON.stringify(target)).join(', ')}]
 function miseToml(data: TemplateData): string {
   const lines = ['[tools]']
   if (data.package_manager === 'bun') lines.push('bun = "1.3"')
-  lines.push('"pipx:copier" = "9.14.0"')
   lines.push('"npm:@sentry/dotagents" = "latest"')
   lines.push('"aqua:evilmartians/lefthook" = "latest"')
   lines.push('"github:max-sixty/worktrunk" = "latest"')

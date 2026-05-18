@@ -10,7 +10,8 @@ Use only when the user explicitly invokes `/quick [P2|P3] <task>`.
 
 Rules:
 - Defaults to P3; explicit P2 allowed; P0/P1 blocked.
-- Create and use a Worktrunk-managed quick worktree under `.agents/worktrees/`. Do not edit in the current checkout.
+- Create and use a Worktrunk-managed quick worktree under `.agents/worktrees/`.
+- Do not edit in the current checkout.
 - Read before editing.
 - For external APIs, libraries, features, or current facts, use official docs/web first.
 - Keep scope tiny and low-risk.

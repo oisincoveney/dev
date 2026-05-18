@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
 import {
   existingResetPaths,
   gitWorktreeClean,
@@ -71,7 +72,7 @@ describe('reset command helpers', () => {
     expect(existsSync(join(dir, 'backlog'))).toBe(true)
   })
 
-  it('bootstraps reset from legacy .dev.config.json when copier answers are missing', () => {
+  it('bootstraps reset from legacy .dev.config.json when state is missing', () => {
     writeFileSync(
       join(dir, '.dev.config.json'),
       `${JSON.stringify(
@@ -98,7 +99,7 @@ describe('reset command helpers', () => {
     const result = runResetOrchestration(dir, { skipExternalTools: true })
 
     expect(result).toEqual({ ok: true })
-    const state = JSON.parse(readFileSync(join(dir, STATE_FILE), 'utf8')) as { variant?: string }
+    const state = parse(readFileSync(join(dir, STATE_FILE), 'utf8')) as { variant?: string }
     expect(state.variant).toBe('ts-library')
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('Use the tracker workflow')
     expect(existsSync(join(dir, '.claude/hooks/pre-tool-dispatch.sh'))).toBe(true)
@@ -132,7 +133,7 @@ describe('reset command helpers', () => {
     const result = runResetOrchestration(dir, { skipExternalTools: true })
 
     expect(result).toEqual({ ok: true })
-    const state = JSON.parse(readFileSync(join(dir, STATE_FILE), 'utf8')) as {
+    const state = parse(readFileSync(join(dir, STATE_FILE), 'utf8')) as {
       tools?: string[]
       workflow?: string
       backlog_enabled?: boolean

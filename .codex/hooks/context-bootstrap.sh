@@ -30,10 +30,12 @@ CAVEMAN
 
 context="$caveman_mode"
 
-if [[ -f ".copier-answers.yml" || -f "mise.toml" ]]; then
-  language=$(awk -F': ' '/^language:/ {print $2; exit}' .copier-answers.yml 2>/dev/null | tr -d '"' || true)
-  variant=$(awk -F': ' '/^variant:/ {print $2; exit}' .copier-answers.yml 2>/dev/null | tr -d '"' || true)
-  workflow=$(awk -F': ' '/^workflow:/ {print $2; exit}' .copier-answers.yml 2>/dev/null | tr -d '"' || true)
+state_file=".oisin-dev.yml"
+
+if [[ -f "$state_file" || -f "mise.toml" ]]; then
+  language=$(awk -F': ' '/^language:/ {print $2; exit}' "$state_file" 2>/dev/null | tr -d '"' || true)
+  variant=$(awk -F': ' '/^variant:/ {print $2; exit}' "$state_file" 2>/dev/null | tr -d '"' || true)
+  workflow=$(awk -F': ' '/^workflow:/ {print $2; exit}' "$state_file" 2>/dev/null | tr -d '"' || true)
   dev="mise run dev"
   build="mise run build"
   test_cmd="mise run test"

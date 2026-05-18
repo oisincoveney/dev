@@ -1,0 +1,40 @@
+backlog_enabled: true
+commands:
+  build: bun run build
+  dev: bun run test:watch
+  format: echo "no format configured"
+  lint: echo "no lint configured"
+  test: bun test
+  typecheck: tsc --noEmit
+contract_driven: false
+framework: ""
+has_frontend: false
+has_typescript: true
+language: typescript
+languages:
+  - typescript
+mcp_servers: []
+models:
+  default: claude-sonnet-4-6
+  planning: claude-opus-4-7
+  review: claude-sonnet-4-6
+  simple_edits: claude-haiku-4-5-20251001
+package_manager: bun
+skills:
+  - code-quality
+  - architecture
+  - testing
+  - ai-behavior
+  - performance
+targets:
+  - claude
+  - codex
+  - opencode
+  - cursor
+  - lefthook
+tools:
+  - backlog
+variant: ts-library
+variants:
+  - ts-library
+workflow: backlog
