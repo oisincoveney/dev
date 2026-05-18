@@ -386,6 +386,7 @@ export function applyInternalTemplate(cwd: string, data: TemplateData): void {
   if (data.targets.includes('codex')) {
     copyTree(HOOKS_TEMPLATE_DIR, join(cwd, '.codex', 'hooks'))
     chmodTree(join(cwd, '.codex', 'hooks'))
+    copyTree(COMMANDS_TEMPLATE_DIR, join(cwd, '.codex', 'commands'))
     writeGeneratedFile(cwd, '.codex/hooks.json', JSON.stringify(codexHooks(data), null, 2) + '\n')
   }
 
@@ -767,6 +768,14 @@ function worktreeTaskCommands(commands: Record<string, string>): Record<string, 
 
   return {
     'worktree:setup': [
+      'repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"',
+      'case "$repo_root" in',
+      '  */.agents/worktrees/*/.agents/worktrees/*)',
+      '    echo "Nested Worktrunk worktree detected: $repo_root" >&2',
+      '    echo "Create agent worktrees under the repository root .agents/worktrees directory, not inside another worktree." >&2',
+      '    exit 2',
+      '    ;;',
+      'esac',
       'mise install',
       'if [[ -f package.json && -f bun.lockb || -f package.json && -f bun.lock ]]; then',
       '  command -v bun >/dev/null 2>&1 && bun install --frozen-lockfile || true',
@@ -797,7 +806,9 @@ function worktreeTaskCommands(commands: Record<string, string>): Record<string, 
 function worktrunkToml(): string {
   return `# Worktrunk project hooks for @oisincoveney/dev generated worktrees.
 # Agent implementation work must create branches with:
-#   WORKTRUNK_WORKTREE_PATH="$PWD/.agents/worktrees/{{ branch | sanitize }}" wt switch --create <branch>
+#   repo_root="$(git rev-parse --show-toplevel)"
+#   case "$repo_root" in */.agents/worktrees/*) repo_root="\${repo_root%%/.agents/worktrees/*}" ;; esac
+#   WORKTRUNK_WORKTREE_PATH="$repo_root/.agents/worktrees/{{ branch | sanitize }}" wt switch --create <branch>
 
 [pre-start]
 setup = "mise run worktree:setup"

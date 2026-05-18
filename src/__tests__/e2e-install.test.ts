@@ -119,6 +119,12 @@ describe('end-to-end install with real side effects', () => {
 
     expect(readFileSync(join(dir, '.agents/skills/tracker-workflow/SKILL.md'), 'utf8')).toContain('Backlog.md')
     expect(readFileSync(join(dir, '.agents/skills/work-next/SKILL.md'), 'utf8')).toContain('backlog task list')
+    expect(readFileSync(join(dir, 'mise.toml'), 'utf8')).toContain('Nested Worktrunk worktree detected')
+    expect(readFileSync(join(dir, '.config/wt.toml'), 'utf8')).toContain('repo_root="$(git rev-parse --show-toplevel)"')
+    expect(readFileSync(join(dir, '.claude/commands/land-prs.md'), 'utf8')).toContain('bunx @oisincoveney/dev land-prs')
+    expect(readFileSync(join(dir, '.claude/commands/pr-daemon.md'), 'utf8')).toContain('bunx @oisincoveney/dev pr-daemon')
+    expect(readFileSync(join(dir, '.codex/commands/land-prs.md'), 'utf8')).toContain('bunx @oisincoveney/dev land-prs')
+    expect(readFileSync(join(dir, '.opencode/commands/pr-daemon.md'), 'utf8')).toContain('bunx @oisincoveney/dev pr-daemon')
     expect(existsSync(join(dir, '.codex/skills/quick'))).toBe(true)
     expect(existsSync(join(dir, '.opencode/skills/quick'))).toBe(true)
     expect(existsSync(join(dir, '.cursor/skills/quick'))).toBe(true)

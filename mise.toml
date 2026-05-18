@@ -31,6 +31,14 @@ run = "tsc --noEmit"
 
 [tasks."worktree:setup"]
 run = """
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+case "$repo_root" in
+  */.agents/worktrees/*/.agents/worktrees/*)
+    echo "Nested Worktrunk worktree detected: $repo_root" >&2
+    echo "Create agent worktrees under the repository root .agents/worktrees directory, not inside another worktree." >&2
+    exit 2
+    ;;
+esac
 mise install
 if [[ -f package.json && -f bun.lockb || -f package.json && -f bun.lock ]]; then
   command -v bun >/dev/null 2>&1 && bun install --frozen-lockfile || true

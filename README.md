@@ -109,7 +109,9 @@ Worktrunk-managed worktrees.
 Generated projects require one agent workspace lane:
 
 ```sh
-WORKTRUNK_WORKTREE_PATH="$PWD/.agents/worktrees/{{ branch | sanitize }}" wt switch --create task/<id>-<slug>
+repo_root="$(git rev-parse --show-toplevel)"
+case "$repo_root" in */.agents/worktrees/*) repo_root="${repo_root%%/.agents/worktrees/*}" ;; esac
+WORKTRUNK_WORKTREE_PATH="$repo_root/.agents/worktrees/{{ branch | sanitize }}" wt switch --create task/<id>-<slug>
 mise run worktree:setup
 mise run worktree:verify
 mise run worktree:teardown

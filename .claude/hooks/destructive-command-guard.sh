@@ -50,7 +50,7 @@ block() {
 
 if echo "$SCAN" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+clone([[:space:];&|]|$)'; then
   block "Full repo clones are blocked for agent work." \
-        "Use Worktrunk: WORKTRUNK_WORKTREE_PATH='\${PWD}/.agents/worktrees/{{ branch | sanitize }}' wt switch --create <branch>."
+        "Use Worktrunk from any checkout: repo_root=\"\$(git rev-parse --show-toplevel)\"; case \"\$repo_root\" in */.agents/worktrees/*) repo_root=\"\${repo_root%%/.agents/worktrees/*}\" ;; esac; WORKTRUNK_WORKTREE_PATH=\"\$repo_root/.agents/worktrees/{{ branch | sanitize }}\" wt switch --create <branch>."
 fi
 
 if echo "$SCAN" | grep -qE '(^|[;&|[:space:]])gh[[:space:]]+repo[[:space:]]+clone([[:space:];&|]|$)'; then

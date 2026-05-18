@@ -1,6 +1,8 @@
 # Worktrunk project hooks for @oisincoveney/dev generated worktrees.
 # Agent implementation work must create branches with:
-#   WORKTRUNK_WORKTREE_PATH="$PWD/.agents/worktrees/{{ branch | sanitize }}" wt switch --create <branch>
+#   repo_root="$(git rev-parse --show-toplevel)"
+#   case "$repo_root" in */.agents/worktrees/*) repo_root="${repo_root%%/.agents/worktrees/*}" ;; esac
+#   WORKTRUNK_WORKTREE_PATH="$repo_root/.agents/worktrees/{{ branch | sanitize }}" wt switch --create <branch>
 
 [pre-start]
 setup = "mise run worktree:setup"
