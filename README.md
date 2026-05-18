@@ -146,23 +146,39 @@ bunx @oisincoveney/dev tickets --no-open
 
 Summarizes open GitHub PRs for a human-in-the-loop landing pass. It reads PR
 metadata, comments, latest reviews, merge state, and check status through
-`gh pr list`, then prints a compact recommendation for each PR: merge, fix,
-review, or defer.
+`gh pr list`, then can fetch per-PR detail with `gh pr view` and `gh pr diff`.
+The default mode is read-only and prints a compact recommendation for each PR:
+merge, fix, review, or defer.
 
 ```sh
 oisin-dev land-prs --limit 20
 oisin-dev land-prs --repo owner/name --json
+oisin-dev land-prs --interactive --details
+oisin-dev land-prs --interactive --merge-approved
+oisin-dev land-prs --merge-approved --auto-merge-ready --delete-branch
 ```
+
+Interactive decisions are recorded in `.agents/pr-landing-decisions.json` by
+default. Merge execution is guarded: a PR must be approved, clean, non-draft,
+passing, and recommended for merge before `gh pr merge` is called.
 
 ### `oisin-dev pr-daemon`
 
 Polls open PRs for new review/comment signals and enqueues Backlog.md fix tasks.
 The daemon records seen signal IDs in `.agents/pr-daemon-state.json` so repeated
 polls do not duplicate work. Use `--dry-run` before letting it create tasks.
+Pass `--spawn` to create Worktrunk fix worktrees after task creation, or
+`--spawn-command` to run a custom agent launcher with `{task}`, `{pr}`, `{url}`,
+and `{branch}` placeholders. Pass `--webhook-port` to receive GitHub webhook
+events locally instead of polling; set `GITHUB_WEBHOOK_SECRET` or override the
+env var name with `--webhook-secret-env`.
 
 ```sh
 oisin-dev pr-daemon --once --dry-run
 oisin-dev pr-daemon --interval 60 --limit 30
+oisin-dev pr-daemon --once --spawn
+oisin-dev pr-daemon --once --spawn-command 'agent --task {task} --pr {pr} --branch {branch}'
+oisin-dev pr-daemon --webhook-port 7777 --spawn
 ```
 
 ## Generated files

@@ -1,13 +1,22 @@
+import { createHmac } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
   buildBacklogTaskArgs,
   buildBacklogTaskInvocations,
+  buildFixSpawnInvocation,
   buildGhPrListArgs,
+  buildGhPrMergeArgs,
+  buildGhPrViewArgs,
+  detailFromPr,
+  extractBacklogTaskId,
   formatLandingPackets,
+  mergeBlockers,
   newSignals,
   packetizePullRequests,
+  signalFromWebhook,
   signalsFromPackets,
   type PrSignal,
+  verifyWebhookSignature,
 } from '../pr-workflow.js'
 
 const rawPrs = [
@@ -98,6 +107,23 @@ describe('PR landing workflow', () => {
     ])
   })
 
+  it('builds rich PR context queries for per-PR review and file details', () => {
+    const args = buildGhPrViewArgs(42, 'example/repo')
+
+    expect(args).toEqual([
+      'pr',
+      'view',
+      '42',
+      '--json',
+      expect.stringContaining('reviews'),
+      '--repo',
+      'example/repo',
+    ])
+    expect(args[4]).toContain('files')
+    expect(args[4]).toContain('body')
+    expect(args[4]).toContain('comments')
+  })
+
   it('packetizes open PRs into landing recommendations', () => {
     const packets = packetizePullRequests(rawPrs)
 
@@ -124,6 +150,31 @@ describe('PR landing workflow', () => {
     expect(output).toContain('recommendation: fix')
     expect(output).toContain('PR #43: Ready PR')
     expect(output).toContain('recommendation: merge')
+  })
+
+  it('formats rich details with files, reviews, comments, and truncated diff', () => {
+    const packets = packetizePullRequests(rawPrs)
+    const detail = detailFromPr(
+      {
+        number: 42,
+        body: 'Body',
+        labels: [{ name: 'agent' }],
+        files: [{ path: 'src/pr-workflow.ts' }],
+        commits: [{ oid: 'abc123' }],
+        comments: [{ body: 'Inline concern', author: { login: 'oisin' }, createdAt: '2026-05-18T10:00:00Z' }],
+        reviews: [{ state: 'CHANGES_REQUESTED', body: 'Fix it', author: { login: 'reviewer' }, submittedAt: '2026-05-18T10:05:00Z' }],
+      },
+      ['diff --git a/file b/file', '+added', '-removed'].join('\n'),
+      2,
+    )
+
+    const output = formatLandingPackets(packets, new Map([[42, detail]]))
+
+    expect(output).toContain('labels: agent')
+    expect(output).toContain('files: src/pr-workflow.ts')
+    expect(output).toContain('review detail: CHANGES_REQUESTED by reviewer')
+    expect(output).toContain('latest comments: oisin: Inline concern')
+    expect(output).toContain('... diff truncated')
   })
 
   it('extracts review and comment signals and filters already-seen ones', () => {
@@ -158,5 +209,82 @@ describe('PR landing workflow', () => {
     ])
 
     expect(buildBacklogTaskInvocations(signal).map((entry) => entry.command)).toEqual(['backlog', 'mise', 'bunx'])
+  })
+
+  it('builds guarded merge commands only for approved clean packets', () => {
+    const packets = packetizePullRequests(rawPrs)
+    expect(mergeBlockers(packets[0]!)).toContain('review decision CHANGES_REQUESTED')
+    expect(mergeBlockers(packets[1]!)).toEqual([])
+    expect(buildGhPrMergeArgs(packets[1]!, { repo: 'example/repo', mergeMethod: 'squash', deleteBranch: true })).toEqual([
+      'pr',
+      'merge',
+      '43',
+      '--squash',
+      '--delete-branch',
+      '--repo',
+      'example/repo',
+    ])
+  })
+
+  it('builds Worktrunk spawn commands for daemon-created fix work', () => {
+    expect(extractBacklogTaskId('Task DEV-7 - Fix PR #42 feedback')).toBe('DEV-7')
+
+    const invocation = buildFixSpawnInvocation(signal, 'DEV-7', undefined)
+    expect(invocation.command).toBe('sh')
+    expect(invocation.args[1]).toContain('wt switch --create')
+    expect(invocation.args[1]).toContain('task/dev-7-42-feedback')
+
+    const custom = buildFixSpawnInvocation(signal, 'DEV-7', 'agent --task {task} --pr {pr} --branch {branch}')
+    expect(custom.args[1]).toBe('agent --task DEV-7 --pr 42 --branch task/dev-7-42-feedback')
+  })
+
+  it('converts GitHub webhook review and comment events into daemon signals', () => {
+    expect(
+      signalFromWebhook('pull_request_review', {
+        pull_request: { number: 42, title: 'Fix review workflow', html_url: 'https://github.com/example/repo/pull/42' },
+        review: {
+          id: 99,
+          state: 'changes_requested',
+          body: 'Fix this now.',
+          submitted_at: '2026-05-18T10:00:00Z',
+          user: { login: 'oisin' },
+        },
+      }),
+    ).toMatchObject({
+      kind: 'changes_requested',
+      prNumber: 42,
+      author: 'oisin',
+    })
+
+    expect(
+      signalFromWebhook('issue_comment', {
+        issue: {
+          number: 42,
+          title: 'Fix review workflow',
+          html_url: 'https://github.com/example/repo/pull/42',
+          pull_request: { url: 'https://api.github.com/repos/example/repo/pulls/42' },
+        },
+        comment: {
+          id: 100,
+          body: 'Please update.',
+          created_at: '2026-05-18T10:01:00Z',
+          user: { login: 'reviewer' },
+        },
+      }),
+    ).toMatchObject({
+      kind: 'comment',
+      prNumber: 42,
+      author: 'reviewer',
+    })
+  })
+
+  it('validates optional GitHub webhook signatures', () => {
+    const body = '{"ok":true}'
+    const secret = 'secret'
+    const signature = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`
+
+    expect(verifyWebhookSignature(body, signature, secret)).toBe(true)
+    expect(verifyWebhookSignature(body, 'sha256=bad', secret)).toBe(false)
+    expect(verifyWebhookSignature(body, undefined, undefined)).toBe(true)
   })
 })

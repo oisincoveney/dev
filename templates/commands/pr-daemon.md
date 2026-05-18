@@ -10,5 +10,7 @@ Run the PR feedback daemon.
 - Do not run continuous daemon mode unless the user explicitly asks for it or passes interval/daemon arguments.
 - Prefer `--once --dry-run` first, report exactly what would be enqueued, then wait for approval before creating tasks.
 - When creating tasks, keep the daemon state file at `.agents/pr-daemon-state.json`.
+- Pass `--spawn` only when the user wants immediate Worktrunk fix worktrees. Pass `--spawn-command` when a custom agent launcher should run.
+- Pass `--webhook-port` when the user wants GitHub review/comment webhooks instead of polling.
 
 Arguments: $ARGUMENTS
