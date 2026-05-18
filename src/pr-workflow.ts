@@ -1,7 +1,5 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { createServer, type IncomingMessage } from 'node:http'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 
@@ -28,7 +26,6 @@ const PR_JSON_FIELDS = [
   'url',
 ] as const
 
-const DEFAULT_DAEMON_STATE = '.agents/pr-daemon-state.json'
 const DEFAULT_DECISION_FILE = '.agents/pr-landing-decisions.json'
 const DEFAULT_DIFF_LINES = 120
 
@@ -100,18 +97,6 @@ export interface PullRequestDetail {
   diffTruncated: boolean
 }
 
-export interface PrSignal {
-  id: string
-  prNumber: number
-  prTitle: string
-  prUrl: string
-  kind: 'changes_requested' | 'review' | 'comment'
-  author: string
-  body: string
-  createdAt: string
-}
-
-export type FixAgent = 'auto' | 'codex' | 'claude' | 'none'
 export type LandingDecisionAction = 'merge' | 'fix' | 'review' | 'defer' | 'skip'
 
 export interface LandingDecision {
@@ -123,10 +108,6 @@ export interface LandingDecision {
   createdAt: string
   merged: boolean
   mergeError?: string
-}
-
-interface DaemonState {
-  seenSignals: string[]
 }
 
 interface LandPrsOptions {
@@ -142,21 +123,6 @@ interface LandPrsOptions {
   mergeMethod: 'squash' | 'merge' | 'rebase'
   deleteBranch: boolean
   decisionFile: string
-}
-
-interface DaemonOptions {
-  once: boolean
-  dryRun: boolean
-  spawn: boolean
-  spawnCommand?: string
-  agent: FixAgent
-  intervalSeconds: number
-  limit: number
-  stateFile: string
-  repo?: string
-  webhookPort?: number
-  webhookPath: string
-  webhookSecretEnv: string
 }
 
 export function buildGhPrListArgs(options: { limit: number; repo?: string }): string[] {
@@ -233,227 +199,12 @@ export function detailFromPr(input: unknown, diff?: string, diffLines = DEFAULT_
   }
 }
 
-export function signalsFromPackets(packets: ReadonlyArray<PullRequestPacket>, rawPrs: unknown): PrSignal[] {
-  if (!Array.isArray(rawPrs)) return []
-  const byNumber = new Map(packets.map((packet) => [packet.number, packet]))
-  const signals: PrSignal[] = []
-  for (const raw of rawPrs) {
-    const pr = objectRecord(raw)
-    const number = numberValue(pr.number, 0)
-    const packet = byNumber.get(number)
-    if (packet === undefined) continue
-
-    for (const review of arrayValue(pr.latestReviews)) {
-      const row = objectRecord(review)
-      const state = stringValue(row.state, '').toUpperCase()
-      if (state.length === 0) continue
-      const body = stringValue(row.body, '')
-      const createdAt = stringValue(row.submittedAt ?? row.createdAt ?? row.updatedAt, packet.url)
-      const author = login(row.author)
-      const id = signalId(number, `review:${state}`, row.id ?? row.databaseId ?? createdAt, body)
-      signals.push({
-        id,
-        prNumber: number,
-        prTitle: packet.title,
-        prUrl: packet.url,
-        kind: state === 'CHANGES_REQUESTED' ? 'changes_requested' : 'review',
-        author,
-        body,
-        createdAt,
-      })
-    }
-
-    for (const comment of arrayValue(pr.comments)) {
-      const row = objectRecord(comment)
-      const body = stringValue(row.body, '')
-      const createdAt = stringValue(row.createdAt ?? row.updatedAt, packet.url)
-      const author = login(row.author)
-      const id = signalId(number, 'comment', row.id ?? row.databaseId ?? createdAt, body)
-      signals.push({
-        id,
-        prNumber: number,
-        prTitle: packet.title,
-        prUrl: packet.url,
-        kind: 'comment',
-        author,
-        body,
-        createdAt,
-      })
-    }
-  }
-  return signals
-}
-
-export function newSignals(signals: ReadonlyArray<PrSignal>, state: DaemonState): PrSignal[] {
-  const seen = new Set(state.seenSignals)
-  return signals.filter((signal) => !seen.has(signal.id))
-}
-
-export function signalFromWebhook(event: string, payload: unknown): PrSignal | null {
-  const body = objectRecord(payload)
-  if (event === 'pull_request_review') {
-    const pr = objectRecord(body.pull_request)
-    const review = objectRecord(body.review)
-    const number = numberValue(pr.number, 0)
-    if (number <= 0) return null
-    const state = stringValue(review.state, '').toUpperCase()
-    if (state.length === 0) return null
-    const reviewBody = stringValue(review.body, '')
-    const createdAt = stringValue(review.submitted_at ?? review.created_at ?? review.updated_at, '')
-    return {
-      id: signalId(number, `webhook-review:${state}`, review.id ?? createdAt, reviewBody),
-      prNumber: number,
-      prTitle: stringValue(pr.title, `(PR #${number})`),
-      prUrl: stringValue(pr.html_url ?? pr.url, ''),
-      kind: state === 'CHANGES_REQUESTED' ? 'changes_requested' : 'review',
-      author: login(review.user),
-      body: reviewBody,
-      createdAt,
-    }
-  }
-  if (event === 'issue_comment') {
-    const issue = objectRecord(body.issue)
-    if (objectRecord(issue.pull_request).url === undefined) return null
-    const comment = objectRecord(body.comment)
-    const number = numberValue(issue.number, 0)
-    if (number <= 0) return null
-    const commentBody = stringValue(comment.body, '')
-    const createdAt = stringValue(comment.created_at ?? comment.updated_at, '')
-    return {
-      id: signalId(number, 'webhook-comment', comment.id ?? createdAt, commentBody),
-      prNumber: number,
-      prTitle: stringValue(issue.title, `(PR #${number})`),
-      prUrl: stringValue(issue.html_url ?? issue.url, ''),
-      kind: 'comment',
-      author: login(comment.user),
-      body: commentBody,
-      createdAt,
-    }
-  }
-  if (event === 'pull_request_review_comment') {
-    const pr = objectRecord(body.pull_request)
-    const comment = objectRecord(body.comment)
-    const number = numberValue(pr.number, 0)
-    if (number <= 0) return null
-    const commentBody = stringValue(comment.body, '')
-    const createdAt = stringValue(comment.created_at ?? comment.updated_at, '')
-    return {
-      id: signalId(number, 'webhook-review-comment', comment.id ?? createdAt, commentBody),
-      prNumber: number,
-      prTitle: stringValue(pr.title, `(PR #${number})`),
-      prUrl: stringValue(pr.html_url ?? pr.url, ''),
-      kind: 'comment',
-      author: login(comment.user),
-      body: commentBody,
-      createdAt,
-    }
-  }
-  return null
-}
-
-export function verifyWebhookSignature(body: string, signatureHeader: string | undefined, secret: string | undefined): boolean {
-  if (secret === undefined || secret.length === 0) return true
-  if (signatureHeader === undefined || !signatureHeader.startsWith('sha256=')) return false
-  const expected = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`
-  const actualBuffer = Buffer.from(signatureHeader)
-  const expectedBuffer = Buffer.from(expected)
-  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
-}
-
 export function formatLandingPackets(
   packets: ReadonlyArray<PullRequestPacket>,
   details: ReadonlyMap<number, PullRequestDetail> = new Map(),
 ): string {
   if (packets.length === 0) return 'No open PRs found.\n'
   return `${packets.map((packet) => formatPacket(packet, details.get(packet.number))).join('\n\n')}\n`
-}
-
-export function buildBacklogTaskArgs(signal: PrSignal): string[] {
-  return [
-    'task',
-    'create',
-    `Fix PR #${signal.prNumber} feedback`,
-    '--description',
-    [
-      `PR: ${signal.prTitle}`,
-      `URL: ${signal.prUrl}`,
-      `Signal: ${signal.kind}`,
-      `Author: ${signal.author}`,
-      `Created: ${signal.createdAt}`,
-      '',
-      signal.body.trim().length > 0 ? signal.body.trim() : '(no body)',
-    ].join('\n'),
-    '--priority',
-    'medium',
-    '--ref',
-    signal.prUrl,
-    '--plain',
-  ]
-}
-
-export function buildBacklogTaskInvocations(signal: PrSignal): Array<{ command: string; args: string[] }> {
-  const args = buildBacklogTaskArgs(signal)
-  return [
-    { command: 'backlog', args },
-    { command: 'mise', args: ['exec', '--', 'backlog', ...args] },
-    { command: 'bunx', args: ['--package', 'backlog.md', 'backlog', ...args] },
-  ]
-}
-
-export function extractBacklogTaskId(output: string): string | undefined {
-  return /\b([A-Z][A-Z0-9]+-\d+)\b/.exec(output)?.[1]
-}
-
-export function buildFixSpawnInvocation(
-  signal: PrSignal,
-  taskId: string | undefined,
-  commandTemplate: string | undefined,
-  agent: FixAgent = 'auto',
-): { command: string; args: string[] } {
-  const branch = branchNameForSignal(signal, taskId)
-  if (commandTemplate !== undefined) {
-    return {
-      command: 'sh',
-      args: ['-lc', renderSpawnTemplate(commandTemplate, signal, taskId, branch)],
-    }
-  }
-  const worktreePath = branch.replaceAll('/', '-')
-  const worktreeDir = `$repo_root/.agents/worktrees/${worktreePath}`
-  const prompt = buildAgentPrompt(signal, taskId, branch)
-  const script = [
-    'repo_root="$(git rev-parse --show-toplevel)"',
-    'case "$repo_root" in */.agents/worktrees/*) repo_root="${repo_root%%/.agents/worktrees/*}" ;; esac',
-    `worktree_dir="${worktreeDir}"`,
-    `WORKTRUNK_WORKTREE_PATH="$worktree_dir" wt switch --create ${shellSingleQuote(branch)} --yes`,
-    ...(agent === 'none' ? [] : [`cd "$worktree_dir"`, agentLaunchScript(agent, prompt)]),
-  ].join('; ')
-  return { command: 'sh', args: ['-lc', script] }
-}
-
-export function buildAgentPrompt(signal: PrSignal, taskId: string | undefined, branch: string): string {
-  return [
-    'You are an implementation agent spawned by pr-daemon to fix PR feedback.',
-    '',
-    `Backlog task: ${taskId ?? '(not created)'}`,
-    `Work branch: ${branch}`,
-    `PR: #${signal.prNumber} ${signal.prTitle}`,
-    `URL: ${signal.prUrl}`,
-    `Signal: ${signal.kind}`,
-    `Author: ${signal.author}`,
-    `Created: ${signal.createdAt}`,
-    '',
-    'Feedback:',
-    signal.body.trim().length > 0 ? signal.body.trim() : '(no body)',
-    '',
-    'Instructions:',
-    '- Inspect the PR, comments, reviews, checks, and diff before editing.',
-    '- Implement the requested fix in this Worktrunk worktree.',
-    '- Follow AGENTS.md and the tracker workflow.',
-    '- Run relevant verification.',
-    '- Commit with git-spice when the fix is complete.',
-    '- Do not merge the PR.',
-    '- If blocked, append a Backlog note or leave a clear final status.',
-  ].join('\n')
 }
 
 export function mergeBlockers(packet: PullRequestPacket): string[] {
@@ -484,42 +235,6 @@ export async function runLandPrs(argv: ReadonlyArray<string>, runner: CommandRun
   if (options.mergeApproved && options.autoMergeReady) {
     mergeReadyPackets(packets, options, runner)
   }
-}
-
-export async function runPrDaemon(argv: ReadonlyArray<string>, runner: CommandRunner = runCommand): Promise<void> {
-  const options = parseDaemonOptions(argv)
-  if (argv.includes('--help') || argv.includes('-h')) {
-    printPrDaemonHelp()
-    return
-  }
-
-  if (options.webhookPort !== undefined) {
-    await runWebhookDaemon(options, runner)
-    return
-  }
-
-  const runOnce = (): void => {
-    const raw = loadOpenPullRequests(options.limit, options.repo, runner)
-    const packets = packetizePullRequests(raw)
-    const state = readDaemonState(options.stateFile)
-    const fresh = newSignals(signalsFromPackets(packets, raw), state)
-    for (const signal of fresh) {
-      processFreshSignal(signal, options, runner)
-    }
-    if (!options.dryRun) {
-      writeDaemonState(options.stateFile, {
-        seenSignals: [...new Set([...state.seenSignals, ...fresh.map((signal) => signal.id)])],
-      })
-    }
-    if (fresh.length === 0) process.stdout.write('No new PR feedback signals.\n')
-  }
-
-  runOnce()
-  if (options.once) return
-
-  await new Promise<never>(() => {
-    setInterval(runOnce, options.intervalSeconds * 1000)
-  })
 }
 
 function loadOpenPullRequests(limit: number, repo: string | undefined, runner: CommandRunner): unknown {
@@ -566,97 +281,6 @@ function withDetails(packets: ReadonlyArray<PullRequestPacket>, details: Readonl
   return packets.map((packet) => ({ ...packet, ...(details.has(packet.number) ? { details: details.get(packet.number) } : {}) }))
 }
 
-function enqueueBacklogTask(signal: PrSignal, runner: CommandRunner): string {
-  const failures: string[] = []
-  for (const invocation of buildBacklogTaskInvocations(signal)) {
-    const result = runner(invocation.command, invocation.args)
-    if (result.error !== undefined) {
-      failures.push(`${invocation.command}: ${result.error.message}`)
-      continue
-    }
-    if (result.status === 0) return result.stdout
-    failures.push(`${invocation.command}: ${result.stderr.trim() || `exited ${result.status}`}`)
-  }
-  throw new Error(`could not enqueue Backlog task: ${failures.join('; ')}`)
-}
-
-function spawnFixWork(
-  signal: PrSignal,
-  taskId: string | undefined,
-  options: Pick<DaemonOptions, 'spawnCommand' | 'agent'>,
-  runner: CommandRunner,
-): void {
-  const invocation = buildFixSpawnInvocation(signal, taskId, options.spawnCommand, options.agent)
-  const result = runner(invocation.command, invocation.args)
-  if (result.error !== undefined) throw new Error(`spawn failed to start: ${result.error.message}`)
-  if (result.status !== 0) throw new Error(result.stderr.trim() || `spawn exited ${result.status}`)
-}
-
-function processFreshSignal(signal: PrSignal, options: Pick<DaemonOptions, 'dryRun' | 'spawn' | 'spawnCommand' | 'agent'>, runner: CommandRunner): void {
-  if (options.dryRun) {
-    process.stdout.write(`DRY-RUN enqueue ${signal.kind} for PR #${signal.prNumber}: ${signal.prTitle}\n`)
-    if (options.spawn) {
-      const invocation = buildFixSpawnInvocation(signal, undefined, options.spawnCommand, options.agent)
-      process.stdout.write(`DRY-RUN spawn ${invocation.command} ${invocation.args.join(' ')}\n`)
-    }
-    return
-  }
-  const output = enqueueBacklogTask(signal, runner)
-  process.stdout.write(`Enqueued ${signal.kind} for PR #${signal.prNumber}: ${signal.prTitle}\n`)
-  if (options.spawn) {
-    const taskId = extractBacklogTaskId(output)
-    spawnFixWork(signal, taskId, options, runner)
-    process.stdout.write(`Spawned fix work for PR #${signal.prNumber}${taskId === undefined ? '' : ` (${taskId})`}.\n`)
-  }
-}
-
-async function runWebhookDaemon(options: DaemonOptions, runner: CommandRunner): Promise<never> {
-  const server = createServer(async (request, response) => {
-    if (request.method !== 'POST' || request.url !== options.webhookPath) {
-      response.writeHead(404).end('not found\n')
-      return
-    }
-    let body = ''
-    try {
-      body = await readRequestBody(request)
-      const secret = process.env[options.webhookSecretEnv]
-      if (!verifyWebhookSignature(body, request.headers['x-hub-signature-256']?.toString(), secret)) {
-        response.writeHead(401).end('bad signature\n')
-        return
-      }
-      const signal = signalFromWebhook(request.headers['x-github-event']?.toString() ?? '', JSON.parse(body) as unknown)
-      if (signal === null) {
-        response.writeHead(202).end('ignored\n')
-        return
-      }
-      const state = readDaemonState(options.stateFile)
-      const fresh = newSignals([signal], state)
-      for (const item of fresh) processFreshSignal(item, options, runner)
-      if (!options.dryRun && fresh.length > 0) {
-        writeDaemonState(options.stateFile, {
-          seenSignals: [...new Set([...state.seenSignals, ...fresh.map((item) => item.id)])],
-        })
-      }
-      response.writeHead(202).end(fresh.length === 0 ? 'duplicate\n' : 'accepted\n')
-    } catch (err) {
-      response.writeHead(400).end(`${err instanceof Error ? err.message : String(err)}\n`)
-    }
-  })
-  await new Promise<void>((resolve) => server.listen(options.webhookPort, resolve))
-  process.stdout.write(`PR daemon webhook listening on ${options.webhookPath} at port ${options.webhookPort}.\n`)
-  return new Promise<never>(() => undefined)
-}
-
-async function readRequestBody(request: IncomingMessage): Promise<string> {
-  const chunks: Buffer[] = []
-  for await (const chunk of request) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
-    const size = chunks.reduce((sum, item) => sum + item.length, 0)
-    if (size > 1024 * 1024) throw new Error('webhook payload too large')
-  }
-  return Buffer.concat(chunks).toString('utf8')
-}
-
 function parseLandPrsOptions(argv: ReadonlyArray<string>): LandPrsOptions {
   const mergeMethod = stringFlag(argv, '--merge-method')
   return {
@@ -673,28 +297,6 @@ function parseLandPrsOptions(argv: ReadonlyArray<string>): LandPrsOptions {
     deleteBranch: argv.includes('--delete-branch'),
     decisionFile: stringFlag(argv, '--decision-file') ?? DEFAULT_DECISION_FILE,
   }
-}
-
-function parseDaemonOptions(argv: ReadonlyArray<string>): DaemonOptions {
-  return {
-    once: argv.includes('--once'),
-    dryRun: argv.includes('--dry-run'),
-    spawn: argv.includes('--spawn'),
-    spawnCommand: stringFlag(argv, '--spawn-command'),
-    agent: agentFlag(stringFlag(argv, '--agent')),
-    intervalSeconds: numberFlag(argv, '--interval', 60),
-    limit: numberFlag(argv, '--limit', 30),
-    stateFile: stringFlag(argv, '--state-file') ?? DEFAULT_DAEMON_STATE,
-    repo: stringFlag(argv, '--repo'),
-    webhookPort: optionalNumberFlag(argv, '--webhook-port'),
-    webhookPath: stringFlag(argv, '--webhook-path') ?? '/github',
-    webhookSecretEnv: stringFlag(argv, '--webhook-secret-env') ?? 'GITHUB_WEBHOOK_SECRET',
-  }
-}
-
-function agentFlag(value: string | undefined): FixAgent {
-  if (value === 'codex' || value === 'claude' || value === 'none') return value
-  return 'auto'
 }
 
 async function runInteractiveLanding(
@@ -798,34 +400,11 @@ function numberFlag(argv: ReadonlyArray<string>, name: string, fallback: number)
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
 }
 
-function optionalNumberFlag(argv: ReadonlyArray<string>, name: string): number | undefined {
-  const value = stringFlag(argv, name)
-  if (value === undefined) return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined
-}
-
 function stringFlag(argv: ReadonlyArray<string>, name: string): string | undefined {
   const index = argv.indexOf(name)
   if (index === -1) return undefined
   const value = argv[index + 1]
   return value === undefined || value.startsWith('--') ? undefined : value
-}
-
-function readDaemonState(path: string): DaemonState {
-  if (!existsSync(path)) return { seenSignals: [] }
-  try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown
-    const record = objectRecord(parsed)
-    return { seenSignals: arrayValue(record.seenSignals).map((entry) => String(entry)) }
-  } catch {
-    return { seenSignals: [] }
-  }
-}
-
-function writeDaemonState(path: string, state: DaemonState): void {
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`)
 }
 
 function toPacket(raw: unknown): PullRequestPacket | null {
@@ -950,11 +529,6 @@ function hasPendingChecks(checkSummary: string): boolean {
   return /(^|, )([1-9]\d*) pending/.test(checkSummary)
 }
 
-function signalId(prNumber: number, kind: string, rawId: unknown, body: string): string {
-  const id = String(rawId ?? '')
-  return `${prNumber}:${kind}:${id}:${body.slice(0, 80)}`
-}
-
 function login(value: unknown): string {
   const record = objectRecord(value)
   return stringValue(record.login ?? record.name, 'unknown')
@@ -979,44 +553,6 @@ function numberValue(value: unknown, fallback: number): number {
 
 function booleanValue(value: unknown): boolean {
   return value === true
-}
-
-function branchNameForSignal(signal: PrSignal, taskId: string | undefined): string {
-  const prefix = taskId === undefined ? 'pr' : taskId.toLowerCase()
-  return `task/${prefix}-${signal.prNumber}-feedback`
-}
-
-function renderSpawnTemplate(template: string, signal: PrSignal, taskId: string | undefined, branch: string): string {
-  return template
-    .replaceAll('{task}', taskId ?? '')
-    .replaceAll('{pr}', String(signal.prNumber))
-    .replaceAll('{url}', signal.prUrl)
-    .replaceAll('{branch}', branch)
-    .replaceAll('{title}', signal.prTitle)
-}
-
-function agentLaunchScript(agent: FixAgent, prompt: string): string {
-  const quotedPrompt = shellSingleQuote(prompt)
-  if (agent === 'codex') {
-    return `codex exec --cd "$worktree_dir" --sandbox workspace-write ${quotedPrompt}`
-  }
-  if (agent === 'claude') {
-    return `claude -p --permission-mode acceptEdits ${quotedPrompt}`
-  }
-  return [
-    'if command -v codex >/dev/null 2>&1; then',
-    `codex exec --cd "$worktree_dir" --sandbox workspace-write ${quotedPrompt}`,
-    'elif command -v claude >/dev/null 2>&1; then',
-    `claude -p --permission-mode acceptEdits ${quotedPrompt}`,
-    'else',
-    'echo "No supported agent CLI found. Install codex or claude, or pass --spawn-command." >&2',
-    'exit 127',
-    'fi',
-  ].join(' ')
-}
-
-function shellSingleQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\"'\"'")}'`
 }
 
 function oneLine(value: string, maxLength: number): string {
@@ -1044,21 +580,6 @@ Usage:
                      [--interactive] [--decision-file .agents/pr-landing-decisions.json]
                      [--merge-approved] [--auto-merge-ready]
                      [--merge-method squash|merge|rebase] [--delete-branch]
-
-`)
-}
-
-function printPrDaemonHelp(): void {
-  process.stdout.write(`
-@oisincoveney/dev pr-daemon — Poll PR feedback and enqueue Backlog fix tasks
-
-Usage:
-  oisin-dev pr-daemon [--once] [--dry-run] [--interval 60] [--limit 30]
-                      [--repo owner/name] [--state-file .agents/pr-daemon-state.json]
-                      [--spawn] [--agent auto|codex|claude|none]
-                      [--spawn-command 'command with {task} {pr} {url} {branch}']
-                      [--webhook-port 7777] [--webhook-path /github]
-                      [--webhook-secret-env GITHUB_WEBHOOK_SECRET]
 
 `)
 }

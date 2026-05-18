@@ -162,40 +162,6 @@ Interactive decisions are recorded in `.agents/pr-landing-decisions.json` by
 default. Merge execution is guarded: a PR must be approved, clean, non-draft,
 passing, and recommended for merge before `gh pr merge` is called.
 
-### `oisin-dev pr-daemon`
-
-Runs a local PR feedback worker. It reads GitHub PR comments/reviews, dedupes
-signals in `.agents/pr-daemon-state.json`, creates Backlog.md fix tasks, and can
-launch a real local agent in a Worktrunk worktree. You do not chat with the
-daemon directly; you talk through PR comments/reviews. The daemon turns those
-events into agent work.
-
-Use `--dry-run` before letting it create tasks. Pass `--spawn` to create a
-Worktrunk fix worktree and launch an agent. `--agent auto` picks `codex` when
-available, then `claude`; pass `--agent codex`, `--agent claude`, or
-`--agent none` to control that. `--spawn-command` remains available for custom
-server launchers and receives `{task}`, `{pr}`, `{url}`, `{branch}`, and
-`{title}` placeholders.
-
-Pass `--webhook-port` to receive GitHub webhook events locally instead of
-polling; set `GITHUB_WEBHOOK_SECRET` or override the env var name with
-`--webhook-secret-env`.
-
-```sh
-oisin-dev pr-daemon --once --dry-run
-oisin-dev pr-daemon --interval 60 --limit 30
-oisin-dev pr-daemon --once --spawn --agent codex
-oisin-dev pr-daemon --once --spawn-command 'agent --task {task} --pr {pr} --branch {branch}'
-oisin-dev pr-daemon --webhook-port 7777 --spawn --agent codex
-```
-
-On an SSH server, run it from the repo checkout:
-
-```sh
-gh auth status
-bunx @oisincoveney/dev pr-daemon --interval 60 --spawn --agent codex
-```
-
 ## Generated files
 
 ### Shared layer

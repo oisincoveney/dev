@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { runHookDispatcher } from './hooks/dispatch.js'
 import { runInit } from './init.js'
-import { runLandPrs, runPrDaemon } from './pr-workflow.js'
+import { runLandPrs } from './pr-workflow.js'
 import { runReset } from './reset.js'
 import { runTicketsUi } from './tickets-ui.js'
 import { runUpdate } from './update.js'
@@ -12,7 +12,6 @@ const COMMANDS: Record<string, string> = {
   reset:            'Dangerously delete and recreate generated agent configuration',
   tickets:           'Launch the local Backlog.md UI for the current workspace',
   'land-prs':        'Summarize open PRs for HITL landing',
-  'pr-daemon':       'Poll PR feedback and enqueue Backlog fix tasks',
   hook:             'Run a TS-native hook handler (internal — invoked by Claude Code)',
   help:             'Show this help message',
 }
@@ -55,9 +54,6 @@ async function main(): Promise<void> {
       break
     case 'land-prs':
       await runLandPrs(process.argv.slice(3))
-      break
-    case 'pr-daemon':
-      await runPrDaemon(process.argv.slice(3))
       break
     case 'hook': {
       const handlerName = process.argv[3]
