@@ -1,25 +1,25 @@
 ---
 name: verifier-loop
-description: How the agent verifies its own ticket work via a fresh-context subagent that uses the code-review skill, files new bd tickets for discovered issues, and self-extends the work via PASS-WITH-FOLLOWUPS.
+description: How the agent verifies its own ticket work via a fresh-context subagent that uses the code-review skill, files new Backlog tasks for discovered issues, and self-extends the work via PASS-WITH-FOLLOWUPS.
 ---
 
 # Verifier Loop
 
-Before `bd close`, agent invoke fresh-context **verifier subagent** to confirm work meets ticket AC. Verifier use `code-review` + diff-aware extra skills. Issues outside original AC → **new bd tickets**, not silent inline fixes.
+Before marking a Backlog task Done, agent invoke fresh-context **verifier subagent** to confirm work meets ticket AC. Verifier use `code-review` + diff-aware extra skills. Issues outside original AC → **new Backlog tasks**, not silent inline fixes.
 
 ## When
 
-Always, before `bd close`. Not optional. Main agent never self-certify.
+Always, before marking a task Done. Not optional. Main agent never self-certify.
 
 ## How
 
 Spawn Agent with `subagent_type=general-purpose`, self-contained prompt:
 
-1. bd issue ID being verified.
-2. Re-read `bd show <id>` from scratch.
+1. Backlog task ID being verified.
+2. Re-read `backlog task view <id> --plain` from scratch.
 3. Skill-loading protocol (below).
 4. Output format (below).
-5. Forbidden: no `bd close`, no `bd update`, no source edits.
+5. Forbidden: no Backlog status changes, no task edits, no source edits.
 
 ## Skill loading (verifier picks per diff)
 
@@ -37,7 +37,7 @@ Spawn Agent with `subagent_type=general-purpose`, self-contained prompt:
 | UI / frontend touched | `accessibility` |
 | Hot-path (renders, request handlers, loops) | `performance` |
 
-Verifier inspect `git diff` to decide. Load via `Skill` tool. **Skill loading is not optional** — every row whose trigger matches the diff MUST be loaded. The `verifier-skill-guard.sh` Stop hook scans the transcript for these invocations and blocks completion claims / `bd close` if they're missing.
+Verifier inspect `git diff` to decide. Load via `Skill` tool. **Skill loading is not optional** — every row whose trigger matches the diff MUST be loaded. The `verifier-skill-guard.sh` Stop hook scans the transcript for these invocations and blocks completion claims / Backlog Done edits if they're missing.
 
 ## Output format
 
@@ -56,7 +56,7 @@ Verifier inspect `git diff` to decide. Load via `Skill` tool. **Skill loading is
 - Edits within `Files Likely Touched`: yes | no (list out-of-scope)
 
 ### New tickets filed (issues outside original AC)
-- bd-XXX.YY — <title> — <reason>
+- <task-id> — <title> — <reason>
 - ...
 ```
 
@@ -72,41 +72,31 @@ Verifier inspect `git diff` to decide. Load via `Skill` tool. **Skill loading is
 Any issue NOT in original AC:
 
 ```bash
-bd create --type=task --priority=N --deps "discovered-from:<current-id>" \
-  --title="<concise summary>" --silent --body-file=- <<'EOF'
----
-type: task
-priority: N
-files:
-  - <path>
-verify:
-  - <cmd>
-deps:
-  discovered_from: <current-id>
-ac:
-  - "WHEN ... THE SYSTEM SHALL ..."
----
-Found by verifier. Fix <problem>. Touch <path>. Verify <cmd>.
-EOF
+backlog task create "<concise summary>" \
+  --priority medium \
+  --depends-on "<current-id>" \
+  --modified-file "<path>" \
+  --ac "WHEN ... THE SYSTEM SHALL ..." \
+  --notes "Found by verifier. Fix <problem>. Touch <path>. Verify <cmd>."
 ```
 
-Appear in `bd ready` as next-up.
+Appear in `backlog task list -s "To Do" --plain` as next-up after dependencies allow it.
 
 ## Main-agent action on result
 
 | Result | Action |
 |---|---|
-| **PASS** | `bd close <id> --reason "verified clean by /verify-spec"`. Then `bd ready` → claim next. |
-| **PASS-WITH-FOLLOWUPS** | `bd close <id> --reason "verified; filed N followups"`. Followups in `bd ready`; agent claims auto or surfaces to user. |
-| **PARTIAL** | DO NOT close. Append verifier output as `bd note <id>`. Fix failing items. Re-invoke verifier. Repeat until PASS / PASS-WITH-FOLLOWUPS. |
+| **PASS** | `backlog task edit <id> -s Done --final-summary "verified clean by /verify-spec"`. Then `backlog task list -s "To Do" --plain` → claim next. |
+| **PASS-WITH-FOLLOWUPS** | Mark Done with final summary noting N followups. Followups remain in Backlog; agent claims auto or surfaces to user. |
+| **PARTIAL** | DO NOT mark Done. Append verifier output as task notes. Fix failing items. Re-invoke verifier. Repeat until PASS / PASS-WITH-FOLLOWUPS. |
 | **FAIL** | Same as PARTIAL — DO NOT close, fix, re-verify. |
 
 ## Loop termination
 
-Stops when verifier returns **clean PASS, zero new tickets** AND `bd ready` (or parent epic's queue) empty. Else main agent keeps claiming.
+Stops when verifier returns **clean PASS, zero new tasks** AND the ready Backlog queue is empty. Else main agent keeps claiming.
 
 ## Hard rules
 
-- **No self-verification.** Main agent NEVER decides ticket done. Verifier subagent only authority for `bd close`.
+- **No self-verification.** Main agent NEVER decides ticket done. Verifier subagent is the only authority for marking a task Done.
 - **No silent inline fixes.** Outside-AC issue → file ticket. Don't "just fix it real quick."
-- **No `bd close` until PASS / PASS-WITH-FOLLOWUPS.** PARTIAL/FAIL = more work, not softened close.
+- **No Done status until PASS / PASS-WITH-FOLLOWUPS.** PARTIAL/FAIL = more work, not softened close.

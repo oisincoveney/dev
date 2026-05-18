@@ -116,10 +116,10 @@ describe.skipIf(!canRun)('worktree-stop-guard.sh', () => {
     git(worktreeRoot, 'commit', '-m', 'feat: work')
     git(worktreeRoot, 'push', '-u', 'origin', 'ticket/abc')
     const r = runHook(worktreeRoot)
-    // bd may not be installed in CI; we only assert the git portion is clean.
-    // If exit 2 from bd, it should still mention 'in_progress' (and we accept either).
+    // Backlog may not be installed in CI; we only assert the git portion is clean.
+    // If exit 2 from tracker state, it should still mention in-progress work.
     if (r.status === 2) {
-      expect(r.stderr).toContain('in_progress')
+      expect(r.stderr).toContain('In Progress')
     } else {
       expect(r.status).toBe(0)
     }

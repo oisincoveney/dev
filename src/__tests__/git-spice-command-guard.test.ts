@@ -68,7 +68,7 @@ describe.skipIf(!canRun)('git-spice-command-guard.sh', () => {
   })
 
   it('ignores blocked-looking text inside heredocs', () => {
-    const command = `bd create --body-file=- <<'EOF'\ntry git commit, git push, and gh pr create in the docs\nEOF`
+    const command = `backlog task create "doc git commands" --description "$(cat <<'EOF'\ntry git commit, git push, and gh pr create in the docs\nEOF\n)"`
     const r = runHook(command)
     expect(r.status).toBe(0)
     expect(r.stdout).toBe('')

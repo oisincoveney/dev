@@ -1,11 +1,11 @@
 ---
 name: human-flag-discipline
-description: When workers break IN_FLIGHT to ping user vs file `bd human <id>` and continue. Goal: keep user out-of-loop during fan-out except for true blockers.
+description: When workers break IN_FLIGHT to ping user vs append a Backlog blocker note and continue. Goal: keep user out-of-loop during fan-out except for true blockers.
 ---
 
 # Human Flag Discipline
 
-User stays out of swarm IN_FLIGHT. Workers don't ping mid-flight except for tracer-fail or destructive-op-needed. Everything else → `bd human <id>`, continue, surface in next Stop digest.
+User stays out of swarm IN_FLIGHT. Workers don't ping mid-flight except for tracer-fail or destructive-op-needed. Everything else → append a Backlog blocker note, continue, surface in next Stop digest.
 
 ## Rules
 
@@ -16,7 +16,7 @@ User stays out of swarm IN_FLIGHT. Workers don't ping mid-flight except for trac
 
 That's it. Two cases.
 
-### Worker files `bd human <id>` + continues when:
+### Worker appends a Backlog blocker note + continues when:
 
 - Non-tracer child verifier-FAIL.
 - Non-tracer child PARTIAL.
@@ -25,9 +25,9 @@ That's it. Two cases.
 - Test fixture missing or generation needed.
 - Worker's own task hits a blocker (e.g., env var unset).
 
-Worker's `bd human <id>` call:
+Worker note:
 ```bash
-bd human <id> --reason="<short>" --details="<long, with file:line + verifier output>"
+backlog task edit <id> --append-notes "HUMAN: <short>. <long, with file:line + verifier output>"
 ```
 
 Worker reports `<id>: PARTIAL — <reason>` in fan-out summary, lets siblings finish.

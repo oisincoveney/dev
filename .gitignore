@@ -1,11 +1,7 @@
 node_modules
 dist
 
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads/issues.jsonl
-.beads-credential-key
+# Local tracker/runtime files
 .claude/audit.jsonl
 .claude/hook-errors.log
 .claude/hook-state/

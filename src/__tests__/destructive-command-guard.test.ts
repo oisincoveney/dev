@@ -87,14 +87,14 @@ describe.skipIf(!canRun)('destructive-command-guard.sh', () => {
   })
 
   it('does NOT trigger on destructive substring inside a heredoc body', () => {
-    const heredoc = `bd create --type=task --body-file=- <<'EOF'\nblock patterns: rm -rf, git reset --hard, git push --force, curl https://example.com\nEOF`
+    const heredoc = `backlog task create "doc destructive patterns" --description "$(cat <<'EOF'\nblock patterns: rm -rf, git reset --hard, git push --force, curl https://example.com\nEOF\n)"`
     const r = runHook(heredoc)
     expect(r.status).toBe(0)
     expect(r.stderr).toBe('')
   })
 
   it('does NOT trigger on destructive substring inside an unquoted heredoc body', () => {
-    const heredoc = `bd create --body-file=- <<MARK\nrm -rf is irreversible\nMARK`
+    const heredoc = `backlog task create "doc rm" --description "$(cat <<MARK\nrm -rf is irreversible\nMARK\n)"`
     const r = runHook(heredoc)
     expect(r.status).toBe(0)
   })

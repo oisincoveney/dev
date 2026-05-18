@@ -12,28 +12,17 @@ Current claim name what in scope. Outside = separate ticket, not silent work.
 Mid-work on claim, discover fix touch file outside ticket's `## Files Likely Touched`:
 
 1. Stop.
-2. File discovered-from child via `bd create`:
+2. File discovered-from child via Backlog:
    ```bash
-   bd create --type=task --priority=2 --deps "discovered-from:<current-id>" \
-     --title="<one-line description>" \
-     --silent --body-file=- <<'EOF'
-   ---
-   type: task
-   priority: 2
-   files:
-     - <out-of-scope file>
-   verify:
-     - <cmd>
-   deps:
-     discovered_from: <current-id>
-   ac:
-     - "WHEN ... THE SYSTEM SHALL ..."
-   ---
-   Found during <current-id>. Fix <issue> in <file>. Verify <cmd>.
-   EOF
+   backlog task create "<one-line description>" \
+     --priority medium \
+     --depends-on "<current-id>" \
+     --modified-file "<out-of-scope file>" \
+     --ac "WHEN ... THE SYSTEM SHALL ..." \
+     --notes "Found during <current-id>. Fix <issue> in <file>. Verify <cmd>."
    ```
 3. Stay scoped. Edit only originally-claimed files.
-4. New ticket lands in `bd ready` as followup.
+4. New task lands in Backlog as followup.
 
 ## Out of scope
 
@@ -61,7 +50,7 @@ Pre-edit blocking on scope violations require parsing issue body + comparing fil
 
 ## `/discover` slash command
 
-If project ships `/discover <description>`, agent invoke that — wraps `bd create --deps=discovered-from`. Both paths equivalent.
+If project ships `/discover <description>`, agent invoke that — wraps Backlog task creation with discovered-from dependency metadata. Both paths equivalent.
 
 ## Hard rules
 
@@ -71,5 +60,5 @@ If project ships `/discover <description>`, agent invoke that — wraps `bd crea
 
 ## See also
 
-- `tracker-workflow.md` — tracker JSON plan, approval, graph, and PR grouping policy
+- `tracker-workflow.md` — tracker plan, approval, graph, and PR grouping policy
 - `tracer-bullet.md` — what counts as the graph's proof ticket

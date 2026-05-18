@@ -515,8 +515,8 @@ export function mergeLefthookCommands(existing: string, requiredBlocks: Record<s
 }
 
 function removeObsoleteLefthookCommands(config: Record<string, unknown>): void {
-  const obsolete = new Set(['bd-dolt-push', 'bd-dolt-pull'])
-  for (const hook of ['post-commit', 'post-merge', 'post-checkout', 'pre-push']) {
+  const obsolete = new Set(['bd-ticket-ref', 'bd-dolt-push', 'bd-dolt-pull'])
+  for (const hook of ['commit-msg', 'post-commit', 'post-merge', 'post-checkout', 'pre-push']) {
     const hookConfig = yamlMap(config[hook])
     const commands = yamlMap(hookConfig.commands)
     for (const name of obsolete) delete commands[name]

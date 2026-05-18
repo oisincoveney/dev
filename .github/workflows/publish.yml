@@ -21,8 +21,8 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      # Installs every tool declared in mise.toml (bun + bd via aqua backend)
-      # so the test suite — which shells out to a real `bd` — can run.
+      # Installs every tool declared in mise.toml so the test suite can run
+      # against the same CLIs used by generated projects.
       - uses: jdx/mise-action@v2
 
       - name: Install dependencies

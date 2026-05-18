@@ -61,9 +61,9 @@ Interactive setup for an existing project. Run inside a directory with `package.
 
 6. **Skills** — Canonical project skills under `.agents/skills/`, linked into tool-specific locations by dotagents
 
-7. **Tools** — Beads (issue tracker), contract-driven modules
+7. **Tools** — Backlog.md (issue tracking), contract-driven modules
 
-8. **Workflow** — `bd` (beads-as-source-of-truth: epic → ticket → /work-next → /verify-spec) or `none`
+8. **Workflow** — Backlog.md (task → `/work-next` → verification → `/finish`) or `none`
 
 9. **AI targets** — Which tools to generate config for: Claude Code, Codex, OpenCode, Cursor, lefthook
 
@@ -91,39 +91,18 @@ oisin-dev reset --yes
 oisin-dev reset --force --yes
 ```
 
-### Beads Git hygiene
+### Backlog.md workflow
 
-When Beads is configured with a Git remote, `oisin-dev init` and the idempotent
-configuration step adopt the repo-backed Dolt workflow: the Dolt `origin` remote
-points at the Git `origin`, automatic JSONL export/staging and automatic Dolt
-push are disabled, and `.beads/issues.jsonl` is ignored and removed from Git
-tracking when necessary. Do not configure Beads `sync.remote` or
-`federation.remote` for this harness; normal `bd` mutations stay local and
-agents push tracker state explicitly with `bd dolt push` at workflow boundaries.
+Backlog.md task files are tracked directly in `backlog/`, with project settings
+in `backlog.config.yml`. Agent workflow state belongs in Backlog task fields:
+status, priority, dependencies, plan, notes, acceptance criteria, Definition of
+Done, refs, modified files, and final summary.
 
-The Beads-generated `.beads/.gitignore` still owns local runtime files such as
-Dolt state, sockets, backup data, logs, lock files, and local export state.
-Keep `.beads/.gitignore`, `.beads/config.yaml`, `.beads/metadata.json`, and
-`.beads/README.md` tracked. Shared ticket state lives in `refs/dolt/data` in the
-same Git repo, so normal code commits should not include `.beads/issues.jsonl`.
+Use `backlog task ...` for task operations, `backlog board` for terminal
+visibility, and `backlog browser --no-open` for the local browser UI.
 
-### `oisin-dev beads-migrate`
-
-Adopts the same repo-backed Dolt workflow for an existing Beads repo. It is idempotent and can be used to repair older repos that already committed `.beads/issues.jsonl`.
-
-```sh
-oisin-dev beads-migrate
-```
-
-Fresh clone flow for Beads-enabled repos:
-
-```sh
-git clone <repo>
-bd bootstrap
-bd dolt pull
-```
-
-That fresh clone flow is for humans bootstrapping a checkout. Agent implementation work must stay in the existing repo and use Worktrunk-managed worktrees.
+Agent implementation work must stay in the existing repo and use
+Worktrunk-managed worktrees.
 
 ### Agent worktrees
 
@@ -153,10 +132,12 @@ Worktrunk was selected after checking current maintained options:
 
 ### `oisin-dev tickets`
 
-Launches the local Beads web UI for the current workspace by delegating to [`beads-ui`](https://github.com/mantoni/beads-ui). It works from non-JavaScript projects too; no `package.json` or project-local npm install is required.
+Launches the local Backlog.md browser UI for the current workspace by delegating
+to `backlog browser`. It works from non-JavaScript projects too; no project-local
+npm install is required.
 
 ```sh
-bunx @oisincoveney/dev tickets --open
+bunx @oisincoveney/dev tickets --no-open
 ```
 
 ## Generated files
@@ -186,7 +167,7 @@ Claude, Codex, Cursor, and OpenCode keep native config under `.claude/`, `.codex
 | `ai-antipattern-guard.sh` | Blocks missing `await`, wrong syntax |
 | `destructive-command-guard.sh` | Requires explicit approval for `rm -rf`, force-push, `git reset --hard` |
 | `block-coauthor.sh` | Removes `Co-Authored-By: Claude` from commits |
-| `block-todowrite.sh` | Blocks TodoWrite tool (use Beads instead) |
+| `block-todowrite.sh` | Blocks TodoWrite tool (use Backlog.md instead) |
 | `post-edit-check.sh` | Verifies edited files compile |
 | `pre-stop-verification.sh` | Blocks unsubstantiated "tests should pass" claims |
 | `pr-size-check.sh` | Warns on oversized PRs |
@@ -276,7 +257,9 @@ Supported language/variant combinations:
 
 ### Required tools
 
-Runtime setup expects `mise`. Project-local `mise.toml` installs dotagents, lefthook, Worktrunk, git-spice, and Backlog.md when enabled, so users do not need to install those globally.
+Runtime setup expects `mise`. Project-local `mise.toml` installs dotagents,
+lefthook, Worktrunk, git-spice, and Backlog.md when enabled, so users do not
+need to install those globally.
 
 If the local mise platform cannot resolve `github:max-sixty/worktrunk`, install Worktrunk with the official fallback:
 
@@ -284,19 +267,12 @@ If the local mise platform cannot resolve `github:max-sixty/worktrunk`, install 
 cargo install worktrunk
 ```
 
-This repo's tests run against real `bd` for e2e coverage — they don't skip when it's missing. Install via [mise](https://mise.jdx.dev/) (preferred):
+This repo's tests run against real Backlog.md CLI behavior for e2e coverage.
+Install via [mise](https://mise.jdx.dev/) (preferred):
 
 ```sh
 mise install   # reads mise.toml
 ```
-
-Or install manually so `bd` is on PATH:
-
-```sh
-curl -sSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
-```
-
-If `bd` isn't on PATH, the e2e install tests fail fast with a clear error rather than silently skipping.
 
 ### Common commands
 

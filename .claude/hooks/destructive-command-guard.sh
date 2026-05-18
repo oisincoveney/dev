@@ -5,8 +5,7 @@
 #
 # Heredoc bodies are excluded from substring checks: the literal text of
 # a heredoc is data, not an executable subcommand. Otherwise we'd block
-# any `bd create --body-file=- <<EOF ... <destructive substring> ... EOF`
-# that documents the very patterns this hook blocks.
+# task creation commands whose body documents the very patterns this hook blocks.
 set -euo pipefail
 
 INPUT=$(cat)
