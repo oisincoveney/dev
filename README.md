@@ -140,6 +140,29 @@ npm install is required.
 bunx @oisincoveney/dev tickets --no-open
 ```
 
+### `oisin-dev land-prs`
+
+Summarizes open GitHub PRs for a human-in-the-loop landing pass. It reads PR
+metadata, comments, latest reviews, merge state, and check status through
+`gh pr list`, then prints a compact recommendation for each PR: merge, fix,
+review, or defer.
+
+```sh
+oisin-dev land-prs --limit 20
+oisin-dev land-prs --repo owner/name --json
+```
+
+### `oisin-dev pr-daemon`
+
+Polls open PRs for new review/comment signals and enqueues Backlog.md fix tasks.
+The daemon records seen signal IDs in `.agents/pr-daemon-state.json` so repeated
+polls do not duplicate work. Use `--dry-run` before letting it create tasks.
+
+```sh
+oisin-dev pr-daemon --once --dry-run
+oisin-dev pr-daemon --interval 60 --limit 30
+```
+
 ## Generated files
 
 ### Shared layer
