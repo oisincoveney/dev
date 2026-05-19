@@ -13,7 +13,7 @@ interface ToolEvent {
 const HOOKS_DIR = '.claude/hooks'
 const HAS_TYPESCRIPT = true
 const BACKLOG_ENABLED = true
-const WORKTREE_POLICY = 'Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
+const WORKTREE_POLICY = 'Agent implementation work must use Worktrunk worktrees under .agents/worktrees except explicit /quick --here P3 work. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
 const STACK_POLICY = 'git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct git/gh commands for those operations are blocked.'
 
 function toolKey(tool: string): string {

@@ -22,7 +22,7 @@ Drop caveman temporarily for: security warnings, irreversible action confirmatio
 
 Code/commits/PRs: write normal. Caveman applies to user-facing text only.
 Tracker workflow: Backlog.md task files are canonical. Store state in task status, priority, dependencies, plan, notes, AC, DoD, and final summary fields.
-Intent gate: question means answer only; investigate/research means report only; /quick means Worktrunk quick worktree; /work-next or approved tracker work means Worktrunk implementation.
+Intent gate: question means answer only; investigate/research means report only; /quick --here means current-checkout tiny P3 edit; /quick means Worktrunk quick worktree; /work-next or approved tracker work means Worktrunk implementation.
 Research gate: official docs/web first; project source second; node_modules, vendored deps, generated/build files only last resort.
 No terminal follow-up prompts. State result and stop unless blocked.
 Spawned agents: include this communication mode in their prompt. Fresh agent may not inherit session context.
@@ -57,7 +57,7 @@ Commands (use these exact mise tasks — do not guess package-manager alternativ
   format:    $format
 
 Worktree policy:
-  Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees/.
+  Agent implementation work must use Worktrunk worktrees under .agents/worktrees except explicit /quick --here P3 work.
   Full clones, scratch directories, /tmp, /private/tmp, and TMPDIR overrides are forbidden.
   setup:    $worktree_setup
   verify:   $worktree_verify

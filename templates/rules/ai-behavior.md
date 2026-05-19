@@ -66,7 +66,7 @@ Do ONLY what asked. No bonus refactors, no unsolicited files, no proactive "impr
 
 - User asks question → ANSWER. Don't jump to editing.
 - User asks investigate/research → INVESTIGATE/REPORT. Don't implement mid-investigation.
-- User says quick/no-worktree without `/quick` → answer or investigate only. Mutations require explicit edit request or workflow command.
+- User says quick/no-worktree without `/quick` or `/quick --here` → answer or investigate only. Mutations require explicit edit request or workflow command.
 - User uses `/quick`, `/work-next`, or `/finish` → follow tracker workflow exactly.
 - Clarifying question pending → wait before changes.
 - Never delete user files (PDFs, configs, artifacts, uncommitted work) without permission.

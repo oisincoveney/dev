@@ -7,13 +7,14 @@ description: Tracker-first development workflow for @oisincoveney/dev. Use for /
 
 The tracker is the single source of truth. Backlog.md is the first-class tracker. Use `backlog task ...` directly; do not use adapter shims for normal workflow work. Workflow state lives in Backlog task fields: status, priority, dependencies, plan, notes, acceptance criteria, Definition of Done, refs, modified files, and final summary.
 
-Main thread is always orchestrator. All implementation happens in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>`, including `/quick`.
+Main thread is always orchestrator. Implementation happens in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>` except for explicit `/quick --here` P3 work.
 
-Use `wt` for agent worktree lifecycle. Do not create full clones, scratch directories, `/tmp` or `/private/tmp` workspaces, or `TMPDIR` overrides for agent implementation work. Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
+Use `wt` for agent worktree lifecycle except for explicit `/quick --here` P3 work. Do not create full clones, scratch directories, `/tmp` or `/private/tmp` workspaces, or `TMPDIR` overrides for agent implementation work. Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
 
 ## Commands
 
-- `/quick [P2|P3] <task>` — low-ceremony path. Defaults to P3; explicit P2 allowed. Never P0/P1. Dispatch a quick implementation agent in a Worktrunk worktree for `quick/p3/<slug>` or `quick/p2/<slug>`. Run normal verification, commit with git-spice, merge back after verification, resolve conflicts if still quick, then submit with git-spice when branch rules allow.
+- `/quick [P2|P3] <task>` — default low-ceremony path. Defaults to P3; explicit P2 allowed. Never P0/P1. Dispatch a quick implementation agent in a Worktrunk worktree for `quick/p3/<slug>` or `quick/p2/<slug>`. Run normal verification, commit with git-spice, merge back after verification, resolve conflicts if still quick, then submit with git-spice when branch rules allow.
+- `/quick --here [P3] <task>` — current-checkout tiny-edit path. P3 only. Inspect dirty state first, avoid unrelated dirty files, block on conflicting dirty files or risky scope, run relevant verification, and leave changes uncommitted unless the user explicitly asks for a commit.
 - `/plan [priority] <goal>` — create tracker item in `review` state and stop. Single-task and multi-ticket plans both require review.
 - `/approve <id>` — re-read the task, verify the reviewed plan still matches user intent, append approval notes, and move item to `To Do`.
 - `/work-next` — execute approved ready tracker work through implementation agents.
@@ -56,7 +57,7 @@ Serial graph work still uses one focused agent per task in dependency order.
 
 ## Verification
 
-`/quick` uses normal verification only. Every tracked task completion requires fresh-context verification.
+`/quick` uses normal verification only. `/quick --here` also requires relevant verification before claiming the change. Every tracked task completion requires fresh-context verification.
 
 Verifier is read-only:
 - Original AC failure blocks close.
@@ -78,6 +79,7 @@ Worktrunk owns worktree lifecycle. git-spice owns stack-aware branch creation, c
 
 Branches:
 - `/quick`: `quick/p3/<slug>` or `quick/p2/<slug>`
+- `/quick --here`: no branch
 - tracked task/child: `task/<id>-<slug>`
 - collisions append `-2`, `-3`, etc.
 

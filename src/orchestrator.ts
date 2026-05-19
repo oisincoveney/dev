@@ -668,14 +668,15 @@ export function agentsMd(data: TemplateData): string {
   ]
   if (data.backlog_enabled) {
     lines.push('- Use the tracker workflow for planned work; Backlog.md is the source of truth.')
-    lines.push('- Main thread is the orchestrator. All implementation, including `/quick`, runs in Worktrunk-managed agent worktrees; tracker metadata is the source of truth.')
-    lines.push('- `/quick [P2|P3] <task>` is the only low-ceremony lane. It still runs in a Worktrunk-managed agent worktree, verifies, commits, and may push/PR when branch rules allow.')
+    lines.push('- Main thread is the orchestrator. Implementation runs in Worktrunk-managed agent worktrees except for the explicit `/quick --here` lane; tracker metadata is the source of truth.')
+    lines.push('- `/quick [P2|P3] <task>` is the default low-ceremony lane. It defaults P3; explicit P2 is allowed; P0/P1 are blocked. It runs in a Worktrunk-managed agent worktree, verifies, commits, and may push/PR when branch rules allow.')
+    lines.push('- `/quick --here [P3] <task>` is the current-checkout quick lane for tiny local edits. It is P3-only, bypasses Worktrunk, requires inspecting dirty state first, blocks on conflicting dirty files or risky scope, runs relevant verification, and leaves changes uncommitted unless the user explicitly asks for a commit.')
     lines.push('- `/plan [priority] <goal>` creates tracker-backed work in review state and stops. `/approve <id>` unlocks it; `/work-next` executes approved ready work; `/finish` integrates verified work.')
     lines.push('- Tracker data is canonical. Store workflow state in Backlog task fields: status, priority, dependencies, plan, notes, acceptance criteria, Definition of Done, and final summary.')
     lines.push('- Use `backlog task ...` directly for tracker operations; use `backlog board` or `backlog browser --no-open` for local visibility.')
   }
   lines.push('- Never run destructive commands without explicit user approval.')
-  lines.push('- Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>`; full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.')
+  lines.push('- Agent implementation work must use Worktrunk (`wt`) git worktrees under `.agents/worktrees/<task-or-branch>` except for explicit `/quick --here` P3 work; full clones, scratch directories, `/tmp`, `/private/tmp`, and `TMPDIR` overrides are forbidden.')
   lines.push('- Worktree setup, verification, and teardown must run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.')
   lines.push('- Worktrunk owns worktree lifecycle; git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct `git`/`gh` commands for git-spice-owned operations are blocked.')
   lines.push('- Use `git-spice` in project automation; local aliases like `gs` are fine for humans.')
@@ -685,7 +686,7 @@ export function agentsMd(data: TemplateData): string {
   lines.push('- Do not write "works", "should work", or "done" without running the relevant verification command and seeing it pass.')
   lines.push('- Ask one non-trivial judgment question at a time.')
   lines.push('- Caveman mode is the default communication style. Keep responses terse unless the user says "normal mode" or clarity requires full wording.')
-  lines.push('- Intent gate: question means answer only; investigate/research means report only; `/quick` means Worktrunk quick worktree; `/work-next` or approved tracker work means Worktrunk implementation.')
+  lines.push('- Intent gate: question means answer only; investigate/research means report only; `/quick --here` means current-checkout tiny P3 edit; `/quick` means Worktrunk quick worktree; `/work-next` or approved tracker work means Worktrunk implementation.')
   lines.push('- Research gate: for external APIs, libraries, features, or current facts, use official docs/web first, first-party project source second, and dependency/generated files only as last resort.')
   lines.push('- Do not end with follow-up prompts like "want me to", "should I", "let me know if", or "if you want". State the result and stop unless blocked.')
   lines.push('', '## Commands', '', 'Use `mise run <task>` for canonical project commands.', '')
@@ -943,7 +944,7 @@ interface ToolEvent {
 const HOOKS_DIR = '.claude/hooks'
 const HAS_TYPESCRIPT = ${JSON.stringify(data.has_typescript)}
 const BACKLOG_ENABLED = ${JSON.stringify(data.backlog_enabled)}
-const WORKTREE_POLICY = 'Agent implementation work, including /quick, must use Worktrunk worktrees under .agents/worktrees. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
+const WORKTREE_POLICY = 'Agent implementation work must use Worktrunk worktrees under .agents/worktrees except explicit /quick --here P3 work. Clones, temp scratch paths, and TMPDIR overrides are blocked.'
 const STACK_POLICY = 'git-spice owns stack-aware branch, commit, restack, push, and PR operations. Direct git/gh commands for those operations are blocked.'
 
 function toolKey(tool: string): string {

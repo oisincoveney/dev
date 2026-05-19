@@ -7,15 +7,16 @@ description: Tracker-first workflow rules: quick lane, planning approval, worktr
 
 Tracker is the single source of truth. Backlog.md is the first-class tracker. Use `backlog task ...` directly; workflow state lives in Backlog task fields.
 
-Main thread is always orchestrator. All implementation runs in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>`, including `/quick`.
+Main thread is always orchestrator. Implementation runs in Worktrunk-managed isolated agent worktrees under `.agents/worktrees/<task-or-branch>` except for explicit `/quick --here` P3 work.
 
-Use `wt` for worktree lifecycle. Do not use full repo clones, scratch directories, `/tmp`, `/private/tmp`, or `TMPDIR` overrides for agent implementation work. Worktree setup, verification, and teardown run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
+Use `wt` for worktree lifecycle except for explicit `/quick --here` P3 work. Do not use full repo clones, scratch directories, `/tmp`, `/private/tmp`, or `TMPDIR` overrides for agent implementation work. Worktree setup, verification, and teardown run through `mise run worktree:setup`, `mise run worktree:verify`, and `mise run worktree:teardown`.
 
 Worktrunk owns worktree lifecycle. git-spice owns stack-aware branch creation, checkout, tracking, restacking, commit creation/amendment, branch publication, and PR creation/update. Direct `git`/`gh` commands for git-spice-owned operations are blocked. git-spice is worktree-aware, so serialize stack mutation commands per stack when other Worktrunk worktrees may have related branches checked out.
 
 ## Commands
 
 - `/quick [P2|P3] <task>` — no tracker approval, normal verification only, implementation agent in Worktrunk quick worktree, commit with git-spice, merge back when verified.
+- `/quick --here [P3] <task>` — no tracker approval, P3-only tiny edit in the current checkout, dirty-state check first, no commit unless explicitly requested.
 - `/plan [priority] <goal>` — create tracker item in `review`; stop.
 - `/approve <id>` — append approval notes; move item to `To Do`.
 - `/work-next` — execute approved ready tracker work.
@@ -27,9 +28,9 @@ Approval covers the reviewed Backlog task title, description, priority, plan, AC
 
 ## Quick Gate
 
-`/quick` defaults P3. Explicit `/quick P2` allowed. P0/P1 never quick.
+`/quick` defaults P3. Explicit `/quick P2` allowed. `/quick --here` is P3-only. P0/P1 never quick.
 
-Quick work must be explicitly invoked with `/quick`, bounded, low-risk, have a normal verification command, and avoid protected domains: migrations, auth/security/billing/data-risk, broad refactors, generated files, new dependencies, releases, ambiguous work, CI, public API/CLI/file-format contracts.
+Quick work must be explicitly invoked with `/quick`, bounded, low-risk, have a normal verification command, and avoid protected domains: migrations, auth/security/billing/data-risk, broad refactors, generated files, new dependencies, releases, ambiguous work, CI, public API/CLI/file-format contracts. `/quick --here` also blocks on conflicting dirty files or risky scope and leaves changes uncommitted unless the user explicitly asks for a commit.
 
 ## Graph Work
 
@@ -39,7 +40,7 @@ Multi-ticket plans require exactly one real tracer/proof ticket. Parent approval
 
 ## Verification
 
-Every tracked task completion requires fresh-context verification. `/quick` uses normal verification only.
+Every tracked task completion requires fresh-context verification. `/quick` uses normal verification only; `/quick --here` requires relevant verification before claiming the change.
 
 Verifier is read-only. P0-P2 findings become tracker tickets; simple/safe P3 findings are returned for implementer inline fix and recorded in notes.
 

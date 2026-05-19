@@ -106,7 +106,8 @@ describe('end-to-end install with real side effects', () => {
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     expect(agents).toContain('Backlog.md is the source of truth')
     expect(agents).toContain('backlog task list -s "To Do" --plain')
-    expect(agents).toContain('All implementation, including `/quick`, runs in Worktrunk-managed agent worktrees')
+    expect(agents).toContain('Implementation runs in Worktrunk-managed agent worktrees except for the explicit `/quick --here` lane')
+    expect(agents).toContain('`/quick --here [P3] <task>` is the current-checkout quick lane')
     expect(agents).not.toContain('bd prime')
     expect(agents).not.toContain('beads')
 
